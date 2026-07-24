@@ -1,0 +1,86 @@
+{
+  "spdxLicense": "MIT",
+  "schemaVersion": 1,
+  "device": {
+    "marketingName": "OnePlus Nord 2T 5G",
+    "model": "CPH2399",
+    "productName": "CPH2399EEA",
+    "productDevice": "OP557AL1",
+    "communityCodename": "karen"
+  },
+  "otaCertificate": {
+    "rawSha256": "df6c2c1a0d40c84a18d76345092e7554689f4686b43d216456101b40c22e1163",
+    "derSha256": "28e58616f0baef859f43fa81fc29780e221e8e7237ea96dc778790d86988abc6"
+  },
+  "packages": [
+    {
+      "id": "oxygenos-14-eu-3001",
+      "filename": "CPH2399_14.0.0.3001_OTA.zip",
+      "purpose": "Latest known full EU OxygenOS 14 OTA",
+      "destructive": false,
+      "size": 5565689522,
+      "md5": "795de127eddfa41ced0b077b35c5895c",
+      "sha256": "4ca89d77ce64e09f1b061db69e5589be7ad60d2c0403b2e9217e47862352c41f",
+      "sourceApi": "https://oxygenupdater.com/api/v2.10/mostRecentUpdateData/81/2",
+      "downloadUrl": "https://gauss-componentotamanual.allawnofs.com/remove-eb367d9da8d667fc2c147fd33ff303b2/component-ota/26/06/16/a7aba01a7bed432681c874768c8c9b65.zip",
+      "metadata": {
+        "productName": "CPH2399EEA",
+        "preDevice": "OP557AL1",
+        "versionName": "CPH2399_14.0.0.3001(EX01)",
+        "securityPatch": "2026-06-01",
+        "wipe": 0
+      },
+      "payload": {
+        "fileHash": "pZLDn4kwKCxQUKC7ZSMdff2QjL3Pm8n5lbomC1uRCMg=",
+        "fileSize": 5565683622,
+        "metadataHash": "XfbMusT+p00wD2fJCrBGTFp21yRAZDXNGfKTRNo5rPs=",
+        "metadataSize": 199612
+      }
+    },
+    {
+      "id": "oxygenos-14-eu-2901",
+      "filename": "CPH2399_14.0.0.2901_OTA.zip",
+      "purpose": "Full EU OxygenOS 14 OTA",
+      "destructive": false,
+      "size": 5540395143,
+      "md5": "774a21b27fa89e779d7a9fb9a2b35a68",
+      "sha256": "32c2666db6d3ba3ef06367051498b45f53b6ba94133d43ff66d84025d007d013",
+      "sourcePage": "https://community.oneplus.com/thread/2112690193910726661",
+      "metadata": {
+        "productName": "CPH2399EEA",
+        "preDevice": "OP557AL1",
+        "versionName": "CPH2399_14.0.0.2901(EX01)",
+        "securityPatch": "2026-04-01",
+        "wipe": 0
+      },
+      "payload": {
+        "fileHash": "UAk7k0mqy5kLuzr+BOz/rnMQWnocpKRAGwDIQSvFG6E=",
+        "fileSize": 5540389271,
+        "metadataHash": "7mn9bTlLEgQdPTvxxn8VRU1uzLxmXg1ZgMxETnYAOBE=",
+        "metadataSize": 198866
+      }
+    },
+    {
+      "id": "oxygenos-13-eu-rollback",
+      "filename": "CPH2399_OOS13_EU_rollback.zip",
+      "purpose": "Emergency EU rollback to OxygenOS 13",
+      "destructive": true,
+      "size": 4939227397,
+      "md5": "8c15c16ea3dbbfd3fadec5e0ca615c25",
+      "sha256": "54c9dbb7f168978e609dc0fbab42128258be3b8a37e7bd1342eaf2c8554fd325",
+      "metadata": {
+        "productName": "CPH2399EEA",
+        "preDevice": "OP557AL1",
+        "versionName": "CPH2399_11_C.30",
+        "securityPatch": "2023-11-05",
+        "wipe": 1
+      },
+      "payload": {
+        "fileHash": "mzzfBMmmzuRDG4nx9CMMI+6EHhH+aY5GgrY6MRxMUNg=",
+        "fileSize": 4939221730,
+        "metadataHash": "qw6YpFQO1GYnZfThlm79cLBw/7FZgwqiTqlpTLSIPH0=",
+        "metadataSize": 181625
+      }
+    }
+  ]
+}

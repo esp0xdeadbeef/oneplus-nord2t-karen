@@ -1,0 +1,311 @@
+{
+  "spdxLicense": "MIT",
+  "schemaVersion": 2,
+  "sourcePackageId": "oxygenos-14-eu-3001",
+  "profiles": {
+    "boot": [
+      "boot",
+      "dtbo",
+      "vbmeta",
+      "vbmeta_system",
+      "vbmeta_vendor"
+    ],
+    "blobs": [
+      "system",
+      "system_ext",
+      "product",
+      "vendor",
+      "odm",
+      "my_product",
+      "my_engineering",
+      "my_stock",
+      "my_carrier",
+      "my_region",
+      "my_heytap",
+      "my_bigball",
+      "my_manifest"
+    ],
+    "firmware": [
+      "audio_dsp",
+      "boot",
+      "cam_vpu1",
+      "cam_vpu2",
+      "cam_vpu3",
+      "cdt_engineering",
+      "dpm",
+      "dtbo",
+      "gz",
+      "lk",
+      "mcupm",
+      "md1img",
+      "pi_img",
+      "preloader_raw",
+      "scp",
+      "spmfw",
+      "sspm",
+      "tee",
+      "vbmeta",
+      "vbmeta_system",
+      "vbmeta_vendor"
+    ],
+    "stock": [
+      "audio_dsp",
+      "boot",
+      "cam_vpu1",
+      "cam_vpu2",
+      "cam_vpu3",
+      "cdt_engineering",
+      "dpm",
+      "dtbo",
+      "gz",
+      "lk",
+      "mcupm",
+      "md1img",
+      "my_bigball",
+      "my_carrier",
+      "my_engineering",
+      "my_heytap",
+      "my_manifest",
+      "my_product",
+      "my_region",
+      "my_stock",
+      "odm",
+      "pi_img",
+      "preloader_raw",
+      "product",
+      "scp",
+      "spmfw",
+      "sspm",
+      "system",
+      "system_ext",
+      "tee",
+      "vbmeta",
+      "vbmeta_system",
+      "vbmeta_vendor",
+      "vendor"
+    ],
+    "port": [
+      "audio_dsp",
+      "boot",
+      "cam_vpu1",
+      "cam_vpu2",
+      "cam_vpu3",
+      "cdt_engineering",
+      "dpm",
+      "dtbo",
+      "gz",
+      "lk",
+      "mcupm",
+      "md1img",
+      "my_bigball",
+      "my_carrier",
+      "my_engineering",
+      "my_heytap",
+      "my_manifest",
+      "my_product",
+      "my_region",
+      "my_stock",
+      "odm",
+      "pi_img",
+      "preloader_raw",
+      "product",
+      "scp",
+      "spmfw",
+      "sspm",
+      "system",
+      "system_ext",
+      "tee",
+      "vbmeta",
+      "vbmeta_system",
+      "vbmeta_vendor",
+      "vendor"
+    ]
+  },
+  "treePartitions": [
+    "system",
+    "system_ext",
+    "product",
+    "vendor",
+    "odm",
+    "my_product",
+    "my_engineering",
+    "my_stock",
+    "my_carrier",
+    "my_region",
+    "my_heytap",
+    "my_bigball",
+    "my_manifest"
+  ],
+  "partitions": [
+    {
+      "name": "audio_dsp",
+      "size": 3383296,
+      "sha256": "71696230eb67690b8f3a7b1e140b80276e5ab2d6406c3ec56c0b9c6021310489"
+    },
+    {
+      "name": "boot",
+      "size": 67108864,
+      "sha256": "7ad447405db4e74276395123c8029c67c63adc3fc6d82c4c180ae6c2e31882c0"
+    },
+    {
+      "name": "cam_vpu1",
+      "size": 4169728,
+      "sha256": "57deea5ca95d700c03323b59179c37cd7313635257c88db0b224808687f892d6"
+    },
+    {
+      "name": "cam_vpu2",
+      "size": 10502144,
+      "sha256": "6764d60fdb4139e8a0bcad109dde8ec56cf759502d8f083e38a8d923244ba40b"
+    },
+    {
+      "name": "cam_vpu3",
+      "size": 14987264,
+      "sha256": "a1523127623fdb5f0698694b44689f926dc20d1c8ca7ed9c0b301482b24b49d4"
+    },
+    {
+      "name": "cdt_engineering",
+      "size": 1048576,
+      "sha256": "72e22fa2321b8cba9101b2ebec259c311f40fe3b85776cb13e1ec64648266641"
+    },
+    {
+      "name": "dpm",
+      "size": 139264,
+      "sha256": "bf79fe037297e98626d9f09ea4457447da782b1ff603767cb0f84dfdc332dcfd"
+    },
+    {
+      "name": "dtbo",
+      "size": 716800,
+      "sha256": "3d644ab5fa1fb5a66c03b585152ae9d3294b768cbe2d36b6fd373048d217354c"
+    },
+    {
+      "name": "gz",
+      "size": 3837952,
+      "sha256": "0bd4f12c90179a07f35cdf91cb0317e703eae81442cbb7c4396f36a87a643903"
+    },
+    {
+      "name": "lk",
+      "size": 1748992,
+      "sha256": "f55adf54eef0980dcd84132bea934beac01670d70abeeda38cb5df088885444f"
+    },
+    {
+      "name": "mcupm",
+      "size": 360448,
+      "sha256": "b5f91685dfac21fce992739851c659138b92c23d49834040d77fc0a8151c924f"
+    },
+    {
+      "name": "md1img",
+      "size": 70553600,
+      "sha256": "429ccb5e6e691f40f1ab24f72f6bd2c8d4d085a3d3462a8f7b59e7d979cfca8c"
+    },
+    {
+      "name": "my_bigball",
+      "size": 915984384,
+      "sha256": "aaef45356f144209e928e83d89b4c193792b9c67d4e4ef49b50e8f0d1ab6fd48"
+    },
+    {
+      "name": "my_carrier",
+      "size": 335872,
+      "sha256": "667e34bd12ea989b6dc1dd62cf60550f8a467653468feddc36cc1ec2850ed4fb"
+    },
+    {
+      "name": "my_engineering",
+      "size": 335872,
+      "sha256": "217c310c380c32263f579ba690991266a2b9c670cd1b5e373f6ca7ec640e6f1f"
+    },
+    {
+      "name": "my_heytap",
+      "size": 927776768,
+      "sha256": "ce0ce6a8f6992bf744dc38f7045b6a940ac002a59c1b09f03a1192e5ae572ab6"
+    },
+    {
+      "name": "my_manifest",
+      "size": 430080,
+      "sha256": "96aa3fce7aae1ae30685f1396ec13e02dccf66095b1796882bd433dd9df9d33a"
+    },
+    {
+      "name": "my_product",
+      "size": 413851648,
+      "sha256": "093c844dc6b0a2027e63cbdbebd9f530b5f3b92f6136987b1647615e12ddc843"
+    },
+    {
+      "name": "my_region",
+      "size": 831488,
+      "sha256": "7c15a8b9deedd86dc7b9951c0d2cbf2ac2b9c6c5f94669021ae5bba72cf9859b"
+    },
+    {
+      "name": "my_stock",
+      "size": 1264873472,
+      "sha256": "ab26e89ebc40a516c1e0edea027af60a862099a5d607e6bb966a2007b47eb96e"
+    },
+    {
+      "name": "odm",
+      "size": 1118810112,
+      "sha256": "df850835446ecbeee14bbbe1a157e0dfc3d8f6af2bcb7e14a7f01e99dfb82cf3"
+    },
+    {
+      "name": "pi_img",
+      "size": 8192,
+      "sha256": "3b956dd52fe084d410b012ef0a07498cbbaad8da20c10887689684e5dffbf765"
+    },
+    {
+      "name": "preloader_raw",
+      "size": 483328,
+      "sha256": "d4bbf637aa0d5488959194919e14198f19db17d5f85f2a872bd353ae9a2df4b5"
+    },
+    {
+      "name": "product",
+      "size": 2129920,
+      "sha256": "159023fd63654544819f41a129a28c1bb4d00c7fabe813fc943b65e0ed0f9107"
+    },
+    {
+      "name": "scp",
+      "size": 2043904,
+      "sha256": "40027ea19cc8f640cdfcc1ae0504bfb3aa738bdce85021145457e43a0a428658"
+    },
+    {
+      "name": "spmfw",
+      "size": 16384,
+      "sha256": "8a94e836582ee40cd0534219a16838265acd5aa345829af98999fc8b9e84a2be"
+    },
+    {
+      "name": "sspm",
+      "size": 753664,
+      "sha256": "1454eb1c221d62c76b8d42bf308867e9a1cc37f3098c3753260c1bec2579297e"
+    },
+    {
+      "name": "system",
+      "size": 816074752,
+      "sha256": "f56143c47e02128a170d7f5f1fb3f5c81f17208ebcaa0d41389bab95a3e8de6d"
+    },
+    {
+      "name": "system_ext",
+      "size": 1125015552,
+      "sha256": "aaff920682542c6cc0737d1f04d2716ba28214cc616c8d0052560b36e36fb145"
+    },
+    {
+      "name": "tee",
+      "size": 999424,
+      "sha256": "49248a5ef1954a542f10b3b50aa58eea3a042bb59a96f041ab3e7a4cf56d7214"
+    },
+    {
+      "name": "vbmeta",
+      "size": 4096,
+      "sha256": "de9e5929753411c8d4ef7d87d0be4cd38124f1f6daa722a1bac94bb4e352784c"
+    },
+    {
+      "name": "vbmeta_system",
+      "size": 4096,
+      "sha256": "4de6e41786cc833ea83de1fc11118cc317741686b46d8bf1cae45a082789b54e"
+    },
+    {
+      "name": "vbmeta_vendor",
+      "size": 4096,
+      "sha256": "43e7315b80de06ff08ce33b07d5b28099744b7c5fab26e4394281a1179c99869"
+    },
+    {
+      "name": "vendor",
+      "size": 487354368,
+      "sha256": "6f12d0c8eeb8399b194951c6ce8abbc14c789453b6620c04241e8d95887c222c"
+    }
+  ]
+}

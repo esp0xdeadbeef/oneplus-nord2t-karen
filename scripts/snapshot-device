@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  echo "usage: nord2t-snapshot [output-directory]" >&2
+}
+
+if [[ $# -gt 1 ]]; then
+  usage
+  exit 2
+fi
+
+if [[ "$(adb get-state 2>/dev/null || true)" != device ]]; then
+  echo "No single authorized ADB device is connected." >&2
+  exit 1
+fi
+
+read_property() {
+  adb shell getprop "$1" | tr -d '\r'
+}
+
+model="$(read_property ro.product.model)"
+device="$(read_property ro.product.device)"
+if [[ "$model" != CPH2399 || "$device" != OP557AL1 ]]; then
+  echo "Refusing to inventory unsupported device: model=$model device=$device" >&2
+  exit 1
+fi
+
+build="$(read_property ro.build.display.id)"
+safe_build="$(printf '%s' "$build" | tr -cs 'A-Za-z0-9._-' '_')"
+output="${1:-snapshots/${safe_build}-rootless}"
+
+if [[ -e "$output" ]]; then
+  echo "Refusing to overwrite existing path: $output" >&2
+  exit 1
+fi
+
+mkdir -p "$output/vintf"
+
+properties=(
+  ro.boot.dynamic_partitions
+  ro.boot.flash.locked
+  ro.boot.slot_suffix
+  ro.boot.verifiedbootstate
+  ro.build.display.id
+  ro.build.version.incremental
+  ro.build.version.release
+  ro.build.version.sdk
+  ro.build.version.security_patch
+  ro.crypto.state
+  ro.crypto.type
+  ro.product.board
+  ro.product.brand
+  ro.product.cpu.abi
+  ro.product.device
+  ro.product.first_api_level
+  ro.product.manufacturer
+  ro.product.model
+  ro.product.name
+  ro.treble.enabled
+  ro.vendor.build.security_patch
+  ro.virtual_ab.enabled
+  ro.vndk.version
+  sys.oem_unlock_allowed
+)
+
+for property in "${properties[@]}"; do
+  printf '%s=%s\n' "$property" "$(read_property "$property")"
+done >"$output/properties.txt"
+
+adb shell pm list packages -s |
+  tr -d '\r' |
+  sed 's/^package://' |
+  LC_ALL=C sort >"$output/system-packages.txt"
+
+adb shell pm list features |
+  tr -d '\r' |
+  LC_ALL=C sort >"$output/features.txt"
+
+{ adb shell 'lshal 2>/dev/null' || true; } |
+  tr -d '\r' |
+  LC_ALL=C sort >"$output/lshal.txt"
+
+adb shell 'ls -1 /dev/block/by-name 2>/dev/null' |
+  tr -d '\r' |
+  LC_ALL=C sort >"$output/partition-names.txt"
+
+adb shell "awk '{ print \$1, \$2, \$3, \$4 }' /proc/mounts" |
+  tr -d '\r' >"$output/mounts.txt"
+
+{
+  printf 'kernel='
+  adb shell uname -r | tr -d '\r'
+  printf 'selinux='
+  adb shell getenforce | tr -d '\r'
+} >"$output/runtime.txt"
+
+vintf_files=(
+  /odm/etc/vintf/manifest.xml
+  /product/etc/vintf/manifest.xml
+  /system/etc/vintf/manifest.xml
+  /system_ext/etc/vintf/manifest.xml
+  /vendor/etc/vintf/manifest.xml
+)
+
+for remote_path in "${vintf_files[@]}"; do
+  if adb shell test -r "$remote_path"; then
+    local_name="${remote_path#/}"
+    local_name="${local_name//\//_}"
+    adb exec-out cat "$remote_path" >"$output/vintf/$local_name"
+  fi
+done
+
+adb exec-out cat /system/etc/security/otacerts.zip >"$output/otacerts.zip"
+
+(
+  cd "$output"
+  find . -type f ! -name SHA256SUMS -print0 |
+    LC_ALL=C sort -z |
+    xargs -0 sha256sum
+) >"$output/SHA256SUMS"
+
+manifest_hash="$(sha256sum "$output/SHA256SUMS" | cut -d' ' -f1)"
+file_count="$(find "$output" -type f | wc -l)"
+echo "Snapshot written: $output"
+echo "files=$file_count"
+echo "sha256sums_sha256=$manifest_hash"
+echo "Only whitelisted properties and system-level metadata were collected."

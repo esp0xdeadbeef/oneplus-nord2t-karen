@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: prepare-lineage [--stock-dir DIR] LINEAGE_ROOT
+
+Prepare a LineageOS 21 checkout for the Karen recovery bring-up. The stock
+directory defaults to the verified boot-profile extraction below the user's
+cache. Run this first when that directory does not exist:
+
+  nix run .#extract-stock -- --profile boot
+
+The script links the reviewable device tree into LINEAGE_ROOT and derives
+ignored kernel/DTB/DTBO inputs from the verified .3001 images. It never writes
+to the phone.
+EOF
+}
+
+cache_root="${XDG_CACHE_HOME:-$HOME/.cache}"
+stock_dir="$cache_root/nord2t-recovery/extracted/CPH2399_14.0.0.3001-boot"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --stock-dir)
+      [[ $# -ge 2 ]] || {
+        usage
+        exit 2
+      }
+      stock_dir="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+[[ $# -eq 1 ]] || {
+  usage
+  exit 2
+}
+
+lineage_root="$(realpath "$1")"
+repo_root="$(realpath "$(dirname "${BASH_SOURCE[0]}")/..")"
+device_tree="$repo_root/lineage/device/oneplus/karen"
+partition_manifest="$repo_root/firmware/partitions-3001.json"
+unpack_bootimg="$lineage_root/system/tools/mkbootimg/unpack_bootimg.py"
+
+for required_file in \
+  "$partition_manifest" \
+  "$stock_dir/images/boot.img" \
+  "$stock_dir/images/dtbo.img" \
+  "$unpack_bootimg"; do
+  if [[ ! -r "$required_file" ]]; then
+    echo "Required file is not readable: $required_file" >&2
+    exit 1
+  fi
+done
+
+verify_partition() {
+  local partition="$1"
+  local image="$2"
+  local expected_size expected_hash actual_size actual_hash
+
+  expected_size="$(
+    jq -r --arg name "$partition" \
+      '.partitions[] | select(.name == $name) | .size' \
+      "$partition_manifest"
+  )"
+  expected_hash="$(
+    jq -r --arg name "$partition" \
+      '.partitions[] | select(.name == $name) | .sha256' \
+      "$partition_manifest"
+  )"
+  actual_size="$(stat -c %s "$image")"
+  actual_hash="$(sha256sum "$image" | cut -d ' ' -f 1)"
+
+  if [[ "$actual_size" != "$expected_size" || "$actual_hash" != "$expected_hash" ]]; then
+    echo "Refusing unverified $partition image." >&2
+    exit 1
+  fi
+}
+
+verify_partition boot "$stock_dir/images/boot.img"
+verify_partition dtbo "$stock_dir/images/dtbo.img"
+
+work_dir="$(mktemp -d)"
+cleanup() {
+  rm -rf -- "$work_dir"
+}
+trap cleanup EXIT
+
+python3 "$unpack_bootimg" \
+  --boot_img "$stock_dir/images/boot.img" \
+  --out "$work_dir/unpacked" \
+  >/dev/null
+
+for unpacked_file in kernel dtb; do
+  if [[ ! -s "$work_dir/unpacked/$unpacked_file" ]]; then
+    echo "Stock boot image did not contain $unpacked_file." >&2
+    exit 1
+  fi
+done
+
+mkdir -p "$device_tree/prebuilt/dtbs"
+install -m 0644 "$work_dir/unpacked/kernel" "$device_tree/prebuilt/kernel"
+install -m 0644 "$work_dir/unpacked/dtb" "$device_tree/prebuilt/dtbs/karen.dtb"
+install -m 0644 "$stock_dir/images/dtbo.img" "$device_tree/prebuilt/dtbo.img"
+
+mkdir -p "$lineage_root/device/oneplus"
+lineage_device_path="$lineage_root/device/oneplus/karen"
+if [[ -L "$lineage_device_path" ]]; then
+  if [[ "$(realpath "$lineage_device_path")" != "$device_tree" ]]; then
+    echo "Refusing unrelated symlink: $lineage_device_path" >&2
+    exit 1
+  fi
+  rm -- "$lineage_device_path"
+  mkdir "$lineage_device_path"
+elif [[ -e "$lineage_device_path" ]]; then
+  source_marker="$lineage_device_path/.karen-source"
+  if [[ ! -L "$source_marker" || "$(realpath "$source_marker")" != "$device_tree" ]]; then
+    echo "Refusing existing path: $lineage_device_path" >&2
+    exit 1
+  fi
+else
+  mkdir "$lineage_device_path"
+fi
+
+source_marker="$lineage_device_path/.karen-source"
+if [[ ! -e "$source_marker" && ! -L "$source_marker" ]]; then
+  ln -s "$device_tree" "$source_marker"
+fi
+
+while IFS= read -r -d '' source_dir; do
+  relative_dir="${source_dir#"$device_tree"/}"
+  if [[ "$source_dir" == "$device_tree" ]]; then
+    relative_dir=
+  fi
+  mkdir -p "$lineage_device_path/$relative_dir"
+done < <(find "$device_tree" -type d -print0)
+
+while IFS= read -r -d '' source_file; do
+  relative_file="${source_file#"$device_tree"/}"
+  linked_file="$lineage_device_path/$relative_file"
+  if [[ -L "$linked_file" ]]; then
+    if [[ "$(realpath "$linked_file")" != "$source_file" ]]; then
+      echo "Refusing unrelated file link: $linked_file" >&2
+      exit 1
+    fi
+  elif [[ -e "$linked_file" ]]; then
+    echo "Refusing existing file: $linked_file" >&2
+    exit 1
+  else
+    ln -s "$source_file" "$linked_file"
+  fi
+done < <(find "$device_tree" \( -type f -o -type l \) -print0)
+
+echo "Karen Lineage bring-up tree prepared."
+echo "device_tree=$lineage_device_path"
+echo "kernel_mode=verified-stock-prebuilt"

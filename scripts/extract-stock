@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-extract-stock [--profile PROFILE] [--output DIR] [OTA.zip]
+
+The default OTA is CPH2399_14.0.0.3001_OTA.zip below
+$XDG_CACHE_HOME/nord2t-recovery, or $HOME/.cache/nord2t-recovery.
+
+Profiles:
+  boot      boot, dtbo and AVB metadata
+  blobs     every EROFS system/vendor/OPlus partition plus extracted trees
+  firmware  boot-chain, modem, TEE and coprocessor firmware
+  stock     every image present in the OTA payload
+  port      every payload image plus extracted EROFS trees (default)
+
+The output path must not exist. The OTA and every extracted partition are
+checked against the repository manifests.
+EOF
+}
+
+profile=port
+output=
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --profile)
+      [[ $# -ge 2 ]] || {
+        usage
+        exit 2
+      }
+      profile="$2"
+      shift 2
+      ;;
+    --output)
+      [[ $# -ge 2 ]] || {
+        usage
+        exit 2
+      }
+      output="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+if [[ $# -gt 1 ]]; then
+  usage
+  exit 2
+fi
+
+firmware_manifest="${FIRMWARE_MANIFEST:-@FIRMWARE_MANIFEST@}"
+partition_manifest="${PARTITION_MANIFEST:-@PARTITION_MANIFEST@}"
+cache_root="${XDG_CACHE_HOME:-$HOME/.cache}"
+packaged_firmware="@DEFAULT_FIRMWARE@"
+if [[ ! -r "$packaged_firmware" ]]; then
+  packaged_firmware="$cache_root/nord2t-recovery/CPH2399_14.0.0.3001_OTA.zip"
+fi
+firmware="${1:-$packaged_firmware}"
+output="${output:-$cache_root/nord2t-recovery/extracted/CPH2399_14.0.0.3001-$profile}"
+
+for required_file in "$firmware_manifest" "$partition_manifest" "$firmware"; do
+  if [[ ! -r "$required_file" ]]; then
+    echo "Required file is not readable: $required_file" >&2
+    exit 1
+  fi
+done
+
+mapfile -t partitions < <(
+  jq -r --arg profile "$profile" '.profiles[$profile][]?' "$partition_manifest"
+)
+if [[ "${#partitions[@]}" -eq 0 ]]; then
+  echo "Unsupported or empty profile: $profile" >&2
+  usage
+  exit 2
+fi
+
+extract_trees=false
+if [[ "$profile" == blobs || "$profile" == port ]]; then
+  extract_trees=true
+  mapfile -t tree_partitions < <(jq -r '.treePartitions[]' "$partition_manifest")
+fi
+
+if [[ -e "$output" ]]; then
+  echo "Refusing to overwrite existing path: $output" >&2
+  exit 1
+fi
+
+output_parent="$(dirname "$output")"
+output_name="$(basename "$output")"
+mkdir -p "$output_parent"
+work_output="$(mktemp -d "$output_parent/.${output_name}.partial.XXXXXX")"
+
+cleanup() {
+  if [[ -n "${work_output:-}" && -d "$work_output" ]]; then
+    rm -rf -- "$work_output"
+  fi
+}
+trap cleanup EXIT
+
+package_id="$(jq -r '.sourcePackageId' "$partition_manifest")"
+package_json="$(
+  jq -ce --arg id "$package_id" '.packages[] | select(.id == $id)' \
+    "$firmware_manifest"
+)"
+expected_size="$(jq -r '.size' <<<"$package_json")"
+expected_hash="$(jq -r '.sha256' <<<"$package_json")"
+actual_size="$(stat -Lc %s "$firmware")"
+actual_hash="$(sha256sum "$firmware" | cut -d ' ' -f 1)"
+
+if [[ "$actual_size" != "$expected_size" ]]; then
+  echo "OTA size mismatch: expected $expected_size, got $actual_size" >&2
+  exit 1
+fi
+
+if [[ "$actual_hash" != "$expected_hash" ]]; then
+  echo "OTA SHA-256 mismatch." >&2
+  exit 1
+fi
+
+mkdir -p "$work_output/images"
+partition_list="$(IFS=,; echo "${partitions[*]}")"
+payload-dumper-go \
+  --concurrency 4 \
+  --partitions "$partition_list" \
+  --output "$work_output/images" \
+  "$firmware"
+
+for partition in "${partitions[@]}"; do
+  image="$work_output/images/$partition.img"
+  expected_partition_size="$(
+    jq -r --arg name "$partition" \
+      '.partitions[] | select(.name == $name) | .size' \
+      "$partition_manifest"
+  )"
+  expected_partition_hash="$(
+    jq -r --arg name "$partition" \
+      '.partitions[] | select(.name == $name) | .sha256' \
+      "$partition_manifest"
+  )"
+
+  if [[ -z "$expected_partition_size" || -z "$expected_partition_hash" ]]; then
+    echo "Partition is not pinned in the manifest: $partition" >&2
+    exit 1
+  fi
+
+  if [[ "$(stat -c %s "$image")" != "$expected_partition_size" ]]; then
+    echo "$partition: extracted size mismatch" >&2
+    exit 1
+  fi
+
+  if [[ "$(sha256sum "$image" | cut -d ' ' -f 1)" != "$expected_partition_hash" ]]; then
+    echo "$partition: extracted SHA-256 mismatch" >&2
+    exit 1
+  fi
+done
+
+(
+  cd "$work_output/images"
+  sha256sum ./*.img >"$work_output/SHA256SUMS"
+)
+
+if [[ "$extract_trees" == true ]]; then
+  mkdir -p "$work_output/trees"
+  for partition in "${tree_partitions[@]}"; do
+    mkdir -p "$work_output/trees/$partition"
+    fsck.erofs \
+      --extract="$work_output/trees/$partition" \
+      --no-preserve \
+      "$work_output/images/$partition.img" >/dev/null
+  done
+fi
+
+jq -n \
+  --arg packageId "$package_id" \
+  --arg profile "$profile" \
+  --arg otaSha256 "$actual_hash" \
+  --argjson partitions "$(printf '%s\n' "${partitions[@]}" | jq -R . | jq -s .)" \
+  '{
+    packageId: $packageId,
+    profile: $profile,
+    otaSha256: $otaSha256,
+    partitions: $partitions
+  }' >"$work_output/SOURCE.json"
+
+mv -- "$work_output" "$output"
+work_output=
+echo "Verified stock extraction written: $output"
+echo "profile=$profile"
+echo "ota_sha256=$actual_hash"

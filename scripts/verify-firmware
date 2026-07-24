@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-verify-firmware [--device-cert] [firmware-directory]
+
+The default directory is $XDG_CACHE_HOME/nord2t-recovery, or
+$HOME/.cache/nord2t-recovery when XDG_CACHE_HOME is unset.
+EOF
+}
+
+check_device_cert=false
+if [[ "${1:-}" == --device-cert ]]; then
+  check_device_cert=true
+  shift
+fi
+
+if [[ $# -gt 1 ]]; then
+  usage
+  exit 2
+fi
+
+manifest="${FIRMWARE_MANIFEST:-@FIRMWARE_MANIFEST@}"
+cache_root="${XDG_CACHE_HOME:-$HOME/.cache}"
+firmware_directory="${1:-$cache_root/nord2t-recovery}"
+
+if [[ ! -r "$manifest" ]]; then
+  echo "Firmware manifest not found: $manifest" >&2
+  exit 1
+fi
+
+if [[ ! -d "$firmware_directory" ]]; then
+  echo "Firmware directory not found: $firmware_directory" >&2
+  exit 1
+fi
+
+temporary_directory="$(mktemp -d)"
+trap 'rm -rf "$temporary_directory"' EXIT
+
+hash_payload_metadata() {
+  local archive="$1"
+  local metadata_size="$2"
+  local destination="$3"
+  local pipeline_status
+
+  set +o pipefail
+  7z e -so "$archive" payload.bin 2>/dev/null |
+    head -c "$metadata_size" >"$destination"
+  pipeline_status=("${PIPESTATUS[@]}")
+  set -o pipefail
+
+  if [[ "${pipeline_status[1]}" -ne 0 ]]; then
+    echo "Could not read payload metadata from $(basename "$archive")." >&2
+    return 1
+  fi
+}
+
+verify_ota_signature() {
+  local archive="$1"
+  local expected_certificate="$2"
+  local name="$3"
+  local archive_size
+  local b0 b1 b2 b3 b4 b5
+  local comment_size
+  local signature_start
+  local signed_length
+  local signature_file="$temporary_directory/$name-signature.der"
+  local signer_file="$temporary_directory/$name-signer.pem"
+  local signer_hash
+
+  read -r b0 b1 b2 b3 b4 b5 < <(tail -c 6 "$archive" | od -An -v -t u1)
+  if [[ "$b2" -ne 255 || "$b3" -ne 255 ]]; then
+    echo "$name: invalid OTA signature footer" >&2
+    return 1
+  fi
+
+  signature_start=$((b0 + b1 * 256))
+  comment_size=$((b4 + b5 * 256))
+  archive_size="$(stat -c %s "$archive")"
+  signed_length=$((archive_size - comment_size - 2))
+
+  if ((signature_start <= 6 || signature_start > comment_size)); then
+    echo "$name: invalid OTA signature bounds" >&2
+    return 1
+  fi
+
+  tail -c "$signature_start" "$archive" >"$signature_file"
+  openssl cms -verify \
+    -binary \
+    -inform DER \
+    -in "$signature_file" \
+    -content <(head -c "$signed_length" "$archive") \
+    -noverify \
+    -out /dev/null 2>/dev/null
+
+  openssl pkcs7 \
+    -inform DER \
+    -in "$signature_file" \
+    -print_certs \
+    -out "$signer_file"
+  signer_hash="$(
+    openssl x509 -in "$signer_file" -outform DER |
+      sha256sum |
+      cut -d' ' -f1
+  )"
+
+  if [[ "$signer_hash" != "$expected_certificate" ]]; then
+    echo "$name: signer certificate does not match manifest" >&2
+    return 1
+  fi
+}
+
+expected_device_certificate="$(jq -r '.otaCertificate.derSha256' "$manifest")"
+package_count="$(jq '.packages | length' "$manifest")"
+
+for ((index = 0; index < package_count; index++)); do
+  package_json="$(jq -c ".packages[$index]" "$manifest")"
+  name="$(jq -r '.id' <<<"$package_json")"
+  filename="$(jq -r '.filename' <<<"$package_json")"
+  archive="$firmware_directory/$filename"
+  expected_size="$(jq -r '.size' <<<"$package_json")"
+  expected_md5="$(jq -r '.md5' <<<"$package_json")"
+  expected_sha256="$(jq -r '.sha256' <<<"$package_json")"
+  expected_product="$(jq -r '.metadata.productName' <<<"$package_json")"
+  expected_device="$(jq -r '.metadata.preDevice' <<<"$package_json")"
+  expected_version="$(jq -r '.metadata.versionName' <<<"$package_json")"
+  expected_wipe="$(jq -r '.metadata.wipe' <<<"$package_json")"
+  expected_patch="$(jq -r '.metadata.securityPatch' <<<"$package_json")"
+  expected_payload_hash="$(jq -r '.payload.fileHash' <<<"$package_json")"
+  expected_payload_size="$(jq -r '.payload.fileSize' <<<"$package_json")"
+  expected_metadata_hash="$(jq -r '.payload.metadataHash' <<<"$package_json")"
+  expected_metadata_size="$(jq -r '.payload.metadataSize' <<<"$package_json")"
+
+  if [[ ! -r "$archive" ]]; then
+    echo "$name: missing $archive" >&2
+    exit 1
+  fi
+
+  echo "$name: checking archive"
+  [[ "$(stat -c %s "$archive")" == "$expected_size" ]]
+  [[ "$(md5sum "$archive" | cut -d' ' -f1)" == "$expected_md5" ]]
+  [[ "$(sha256sum "$archive" | cut -d' ' -f1)" == "$expected_sha256" ]]
+  7z t "$archive" >/dev/null
+
+  metadata="$temporary_directory/$name-metadata"
+  properties="$temporary_directory/$name-payload-properties"
+  ota_certificate="$temporary_directory/$name-otacert.pem"
+  7z e -so "$archive" META-INF/com/android/metadata >"$metadata" 2>/dev/null
+  7z e -so "$archive" payload_properties.txt >"$properties" 2>/dev/null
+  7z e -so "$archive" META-INF/com/android/otacert >"$ota_certificate" 2>/dev/null
+
+  grep -Fxq "product_name=$expected_product" "$metadata"
+  grep -Fxq "pre-device=$expected_device" "$metadata"
+  grep -Fxq "version_name=$expected_version" "$metadata"
+  grep -Fxq "wipe=$expected_wipe" "$metadata"
+  grep -Fxq "post-security-patch-level=$expected_patch" "$metadata"
+  grep -Fxq "FILE_HASH=$expected_payload_hash" "$properties"
+  grep -Fxq "FILE_SIZE=$expected_payload_size" "$properties"
+  grep -Fxq "METADATA_HASH=$expected_metadata_hash" "$properties"
+  grep -Fxq "METADATA_SIZE=$expected_metadata_size" "$properties"
+
+  archive_certificate_hash="$(
+    openssl x509 -in "$ota_certificate" -outform DER |
+      sha256sum |
+      cut -d' ' -f1
+  )"
+  [[ "$archive_certificate_hash" == "$expected_device_certificate" ]]
+  verify_ota_signature "$archive" "$expected_device_certificate" "$name"
+
+  actual_payload_hash="$(
+    7z e -so "$archive" payload.bin 2>/dev/null |
+      openssl dgst -sha256 -binary |
+      base64 -w0
+  )"
+  [[ "$actual_payload_hash" == "$expected_payload_hash" ]]
+
+  metadata_payload="$temporary_directory/$name-payload-metadata"
+  hash_payload_metadata "$archive" "$expected_metadata_size" "$metadata_payload"
+  actual_metadata_hash="$(
+    openssl dgst -sha256 -binary <"$metadata_payload" |
+      base64 -w0
+  )"
+  [[ "$actual_metadata_hash" == "$expected_metadata_hash" ]]
+
+  echo "$name: verified"
+done
+
+if "$check_device_cert"; then
+  if [[ "$(adb get-state 2>/dev/null || true)" != device ]]; then
+    echo "No single authorized ADB device is connected for certificate comparison." >&2
+    exit 1
+  fi
+
+  model="$(adb shell getprop ro.product.model | tr -d '\r')"
+  device="$(adb shell getprop ro.product.device | tr -d '\r')"
+  if [[ "$model" != CPH2399 || "$device" != OP557AL1 ]]; then
+    echo "Refusing certificate comparison for model=$model device=$device" >&2
+    exit 1
+  fi
+
+  device_certificates="$temporary_directory/device-otacerts.zip"
+  adb exec-out cat /system/etc/security/otacerts.zip >"$device_certificates"
+  certificate_entry="$(
+    7z l -ba "$device_certificates" |
+      awk '$NF ~ /\.x509\.pem$/ { print $NF; exit }'
+  )"
+  if [[ -z "$certificate_entry" ]]; then
+    echo "No OTA certificate found on device." >&2
+    exit 1
+  fi
+
+  device_certificate_hash="$(
+    7z e -so "$device_certificates" "$certificate_entry" 2>/dev/null |
+      openssl x509 -outform DER |
+      sha256sum |
+      cut -d' ' -f1
+  )"
+  if [[ "$device_certificate_hash" != "$expected_device_certificate" ]]; then
+    echo "Connected device OTA certificate does not match the manifest." >&2
+    exit 1
+  fi
+  echo "device-ota-certificate: verified"
+fi
+
+echo "All available firmware packages passed every check."

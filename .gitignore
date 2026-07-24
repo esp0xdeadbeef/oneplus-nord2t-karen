@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: MIT
+
+# Nix
+/.direnv/
+/result
+/result-*
+
+# Firmware and Android build products
+*.apk
+*.bin
+*.dtb
+*.elf
+*.img
+*.lz4
+*.ota
+*.tar
+*.tar.*
+*.zip
+/build/
+/extracted/
+/out/
+/vendor/
+
+# Local stock-derived Lineage bring-up inputs
+/lineage/device/oneplus/karen/prebuilt/kernel
+
+# Device captures and diagnostics
+*.log
+*.pcap
+*.trace
+/dumps/
+/live-partitions/
+/snapshots/
+
+# Local configuration
+.env
+.env.*
+!.env.example

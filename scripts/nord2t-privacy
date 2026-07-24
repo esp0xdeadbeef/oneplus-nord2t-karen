@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  echo "usage: nord2t-privacy {audit|inventory|apply|harden|degoogle|restore-google|restore-hardening|restore-play-store}" >&2
+}
+
+if [[ $# -gt 1 ]]; then
+  usage
+  exit 2
+fi
+
+action="${1:-audit}"
+case "$action" in
+  audit | inventory | apply | harden | degoogle | restore-google | restore-hardening | restore-play-store)
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
+
+if [[ "$(adb get-state 2>/dev/null || true)" != device ]]; then
+  echo "No single authorized ADB device is connected." >&2
+  exit 1
+fi
+
+read_property() {
+  adb shell getprop "$1" | tr -d '\r'
+}
+
+model="$(read_property ro.product.model)"
+device="$(read_property ro.product.device)"
+if [[ "$model" != CPH2399 || "$device" != OP557AL1 ]]; then
+  echo "Refusing to modify unsupported device: model=$model device=$device" >&2
+  exit 1
+fi
+
+package_version() {
+  adb shell dumpsys package "$1" |
+    tr -d '\r' |
+    sed -n 's/^[[:space:]]*versionName=\([^[:space:]]*\).*/\1/p' |
+    head -n 1
+}
+
+package_state() {
+  local state
+  state="$(
+    adb shell dumpsys package "$1" |
+      tr -d '\r' |
+      sed -n 's/.*User 0:.*enabled=\([^[:space:]]*\).*/\1/p' |
+      head -n 1
+  )"
+
+  case "$state" in
+    0) echo default ;;
+    1) echo enabled ;;
+    2) echo disabled ;;
+    3) echo disabled-user ;;
+    4) echo disabled-until-used ;;
+    *) echo "unknown-$state" ;;
+  esac
+}
+
+package_exists() {
+  adb shell pm path "$1" 2>/dev/null | grep -q '^package:'
+}
+
+disable_for_owner() {
+  local output
+  if ! output="$(adb shell pm disable-user --user 0 "$1" 2>&1)"; then
+    echo "Warning: OxygenOS refused to disable $1; leaving it unchanged." >&2
+    return 0
+  fi
+  echo "$output"
+}
+
+# Conservative subset of packages marked "Recommended" in UAD-ng commit
+# 9336f25e7d5476e0824720ee44dce23bc7640c3f. Telephony, emergency services,
+# OTA, camera, WebView and configuration updates deliberately stay enabled.
+hardening_packages=(
+  com.google.android.apps.googleassistant
+  com.google.android.apps.restore
+  com.google.android.apps.setupwizard.searchselector
+  com.google.android.as
+  com.google.android.as.oss
+  com.google.android.feedback
+  com.google.android.gms.location.history
+  com.google.android.onetimeinitializer
+  com.heytap.mcs
+  com.oneplus.membership
+  com.oplus.crashbox
+  com.oplus.interconnectcollectkit
+  com.oplus.lfeh
+  com.oplus.logkit
+  com.oplus.ocloud
+  com.oplus.olc
+  com.oplus.onet
+  com.oplus.onetrace
+  com.oplus.postmanservice
+  com.oplus.qualityprotect
+  com.oplus.statistics.rom
+)
+
+# Network-facing Google core and bundled consumer applications. Critical
+# AOSP/Mainline components, WebView, Wi-Fi/network resources, permission
+# control, emergency alerts, dialer, SMS, contacts, keyboard, TTS and
+# accessibility remain installed.
+degoogle_packages=(
+  com.android.chrome
+  com.google.android.adservices.api
+  com.google.android.apps.maps
+  com.google.android.apps.nbu.files
+  com.google.android.apps.photos
+  com.google.android.apps.walletnfcrel
+  com.google.android.apps.wellbeing
+  com.google.android.calendar
+  com.google.android.federatedcompute
+  com.google.android.gm
+  com.google.android.gms
+  com.google.android.googlequicksearchbox
+  com.google.android.gsf
+  com.google.android.health.connect.backuprestore
+  com.google.android.healthconnect.controller
+  com.google.android.ondevicepersonalization.services
+  com.google.android.partnersetup
+  com.google.android.projection.gearhead
+  com.google.android.setupwizard
+  com.google.android.youtube
+  com.google.ar.core
+  com.google.ar.lens
+  com.google.mainline.adservices
+  com.google.mainline.telemetry
+)
+
+audit() {
+  echo "model=$model"
+  echo "device=$device"
+  echo "build=$(read_property ro.build.display.id)"
+  echo "android=$(read_property ro.build.version.release)"
+  echo "security_patch=$(read_property ro.build.version.security_patch)"
+  echo "bootloader_locked=$(read_property ro.boot.flash.locked)"
+  echo "verified_boot=$(read_property ro.boot.verifiedbootstate)"
+  echo "oem_unlock_allowed=$(read_property sys.oem_unlock_allowed)"
+  echo "aurora_version=$(package_version com.aurora.store)"
+  echo "play_store_state=$(package_state com.android.vending)"
+  echo "play_services_state=$(package_state com.google.android.gms)"
+  echo "gsf_state=$(package_state com.google.android.gsf)"
+
+  local package
+  local degoogle_disabled=0
+  local degoogle_present=0
+  local disabled=0
+  local present=0
+
+  for package in "${hardening_packages[@]}"; do
+    if package_exists "$package"; then
+      present=$((present + 1))
+      if [[ "$(package_state "$package")" == disabled-user ]]; then
+        disabled=$((disabled + 1))
+      fi
+    fi
+  done
+  echo "hardening_disabled=$disabled/$present"
+
+  for package in "${degoogle_packages[@]}"; do
+    if package_exists "$package"; then
+      degoogle_present=$((degoogle_present + 1))
+      if [[ "$(package_state "$package")" == disabled-user ]]; then
+        degoogle_disabled=$((degoogle_disabled + 1))
+      fi
+    fi
+  done
+  echo "degoogle_disabled=$degoogle_disabled/$degoogle_present"
+}
+
+inventory() {
+  local features
+  local hals
+  local packages
+
+  audit
+  echo "selinux=$(adb shell getenforce | tr -d '\r')"
+  echo "crypto_state=$(read_property ro.crypto.state)"
+  echo "crypto_type=$(read_property ro.crypto.type)"
+  echo "treble=$(read_property ro.treble.enabled)"
+  echo "vndk=$(read_property ro.vndk.version)"
+  echo "first_api_level=$(read_property ro.product.first_api_level)"
+  echo "slot=$(read_property ro.boot.slot_suffix)"
+  echo "dynamic_partitions=$(read_property ro.boot.dynamic_partitions)"
+  echo "virtual_ab=$(read_property ro.virtual_ab.enabled)"
+  echo "kernel=$(adb shell uname -r | tr -d '\r')"
+
+  packages="$(
+    adb shell pm list packages -s |
+      tr -d '\r' |
+      sed 's/^package://' |
+      LC_ALL=C sort
+  )"
+  features="$(
+    adb shell pm list features |
+      tr -d '\r' |
+      LC_ALL=C sort
+  )"
+  hals="$(
+    { adb shell 'lshal 2>/dev/null' || true; } |
+      tr -d '\r' |
+      LC_ALL=C sort
+  )"
+
+  echo "system_package_count=$(printf '%s\n' "$packages" | sed '/^$/d' | wc -l)"
+  echo "system_package_sha256=$(printf '%s\n' "$packages" | sha256sum | cut -d' ' -f1)"
+  echo "feature_sha256=$(printf '%s\n' "$features" | sha256sum | cut -d' ' -f1)"
+  echo "hal_sha256=$(printf '%s\n' "$hals" | sha256sum | cut -d' ' -f1)"
+}
+
+apply_baseline() {
+  local aurora_apk="${AURORA_APK:-@AURORA_APK@}"
+  local patch
+
+  patch="$(read_property ro.build.version.security_patch)"
+  if [[ "$patch" < 2026-06-01 ]]; then
+    echo "Warning: install the current official CPH2399 OTA before treating this as a hardened baseline." >&2
+  fi
+
+  if [[ ! -f "$aurora_apk" ]]; then
+    echo "Aurora APK not found. Use 'nix run .#privacy -- apply' or set AURORA_APK." >&2
+    exit 1
+  fi
+
+  adb install --user 0 -r "$aurora_apk"
+  adb shell pm disable-user --user 0 com.android.vending
+}
+
+harden() {
+  local package
+
+  apply_baseline
+  for package in "${hardening_packages[@]}"; do
+    if package_exists "$package"; then
+      disable_for_owner "$package"
+    fi
+  done
+}
+
+degoogle() {
+  local package
+
+  harden
+  for package in "${degoogle_packages[@]}"; do
+    if package_exists "$package"; then
+      disable_for_owner "$package"
+    fi
+  done
+}
+
+restore_google() {
+  local package
+
+  adb shell pm default-state --user 0 com.android.vending
+  for package in "${degoogle_packages[@]}"; do
+    if package_exists "$package"; then
+      adb shell pm default-state --user 0 "$package"
+    fi
+  done
+  for package in "${hardening_packages[@]}"; do
+    case "$package" in
+      com.google.*)
+        if package_exists "$package"; then
+          adb shell pm default-state --user 0 "$package"
+        fi
+        ;;
+    esac
+  done
+}
+
+restore_hardening() {
+  local package
+
+  for package in "${hardening_packages[@]}"; do
+    if package_exists "$package"; then
+      adb shell pm default-state --user 0 "$package"
+    fi
+  done
+}
+
+case "$action" in
+  audit)
+    audit
+    ;;
+  inventory)
+    inventory
+    ;;
+  apply)
+    apply_baseline
+    audit
+    ;;
+  harden)
+    harden
+    audit
+    ;;
+  degoogle)
+    degoogle
+    audit
+    ;;
+  restore-google)
+    restore_google
+    audit
+    ;;
+  restore-hardening)
+    restore_hardening
+    audit
+    ;;
+  restore-play-store)
+    adb shell pm default-state --user 0 com.android.vending
+    audit
+    ;;
+esac
