@@ -5,7 +5,8 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: prepare-lineage [--stock-dir DIR] LINEAGE_ROOT
+usage: prepare-lineage [--full] [--stock-dir DIR]
+                       [--lineage-stock-dir DIR] LINEAGE_ROOT
 
 Prepare a LineageOS 21 checkout for the Karen recovery bring-up. The stock
 directory defaults to the verified boot-profile extraction below the user's
@@ -15,21 +16,36 @@ cache. Run this first when that directory does not exist:
 
 The script links the reviewable device tree into LINEAGE_ROOT and derives
 ignored kernel/DTB/DTBO inputs from the verified .3001 images. It never writes
-to the phone.
+to the phone. With --full it also installs the verified stock vendor/odm
+images and full first-stage fstab from the `lineage` extraction profile.
 EOF
 }
 
 cache_root="${XDG_CACHE_HOME:-$HOME/.cache}"
 stock_dir="$cache_root/nord2t-recovery/extracted/CPH2399_14.0.0.3001-boot"
+lineage_stock_dir="$cache_root/nord2t-recovery/extracted/CPH2399_14.0.0.3001-lineage"
+full=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --full)
+      full=true
+      shift
+      ;;
     --stock-dir)
       [[ $# -ge 2 ]] || {
         usage
         exit 2
       }
       stock_dir="$2"
+      shift 2
+      ;;
+    --lineage-stock-dir)
+      [[ $# -ge 2 ]] || {
+        usage
+        exit 2
+      }
+      lineage_stock_dir="$2"
       shift 2
       ;;
     -h | --help)
@@ -95,6 +111,19 @@ verify_partition() {
 
 verify_partition boot "$stock_dir/images/boot.img"
 verify_partition dtbo "$stock_dir/images/dtbo.img"
+if [[ "$full" == true ]]; then
+  for required_file in \
+    "$lineage_stock_dir/images/vendor.img" \
+    "$lineage_stock_dir/images/odm.img" \
+    "$lineage_stock_dir/trees/vendor/etc/fstab.mt6893"; do
+    if [[ ! -r "$required_file" ]]; then
+      echo "Required file is not readable: $required_file" >&2
+      exit 1
+    fi
+  done
+  verify_partition vendor "$lineage_stock_dir/images/vendor.img"
+  verify_partition odm "$lineage_stock_dir/images/odm.img"
+fi
 
 work_dir="$(mktemp -d)"
 cleanup() {
@@ -118,6 +147,18 @@ mkdir -p "$device_tree/prebuilt/dtbs"
 install -m 0644 "$work_dir/unpacked/kernel" "$device_tree/prebuilt/kernel"
 install -m 0644 "$work_dir/unpacked/dtb" "$device_tree/prebuilt/dtbs/karen.dtb"
 install -m 0644 "$stock_dir/images/dtbo.img" "$device_tree/prebuilt/dtbo.img"
+if [[ "$full" == true ]]; then
+  mkdir -p "$device_tree/prebuilt/stock"
+  install -m 0644 \
+    "$lineage_stock_dir/images/vendor.img" \
+    "$device_tree/prebuilt/stock/vendor.img"
+  install -m 0644 \
+    "$lineage_stock_dir/images/odm.img" \
+    "$device_tree/prebuilt/stock/odm.img"
+  install -m 0644 \
+    "$lineage_stock_dir/trees/vendor/etc/fstab.mt6893" \
+    "$device_tree/rootdir/etc/fstab.mt6893.full"
+fi
 
 mkdir -p "$lineage_root/device/oneplus"
 lineage_device_path="$lineage_root/device/oneplus/karen"
@@ -170,3 +211,8 @@ done < <(find "$device_tree" \( -type f -o -type l \) -print0)
 echo "Karen Lineage bring-up tree prepared."
 echo "device_tree=$lineage_device_path"
 echo "kernel_mode=verified-stock-prebuilt"
+if [[ "$full" == true ]]; then
+  echo "system_mode=full-with-verified-stock-vendor"
+else
+  echo "system_mode=recovery-only"
+fi

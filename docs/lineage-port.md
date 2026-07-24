@@ -251,8 +251,9 @@ Prepare a Lineage 21 checkout without copying proprietary inputs into Git:
 
 ```sh
 nix run .#extract-stock -- --profile boot
+nix run .#extract-stock -- --profile lineage
 nix shell nixpkgs#jq nixpkgs#python3 --command \
-  scripts/prepare-lineage /path/to/lineage-21
+  scripts/prepare-lineage --full /path/to/lineage-21
 ```
 
 Then build only the recovery-as-boot image. On NixOS, run the build inside the
@@ -261,11 +262,14 @@ repository's FHS shell so AOSP's generic Linux host tools can execute:
 ```sh
 nix run /path/to/oneplus-nord2t-karen#android-fhs -- -c '
   source build/envsetup.sh
+  export KAREN_FULL_SYSTEM=true
   lunch lineage_karen-ap2a-userdebug
-  m bootimage
+  m bootimage systemimage systemextimage productimage \
+    vendorimage odmimage vbmetaimage vbmeta_systemimage vbmeta_vendorimage
 '
 ```
 
+Omit `--full` and `KAREN_FULL_SYSTEM` when rebuilding only the recovery probe.
 Do not flash the result until bootloader USB communication and exact stock
 slot restoration have both been proven. The rest of this document records what
 is needed to turn `karen` into an official, updatable device rather than a
