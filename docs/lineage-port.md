@@ -145,6 +145,53 @@ layout decisions while retaining its own verified offsets, fstab, stock
 kernel, DTB and DTBO. Its A/B update list explicitly includes the five
 Lineage-built logical partitions and the matching boot/AVB metadata.
 
+### Successful inactive-slot recovery boot
+
+The corrected build completed on `s-tau` and produced a 64 MiB `boot.img` with
+SHA-256
+`76d44168975a309785a7a60e059b9c1ae52248631a311ff315bb9c4eddac3ad2`.
+Its stock kernel and DTB hashes remained unchanged. The structural audit
+confirmed header v2, the recovery-only init fatal target, first-stage
+`fstab.mt6893`, ramdisk `snapuserd`, Lineage Recovery and the deliberately
+insecure bring-up ADB configuration. Its AVB footer uses algorithm `NONE` and
+it remains test-keyed and unsuitable for release.
+
+Because temporary `fastboot boot` had already been disproved by both stock and
+Magisk controls, this candidate was written only to inactive `boot_b` after
+the original contents of that slot were saved and hashed. Selecting slot `b`
+then booted the recovery on the phone:
+
+- the owner confirmed the Lineage Recovery UI on the display;
+- recovery ADB enumerated over the direct laptop USB port;
+- `ro.boot.slot_suffix` reported `_b` and `ro.bootmode` reported `recovery`;
+- recovery `adbd` supplied the expected `uid=0(root)` diagnostic shell;
+- first-stage fstab, `snapuserd`, DRM, framebuffer and input devices were
+  present.
+
+This is the first hardware execution proof for the port. It validates the
+stock kernel/DTB plus Lineage ramdisk baseline, display and recovery USB ADB.
+It does not yet validate touch, encrypted data access, sideload, recovery
+fastbootd, radio or any complete Lineage system image.
+
+The phone was returned to stock without navigating the recovery UI:
+
+```sh
+adb shell reboot bootloader
+fastboot getvar is-userspace
+fastboot getvar product
+fastboot getvar hw-revision
+fastboot getvar unlocked
+fastboot set_active a
+fastboot flash boot_b /private/verified/original-boot_b.img
+fastboot reboot
+```
+
+The live restored `boot_b` hash matched its pre-test backup exactly. OxygenOS
+`.3001` booted from slot `a`, SELinux remained enforcing, and the existing
+Magisk-patched stock `boot_a` still provided the approved root shell. Runtime
+logs are retained privately outside Git because host captures can contain
+device identifiers.
+
 ### Interactive checkout
 
 The following fallback is useful while iterating on Android makefiles because

@@ -98,15 +98,21 @@ machine-specific build configuration is part of this repository.
 The pinned build completed successfully on `s-tau` and its resulting
 recovery-as-boot image passed the repository's structural audit. Its kernel
 and DTB are byte-identical to `.3001` stock, while the ramdisk contains the
-expected Lineage Recovery, fastbootd, fstab and SELinux policy. The first
-temporary RAM boot transferred completely, then lost fastboot transport and
-eventually returned to stock with boot reason `lk_crash`; it did not yet
-provide a persistent recovery shell. The next recovery-only probe deliberately
-disables ADB authentication so this freshly wiped device can expose early
-bring-up logs. The audit rejects that debug setting unless
-`--allow-insecure-adb` is explicitly supplied. This remains an unsigned test
-image, and exact stock-slot restoration must be proven before anything is
-flashed persistently. See the
+expected Lineage Recovery, fastbootd, first-stage fstab, virtual A/B
+`snapuserd` and SELinux policy. Temporary `fastboot boot` transferred
+completely but returned to stock with boot reason `lk_crash`, so the corrected
+image was written only to inactive `boot_b` after its exact stock contents had
+been saved.
+
+That inactive-slot probe booted Lineage Recovery successfully. Its display and
+ADB worked, ADB ran as root in recovery, the device reported slot `b`, and the
+first-stage ramdisk files were present. No user-data or dynamic partition was
+flashed. The phone was then rebooted to bootloader-fastboot, slot `a` was made
+active, and the saved original `boot_b` was restored and verified byte for
+byte. Stock `.3001` subsequently booted normally with SELinux enforcing and
+the separately tested Magisk root on `boot_a` still intact. The recovery
+remains an unsigned bring-up image with deliberately insecure ADB; it is not an
+installable ROM. See the
 [LineageOS port assessment](docs/lineage-port.md) for the current gates and
 bring-up sequence.
 

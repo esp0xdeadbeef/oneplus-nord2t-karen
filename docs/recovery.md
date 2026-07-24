@@ -148,6 +148,51 @@ from fastbootd to bootloader-fastboot over a direct laptop USB port. Temporary
 control images transferred, disconnected and returned through `lk_crash`.
 Active-slot `boot_a` flashing was subsequently proven with the audited Magisk
 control image and its exact pinned stock-unroot counterpart remains available.
+An inactive-slot Lineage Recovery test subsequently proved the complete
+`boot_b` write, slot switch, recovery boot and exact stock restoration
+roundtrip.
+
+## Tested inactive-slot recovery roundtrip
+
+The corrected Lineage Recovery bring-up image was tested on 2026-07-24 without
+touching active `boot_a` or any dynamic partition. Before the test, rooted
+stock readback saved the older original `boot_b` image outside Git and recorded
+its exact 64 MiB size and SHA-256. Bootloader-fastboot then wrote the candidate
+only to `boot_b` and selected slot `b`.
+
+The phone booted Lineage Recovery visibly. Recovery ADB enumerated as
+`lineage_karen`, reported `ro.boot.slot_suffix=_b` and supplied the intended
+root diagnostic shell. The runtime ramdisk contained the first-stage fstab and
+virtual A/B `snapuserd`; display, framebuffer, DRM and input devices were
+present. This proves recovery execution, display and USB ADB, but does not yet
+prove touch, decryption, sideload, fastbootd or installation of a complete ROM.
+
+The recovery ignored `adb reboot fastboot`. The tested exit command was:
+
+```sh
+adb shell reboot bootloader
+```
+
+In bootloader-fastboot, the following gates were checked before restoration:
+
+```text
+is-userspace: no
+product: k6893v1_64_k419
+hw-revision: ca00
+unlocked: yes
+```
+
+Slot `a` was selected, the saved original image was written back only to
+`boot_b`, and the phone was rebooted. Stock
+`CPH2399_14.0.0.3001(EX01)` returned on slot `a` with SELinux enforcing. A
+rooted live readback of `boot_b` exactly matched the pre-test SHA-256, while
+the Magisk-patched stock `boot_a` and its approved root shell remained intact.
+
+One loader quirk is worth preserving: after selecting an inactive slot,
+`fastboot getvar current-slot` can continue to describe the currently running
+bootloader slot until the next boot. Always verify the slot again from the
+booted environment with `ro.boot.slot_suffix`; do not infer failure solely
+from the immediate `getvar` result.
 
 ## Tested bootloader unlock
 
