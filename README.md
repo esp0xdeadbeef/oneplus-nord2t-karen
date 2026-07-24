@@ -39,6 +39,13 @@ Calls, SMS, mobile data, Wi-Fi association, Bluetooth pairing, camera output,
 NFC, push notifications, banking apps and navigation still need real-world
 testing by the owner.
 
+The bootloader was unlocked and userdata was wiped on 2026-07-24 for recovery
+bring-up. Stock OxygenOS still boots from slot `a`, but Verified Boot now
+reports orange/unlocked instead of green/locked. The working unlock path was
+fastbootd -> bootloader-fastboot over a cable connected directly to the
+laptop; bootloader-fastboot did not enumerate behind the Lenovo dock. See the
+[tested unlock procedure](docs/recovery.md#tested-bootloader-unlock).
+
 Disabling Play services breaks or degrades Firebase push, Google login, Wallet,
 Android Auto, RCS, Play Integrity and apps that require Google APIs. The helper
 therefore provides restore actions. It deliberately keeps critical telephony,
@@ -85,11 +92,17 @@ machine-specific build configuration is part of this repository.
 The pinned build completed successfully on `s-tau` and its resulting
 recovery-as-boot image passed the repository's structural audit. Its kernel
 and DTB are byte-identical to `.3001` stock, while the ramdisk contains the
-expected Lineage Recovery, authenticated ADB, fastbootd, fstab and SELinux
-policy. This is still an unsigned test image. Bootloader USB must work
-reliably, and exact stock-slot restoration must be proven before it is
-flashed. See the [LineageOS port assessment](docs/lineage-port.md) for the
-current gates and bring-up sequence.
+expected Lineage Recovery, fastbootd, fstab and SELinux policy. The first
+temporary RAM boot transferred completely, then lost fastboot transport and
+eventually returned to stock with boot reason `lk_crash`; it did not yet
+provide a persistent recovery shell. The next recovery-only probe deliberately
+disables ADB authentication so this freshly wiped device can expose early
+bring-up logs. The audit rejects that debug setting unless
+`--allow-insecure-adb` is explicitly supplied. This remains an unsigned test
+image, and exact stock-slot restoration must be proven before anything is
+flashed persistently. See the
+[LineageOS port assessment](docs/lineage-port.md) for the current gates and
+bring-up sequence.
 
 ## Use
 

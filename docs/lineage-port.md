@@ -73,7 +73,7 @@ Reproduce the comparison with:
 
 ```sh
 nix build .#karen-bootimage
-nix run .#audit-boot -- ./result/boot.img
+nix run .#audit-boot -- --allow-insecure-adb ./result/boot.img
 ```
 
 The audit verifies:
@@ -86,12 +86,38 @@ The audit verifies:
 - the current F2FS metadata-encryption parameters and logical EROFS mappings;
 - absence of device-unique and security partitions from the recovery fstab.
 
+The pinned recovery-only Robotnix derivation sets
+`KAREN_RECOVERY_BRINGUP=true`. The Karen board configuration maps that explicit
+marker to Lineage's `WITH_ADB_INSECURE` switch so a wiped device can provide a
+headless diagnostic shell. This must never be set for an installable system
+build. The audit rejects `ro.adb.secure=0` by default and accepts it only with
+the explicit `--allow-insecure-adb` bring-up flag.
+
 The test image has an unsigned AVB footer (`Algorithm: NONE`) and test keys.
 Its header reports the pinned Lineage source patch level of 2026-04, while
 stock reports 2026-06. It is therefore correctly classified as an experimental
 unlock-only image, not as a signed release or a replacement security baseline.
 Structural success does not prove display, touch, USB or block-device behavior
 on hardware.
+
+### First hardware boot probe
+
+The bootloader was unlocked through bootloader-fastboot on 2026-07-24. It
+enumerated only after moving the cable from the Lenovo dock to a direct laptop
+USB port. The first audited image, SHA-256
+`83f84198841415fd4934ce5fc283e64922562d1cc95e40acfb37c909de8607e2`,
+was sent with `fastboot boot`; all 64 MiB transferred successfully. The phone
+then disconnected before fastboot received the final boot status. That
+transport error alone does not prove boot failure.
+
+The host subsequently saw the MediaTek Android ADB interface
+(`0e8d:201c`) reconnect repeatedly, and the phone eventually returned to stock
+OxygenOS on slot `a`. Stock reported `ro.boot.bootreason=lk_crash`,
+`ro.boot.verifiedbootstate=orange` and an unlocked bootloader. The original
+image required authenticated ADB, while the unlock wipe had removed the
+authorized device-side key, so it did not yield a diagnostic recovery shell.
+The next probe therefore changes only the recovery ADB authentication setting
+through the explicit bring-up marker described above.
 
 ### Interactive checkout
 

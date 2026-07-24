@@ -12,6 +12,12 @@
   release = "ap2a";
   stateVersion = "3";
 
+  # This derivation builds only the temporary recovery-as-boot probe. Disable
+  # ADB authentication so a freshly wiped device can provide bring-up logs.
+  # BoardConfig.mk scopes the resulting WITH_ADB_INSECURE setting to this
+  # explicit environment marker.
+  envVars.KAREN_RECOVERY_BRINGUP = "true";
+
   # Build scratch space is already isolated by Nix. Keeping ccache disabled
   # makes the result independent from mutable host state.
   ccache.enable = false;

@@ -5,11 +5,12 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: nord2t-audit-boot CANDIDATE_BOOT_IMG [STOCK_BOOT_IMG]
+usage: nord2t-audit-boot [--allow-insecure-adb] CANDIDATE_BOOT_IMG [STOCK_BOOT_IMG]
 
 Audit a Karen recovery-as-boot image against the pinned CPH2399 .3001 stock
 boot image. When STOCK_BOOT_IMG is omitted, the verified image is extracted
-from the flake's pinned official OTA.
+from the flake's pinned official OTA. Insecure ADB is rejected unless the
+explicit flag is supplied for a temporary, unlocked bring-up image.
 EOF
 }
 
@@ -17,6 +18,12 @@ fail() {
   echo "boot audit failed: $*" >&2
   exit 1
 }
+
+allow_insecure_adb=false
+if [[ "${1:-}" == "--allow-insecure-adb" ]]; then
+  allow_insecure_adb=true
+  shift
+fi
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then
   usage
@@ -183,8 +190,17 @@ grep -Fxq "ro.product.system.device=karen" "$properties" ||
   fail "ramdisk product device is not karen"
 grep -Fxq "ro.secure=1" "$properties" ||
   fail "ramdisk does not enable secure mode"
-grep -Fxq "ro.adb.secure=1" "$properties" ||
-  fail "ramdisk does not require authenticated ADB"
+
+if grep -Fxq "ro.adb.secure=1" "$properties"; then
+  adb_security="authenticated"
+elif grep -Fxq "ro.adb.secure=0" "$properties"; then
+  [[ "$allow_insecure_adb" == true ]] ||
+    fail "ramdisk disables ADB authentication; use --allow-insecure-adb only for a temporary bring-up image"
+  adb_security="insecure-bringup-only"
+else
+  fail "ramdisk has no recognized ro.adb.secure setting"
+fi
+
 grep -Fq "/dev/block/by-name/userdata /data f2fs" "$fstab" ||
   fail "ramdisk lacks the current userdata mapping"
 grep -Fq "fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized" \
@@ -222,6 +238,7 @@ echo "os_version=$(<"$candidate_prefix-os_version")"
 echo "os_patch_level=$(<"$candidate_prefix-os_patch_level")"
 echo "stock_os_patch_level=$(<"$stock_prefix-os_patch_level")"
 echo "avb_algorithm=$avb_algorithm"
+echo "adb_security=$adb_security"
 
 if [[ "$avb_algorithm" == NONE ]]; then
   echo "flash_gate=unsigned-test-image-requires-unlocked-bootloader"

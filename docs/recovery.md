@@ -117,6 +117,55 @@ Userspace fastboot (`adb reboot fastboot`) was tested non-destructively on
 back to green Verified Boot. This proves host communication with fastbootd,
 not that bootloader-fastboot, temporary booting or arbitrary flashing is safe.
 
+## Tested bootloader unlock
+
+The bootloader was unlocked successfully on this `CPH2399` on 2026-07-24. The
+important distinction is between Android userspace fastbootd and the actual
+bootloader-fastboot implementation:
+
+```sh
+adb reboot fastboot
+fastboot getvar is-userspace
+# is-userspace: yes
+
+fastboot reboot bootloader
+fastboot getvar is-userspace
+# is-userspace: no
+
+fastboot getvar unlocked
+# unlocked: no
+
+fastboot flashing unlock
+```
+
+At the on-device confirmation screen, select **Unlock the bootloader** with the
+volume keys and confirm with Power. This erases userdata. After confirmation,
+the device remained in bootloader-fastboot and reported:
+
+```text
+unlocked: yes
+current-slot: a
+is-userspace: no
+```
+
+Two host-side details were essential:
+
+- In fastbootd, `fastboot flashing unlock` returned `Unrecognized command
+  flashing unlock`; `fastboot oem unlock` returned `Unable to open fastboot
+  HAL`. Unlocking must be performed by bootloader-fastboot, not fastbootd.
+- Behind the Lenovo Thunderbolt dock, the black bootloader screen displayed
+  `Fastboot mode` and `DB: product name is match` but exposed no USB device at
+  all. Moving the already-running fastbootd connection to a direct laptop USB
+  port changed the topology from the dock path `1-5.4.1` to root-hub port
+  `1-6`. After `fastboot reboot bootloader`, the phone then enumerated as
+  ordinary `fastboot`, and the unlock command worked.
+
+Use `fastboot getvar is-userspace` rather than the screen text to decide which
+implementation is active. Do not proceed if it returns `yes`, if no fastboot
+device is listed, or if the connected model is not the expected `CPH2399`.
+Unlocking changes Verified Boot from green/locked to orange/unlocked until a
+safe stock relock is deliberately performed.
+
 ## Black “Fastboot mode” screen
 
 After the privacy changes, one reboot entered a black OPlus/MediaTek screen
@@ -127,8 +176,10 @@ Fastboot mode
 DB: product name is match
 ```
 
-It did not expose a usable ADB or USB fastboot device, and no partition had
-been flashed. The recovery procedure that worked, consistent with the
+Behind the Lenovo dock it did not expose a usable ADB or USB fastboot device,
+and no partition had been flashed. A direct laptop port subsequently made this
+same mode usable for the tested unlock above. If the loader is unreachable,
+the recovery procedure that worked, consistent with the
 [OnePlus Nord 2T manual](https://service.oneplus.com/content/dam/support/user-manuals/common/OnePlus_Nord_2T_5G_User_Manual_EN_20220919.pdf),
 was:
 
