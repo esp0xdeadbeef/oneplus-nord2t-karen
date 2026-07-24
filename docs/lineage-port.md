@@ -42,6 +42,12 @@ and writes only the resulting `boot.img` to the store:
 nix build .#karen-bootimage
 ```
 
+Robotnix's upstream Lineage lock includes TheMuppets vendor repositories for
+all supported devices. The flake derives a filtered lock that removes those
+unrelated proprietary repositories; it retains every AOSP and Lineage project
+at the same pinned commit and content hash. Karen's matching stock inputs are
+derived independently from the verified `.3001` OTA.
+
 This target exists to make remote builds and source pinning testable during
 bring-up. It does not make the unbooted image safe to flash.
 

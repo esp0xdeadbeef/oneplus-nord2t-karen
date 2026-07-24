@@ -55,7 +55,9 @@ layers:
 - `robotnix` is locked to an exact revision and imports its generated
   LineageOS `repo.lock`. That lock is Robotnix's Nix equivalent of
   `repo manifest -r`: every Android project has a fixed Git commit and Nix
-  content hash.
+  content hash. The flake deterministically removes only the unrelated
+  TheMuppets vendor trees for other phones before evaluation; Karen's stock
+  inputs come from the separately verified OTA.
 
 The repository then adds the local `karen` tree without committing proprietary
 or stock-derived binaries. There are three useful build paths:

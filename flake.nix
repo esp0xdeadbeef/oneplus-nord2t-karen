@@ -135,6 +135,24 @@
             install -m 0644 "$stock_dir/images/dtbo.img" "$out/prebuilt/dtbo.img"
           '';
 
+        robotnixLineage21Lock = let
+          upstreamLock =
+            builtins.fromJSON
+            (builtins.readFile "${robotnix}/flavors/lineageos/lineage-21.0/repo.lock");
+          entries =
+            pkgs.lib.filterAttrs
+            (
+              _: entry:
+                !pkgs.lib.hasPrefix
+                "https://github.com/TheMuppets/"
+                entry.project.repo_ref.repo_url
+            )
+            upstreamLock.entries;
+        in
+          pkgs.writeText "lineage-21-karen-repo.lock" (
+            builtins.toJSON (upstreamLock // {inherit entries;})
+          );
+
         androidFhs = pkgs.buildFHSEnv {
           name = "nord2t-android-fhs";
           multiArch = pkgs.stdenv.hostPlatform.isx86_64;
@@ -227,6 +245,7 @@
             robotnix.lib.robotnixSystem (
               import ./lineage/robotnix-karen.nix {
                 deviceTree = karenDeviceTree;
+                lineageLockfile = robotnixLineage21Lock;
               }
             )
           else null;

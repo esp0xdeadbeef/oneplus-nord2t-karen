@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: MIT
-{deviceTree}: {lib, ...}: {
+{
+  deviceTree,
+  lineageLockfile,
+}: {lib, ...}: {
   flavor = "lineageos";
   flavorVersion = "21.0";
   device = "karen";
@@ -12,5 +15,9 @@
   # makes the result independent from mutable host state.
   ccache.enable = false;
 
+  # Robotnix's generated Lineage lock also contains TheMuppets vendor trees
+  # for every supported phone. Karen has no matching entry and derives its
+  # stock inputs independently, so do not realize those unrelated blobs.
+  source.manifest.lockfile = lib.mkForce lineageLockfile;
   source.dirs."device/oneplus/karen".src = lib.mkForce deviceTree;
 }
