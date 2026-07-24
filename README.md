@@ -184,6 +184,20 @@ This reboots Android into the black OPlus preloader screen. No flash command
 is sent, but the phone must afterwards be restarted by holding Power and
 Volume Up for about ten seconds.
 
+After that probe, an experimental, more invasive but storage-read-only GPT
+gate is available:
+
+```bash
+nix run .#read-gpt
+```
+
+It attempts to upload the pinned MT6893 mtkclient support to RAM, then requires
+two byte-identical UFS GPT reads before it stores one private local copy
+outside the repository. It never issues a write, erase or format command. The
+first hardware attempts did not produce GPT bytes and one left the phone on
+the black preloader screen until the Power plus Volume Up recovery chord was
+used. This route is not proven and should not be treated as stock-herstel.
+
 Verify locally cached official recovery packages, including hashes, metadata,
 payload hashes, OTA whole-file signatures and signer certificate:
 

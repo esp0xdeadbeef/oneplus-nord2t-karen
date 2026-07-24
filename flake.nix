@@ -119,6 +119,19 @@
           text = builtins.readFile ./scripts/probe-preloader;
         };
 
+        readGpt = pkgs.writeShellApplication {
+          name = "nord2t-read-gpt";
+          runtimeInputs = with pkgs; [
+            android-tools
+            coreutils
+            gawk
+            gnugrep
+            gnused
+            mtkclient
+          ];
+          text = builtins.readFile ./scripts/read-gpt;
+        };
+
         extractStock = pkgs.writeShellApplication {
           name = "nord2t-extract-stock";
           runtimeInputs = with pkgs; [
@@ -433,6 +446,7 @@
           magisk-apk = magiskApk;
           privacy = nord2tPrivacy;
           probe-preloader = probePreloader;
+          read-gpt = readGpt;
           shamiko-module = shamikoModule;
           snapshot = snapshotDevice;
           stock-boot-3001 = stockBoot3001;
@@ -471,6 +485,10 @@
           type = "app";
           program = "${self.packages.${system}.probe-preloader}/bin/nord2t-probe-preloader";
         };
+        read-gpt = {
+          type = "app";
+          program = "${self.packages.${system}.read-gpt}/bin/nord2t-read-gpt";
+        };
         snapshot = {
           type = "app";
           program = "${self.packages.${system}.snapshot}/bin/nord2t-snapshot";
@@ -505,6 +523,7 @@
           extract-stock
           privacy
           probe-preloader
+          read-gpt
           snapshot
           verify-firmware
           ;
@@ -536,11 +555,27 @@
             nativeBuildInputs = [
               pkgs.bash
               pkgs.coreutils
+              pkgs.gawk
               pkgs.gnugrep
             ];
             src = ./.;
           } ''
             bash "$src"/tests/package-safety.sh
+            touch "$out"
+          '';
+
+        preloader-safety =
+          pkgs.runCommand "nord2t-preloader-safety" {
+            nativeBuildInputs = [
+              pkgs.bash
+              pkgs.coreutils
+              pkgs.gawk
+              pkgs.gnugrep
+              pkgs.gnused
+            ];
+            src = ./.;
+          } ''
+            bash "$src"/tests/preloader-safety.sh
             touch "$out"
           '';
 

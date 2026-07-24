@@ -65,6 +65,29 @@ UFS access. DAA remains enabled. The next destructive-recovery gate is to load
 a compatible, reviewable DA without writing storage, then read the GPT twice
 and compare hashes.
 
+### Unproven DA/GPT attempt
+
+The pinned Nixpkgs `mtkclient` package identifies hardware code `0x950`, ships
+an `mt6893_payload.bin`, and has an MT6893 entry in its generic DA-v5 bundle.
+That proves only that the tool has a candidate profile; it does not make the
+payload OPlus-authorized or compatible with this preloader generation.
+
+Two explicitly storage-read-only `mtk gpt --skipwdt` attempts were made through
+the guarded `nix run .#read-gpt` wrapper. Neither produced GPT bytes. The first
+preloader cycle returned to Android; during the second attempt the generic
+client waited for a DA session and the phone remained on the black OPlus
+preloader screen. The tested Power plus Volume Up chord returned it to stock
+`.3001` on slot A with SELinux enforcing and the raw kernel state still
+unlocked/orange. No `mtk` write, erase, format or vbmeta command was issued.
+
+The failure does not yet distinguish a short USB-enumeration race from
+rejection of the generic DA, so it is not evidence that UFS was read and not
+proof of a working exploit. DAA remains the hard boundary. Do not add service
+accounts, leaked authorization files or unreviewed third-party DA binaries.
+Further DA execution is paused until a compatible loader/auth route can be
+validated independently; custom-ROM-porting can continue through the proven
+ADB, fastbootd and bootloader-fastboot paths.
+
 ## Verified stock material
 
 The official full EU `.3001` OTA contains 34 partitions. They include:

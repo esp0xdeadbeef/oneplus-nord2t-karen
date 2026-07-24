@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-read-gpt [--output DIRECTORY] [--yes]
+
+Temporarily enter the OPlus/MediaTek preloader and attempt to upload
+mtkclient's pinned MT6893 support to RAM, then read the UFS user-region GPT
+twice. No storage write, erase or format command is sent. On success the
+private GPT bytes and their hashes are retained locally; raw mtkclient logs
+and device identifiers are always deleted.
+EOF
+}
+
+fail() {
+  echo "read-gpt failed: $*" >&2
+  exit 1
+}
+
+assume_yes=false
+state_root="${XDG_STATE_HOME:-${HOME:?}/.local/state}"
+output="$state_root/nord2t-recovery/gpt-readback-3001"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output)
+      [[ $# -ge 2 ]] || {
+        usage
+        exit 2
+      }
+      output="$2"
+      shift 2
+      ;;
+    --yes)
+      assume_yes=true
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+[[ ! -e "$output" ]] || fail "refusing to overwrite output: $output"
+
+mapfile -t adb_devices < <(
+  adb devices | awk 'NR > 1 && $2 == "device" { print $1 }'
+)
+[[ "${#adb_devices[@]}" == 1 ]] ||
+  fail "expected exactly one authorized ADB device"
+serial="${adb_devices[0]}"
+
+adb_property() {
+  adb -s "$serial" shell getprop "$1" | tr -d '\r'
+}
+
+[[ "$(adb_property sys.boot_completed)" == 1 ]] ||
+  fail "Android has not finished booting"
+[[ "$(adb_property ro.product.model)" == CPH2399 ]] ||
+  fail "connected model is not CPH2399"
+[[ "$(adb_property ro.product.device)" == OP557AL1 ]] ||
+  fail "connected device is not OP557AL1"
+[[ "$(adb_property ro.build.display.id)" == "CPH2399_14.0.0.3001(EX01)" ]] ||
+  fail "installed build is not the pinned .3001 baseline"
+
+if [[ "$assume_yes" != true ]]; then
+  printf '%s' \
+    "Read the GPT twice through a temporary RAM-loaded DA? Type CPH2399-read-gpt: " \
+    >&2
+  read -r confirmation
+  [[ "$confirmation" == CPH2399-read-gpt ]] || fail "confirmation declined"
+fi
+
+temporary_directory="$(mktemp -d -t nord2t-read-gpt.XXXXXXXX)"
+read_one="$temporary_directory/read-one"
+read_two="$temporary_directory/read-two"
+raw_log="$temporary_directory/mtkclient.log"
+mkdir -p "$read_one" "$read_two"
+chmod 0700 "$temporary_directory" "$read_one" "$read_two"
+
+probe_pid=""
+cleanup() {
+  if [[ -n "$probe_pid" ]] && kill -0 "$probe_pid" 2>/dev/null; then
+    kill "$probe_pid" 2>/dev/null || true
+    wait "$probe_pid" 2>/dev/null || true
+  fi
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+
+(
+  cd "$temporary_directory"
+  timeout 120s mtk gpt --skipwdt "$read_one" >"$raw_log" 2>&1
+) &
+probe_pid="$!"
+
+client_ready=false
+for _ in $(seq 1 30); do
+  if grep -Fq "Waiting for PreLoader VCOM" "$raw_log" 2>/dev/null; then
+    client_ready=true
+    break
+  fi
+  kill -0 "$probe_pid" 2>/dev/null ||
+    fail "mtkclient stopped before it was ready for preloader enumeration"
+  sleep 0.5
+done
+[[ "$client_ready" == true ]] ||
+  fail "mtkclient was not ready for preloader enumeration within 15 seconds"
+
+adb -s "$serial" reboot edl
+
+set +e
+wait "$probe_pid"
+first_status="$?"
+set -e
+probe_pid=""
+
+if [[ "$first_status" -ne 0 ]] ||
+  [[ ! -s "$read_one/gpt.bin" || ! -s "$read_one/gpt_backup.bin" ]]; then
+  echo "The first read did not reach an authenticated UFS read session." >&2
+  if grep -Eqi 'DAA|SLA|auth|signature|security' "$raw_log"; then
+    echo "mtkclient encountered a security or authentication boundary." >&2
+  elif grep -Eqi 'Waiting for PreLoader|reconnect|timeout' "$raw_log"; then
+    echo "mtkclient did not retain the required preloader/DA USB session." >&2
+  else
+    echo "mtkclient did not produce a classifiable, identifier-safe result." >&2
+  fi
+  echo "Raw logs and any device identifiers have been deleted." >&2
+  echo "If Android does not return, hold Power + Volume Up for about ten seconds." >&2
+  exit 1
+fi
+
+set +e
+(
+  cd "$temporary_directory"
+  timeout 120s mtk gpt --skipwdt "$read_two" >>"$raw_log" 2>&1
+)
+second_status="$?"
+set -e
+
+if [[ "$second_status" -ne 0 ]] ||
+  [[ ! -s "$read_two/gpt.bin" || ! -s "$read_two/gpt_backup.bin" ]]; then
+  echo "The repeated GPT read failed." >&2
+  echo "Raw logs and any device identifiers have been deleted." >&2
+  echo "If Android does not return, hold Power + Volume Up for about ten seconds." >&2
+  exit 1
+fi
+
+cmp -s "$read_one/gpt.bin" "$read_two/gpt.bin" ||
+  fail "the two primary GPT reads differ"
+cmp -s "$read_one/gpt_backup.bin" "$read_two/gpt_backup.bin" ||
+  fail "the two backup GPT reads differ"
+
+gpt_magic_offset="$(
+  LC_ALL=C grep -aob -m 1 'EFI PART' "$read_one/gpt.bin" |
+    cut -d: -f1 ||
+    true
+)"
+[[ -n "$gpt_magic_offset" ]] ||
+  fail "mtkclient returned a partition table without an EFI GPT header"
+[[ "$gpt_magic_offset" == 512 || "$gpt_magic_offset" == 4096 ]] ||
+  fail "GPT header magic is not at a supported logical-block offset"
+
+mkdir -p "$output"
+chmod 0700 "$output"
+install -m 0600 "$read_one/gpt.bin" "$output/gpt.bin"
+install -m 0600 "$read_one/gpt_backup.bin" "$output/gpt_backup.bin"
+(
+  cd "$output"
+  sha256sum gpt.bin gpt_backup.bin >SHA256SUMS
+  chmod 0600 SHA256SUMS
+)
+
+set +e
+(
+  cd "$temporary_directory"
+  timeout 30s mtk reset --skipwdt >>"$raw_log" 2>&1
+)
+reset_status="$?"
+set -e
+
+android_ready=false
+if [[ "$reset_status" -eq 0 ]]; then
+  for _ in $(seq 1 90); do
+    if [[ "$(adb -s "$serial" get-state 2>/dev/null || true)" == device ]] &&
+      [[ "$(adb_property sys.boot_completed 2>/dev/null || true)" == 1 ]]; then
+      android_ready=true
+      break
+    fi
+    sleep 1
+  done
+fi
+
+echo "Two byte-identical GPT reads passed and are stored privately in: $output"
+echo "Raw logs, ME ID, SoC ID and transient mtkclient state were deleted."
+echo "No UFS write, erase or format command was sent."
+if [[ "$android_ready" == true ]]; then
+  echo "Android returned after the DA reset."
+else
+  echo "Android did not return automatically."
+  echo "Hold Power + Volume Up for about ten seconds, then press Power."
+fi
