@@ -91,6 +91,22 @@ full OTA. Live `nvdata`, `nvram`, calibration, persistent and radio data stay
 on the phone and outside both the build and Git. A completed build still needs
 image, VINTF, AVB, size and restore audits before any full-system flash.
 
+Approved read-only `lpdump --slot 0 --json` output from the running `.3001`
+system confirmed virtual A/B metadata version 10.2, a 12,348,030,976-byte
+`super` device and a 12,343,836,672-byte `main` group. The latter is exactly
+`super` minus the required 4 MiB overhead and is now the build limit. The live
+group contains the five standard partitions plus ten OPlus partitions:
+`my_engineering`, `my_product`, `my_stock`, `my_heytap`, `my_company`,
+`my_carrier`, `my_region`, `my_preload`, `my_bigball` and `my_manifest`.
+
+Android's unmodified dynamic-partition build configuration accepts the
+standard partition set, not those OPlus names. The initial test plan must
+therefore update only audited individual inactive-slot images through
+fastbootd and leave every live OPlus logical partition in place. Do not build
+or install an OTA or generated `super.img` until the target-files metadata can
+round-trip all 15 partition names without deleting, shrinking or moving the
+OPlus partitions.
+
 ### Verified build and structural audit
 
 The pinned derivation completed successfully on `s-tau` on 2026-07-24. After
