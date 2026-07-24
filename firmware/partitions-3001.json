@@ -29,6 +29,18 @@
       "vendor",
       "odm"
     ],
+    "restore": [
+      "boot",
+      "dtbo",
+      "system",
+      "system_ext",
+      "product",
+      "vendor",
+      "odm",
+      "vbmeta",
+      "vbmeta_system",
+      "vbmeta_vendor"
+    ],
     "firmware": [
       "audio_dsp",
       "boot",

@@ -256,17 +256,20 @@ root, loop mounts or a GitHub firmware mirror:
 ```bash
 nix run .#extract-stock -- --profile boot
 nix run .#extract-stock -- --profile blobs
+nix run .#extract-stock -- --profile restore
 nix run .#extract-stock -- --profile firmware
 nix run .#extract-stock -- --profile stock
 ```
 
 The extractor verifies the full OTA and every resulting image against
 [`firmware/partitions-3001.json`](firmware/partitions-3001.json), then
-rootlessly expands all EROFS blob partitions when requested. `stock` contains
-all 34 images present in the payload; it is not by itself a BROM restore
-package because the OTA has no GPT, Download Agent, authentication material or
-`vendor_boot`. For a clean Nix-store copy of the same official OPlus CDN
-object, use:
+rootlessly expands all EROFS blob partitions when requested. `restore`
+contains only the exact boot/AVB and five standard logical images used by the
+Lineage rollback procedure; build the pinned set with
+`nix build .#stock-restore-3001`. `stock` contains all 34 images present in the
+payload; it is not by itself a BROM restore package because the OTA has no
+GPT, Download Agent, authentication material or `vendor_boot`. For a clean
+Nix-store copy of the same official OPlus CDN object, use:
 
 ```bash
 nix build .#firmware-3001 --no-link --print-out-paths

@@ -61,6 +61,7 @@ Extract the porting inputs from the current OTA without rooting the phone:
 nix run .#extract-stock -- --profile boot
 nix run .#extract-stock -- --profile blobs
 nix run .#extract-stock -- --profile lineage
+nix run .#extract-stock -- --profile restore
 nix run .#extract-stock -- --profile firmware
 nix run .#extract-stock -- --profile stock
 ```

@@ -190,6 +190,13 @@
             nord2t-extract-stock --profile lineage --output "$out"
           '';
 
+        stockRestore3001 =
+          pkgs.runCommand "CPH2399_14.0.0.3001-lineage-restore" {
+            nativeBuildInputs = [extractStock];
+          } ''
+            nord2t-extract-stock --profile restore --output "$out"
+          '';
+
         stockRoot = pkgs.writeShellApplication {
           name = "nord2t-stock-root";
           runtimeInputs = with pkgs; [
@@ -588,6 +595,7 @@
           snapshot = snapshotDevice;
           stock-boot-3001 = stockBoot3001;
           stock-lineage-3001 = stockLineage3001;
+          stock-restore-3001 = stockRestore3001;
           stock-root = stockRoot;
           stock-root-full = stockRootFull;
           stock-unroot = stockUnroot;

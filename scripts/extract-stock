@@ -14,6 +14,7 @@ Profiles:
   boot      boot, dtbo and AVB metadata
   blobs     every EROFS system/vendor/OPlus partition plus extracted trees
   lineage   verified vendor and odm images plus their extracted trees
+  restore   boot, AVB and the five standard logical images needed for rollback
   firmware  boot-chain, modem, TEE and coprocessor firmware
   stock     every image present in the OTA payload
   port      every payload image plus extracted EROFS trees (default)
