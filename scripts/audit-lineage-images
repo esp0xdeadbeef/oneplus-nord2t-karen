@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-audit-lineage-images IMAGE_DIR
+
+Audit a complete Karen full-userspace image directory before any hardware
+write. The directory must contain boot, system, system_ext, product, vendor,
+odm, vbmeta, vbmeta_system and vbmeta_vendor images.
+EOF
+}
+
+fail() {
+  echo "Lineage image audit failed: $*" >&2
+  exit 1
+}
+
+if [[ $# -ne 1 ]]; then
+  usage
+  exit 2
+fi
+
+image_directory="$(realpath "$1")"
+partition_manifest="${PARTITION_MANIFEST:-@PARTITION_MANIFEST@}"
+standard_image_ceiling=8816586752
+
+[[ -d "$image_directory" ]] ||
+  fail "image directory is not readable: $image_directory"
+[[ -r "$partition_manifest" ]] ||
+  fail "partition manifest is not readable: $partition_manifest"
+
+images=(
+  boot
+  system
+  system_ext
+  product
+  vendor
+  odm
+  vbmeta
+  vbmeta_system
+  vbmeta_vendor
+)
+
+for image in "${images[@]}"; do
+  path="$image_directory/$image.img"
+  [[ -f "$path" && -r "$path" ]] ||
+    fail "required image is not readable: $image.img"
+  [[ -s "$path" ]] ||
+    fail "required image is empty: $image.img"
+done
+
+verify_stock_partition() {
+  local partition="$1"
+  local image="$2"
+  local expected_size expected_hash actual_size actual_hash
+
+  expected_size="$(
+    jq -er --arg name "$partition" \
+      '.partitions[] | select(.name == $name) | .size' \
+      "$partition_manifest"
+  )"
+  expected_hash="$(
+    jq -er --arg name "$partition" \
+      '.partitions[] | select(.name == $name) | .sha256' \
+      "$partition_manifest"
+  )"
+  actual_size="$(stat -c %s "$image")"
+  actual_hash="$(sha256sum "$image" | cut -d ' ' -f 1)"
+
+  [[ "$actual_size" == "$expected_size" ]] ||
+    fail "$partition is $actual_size bytes, expected exact stock size $expected_size"
+  [[ "$actual_hash" == "$expected_hash" ]] ||
+    fail "$partition does not match the pinned stock image"
+}
+
+verify_stock_partition vendor "$image_directory/vendor.img"
+verify_stock_partition odm "$image_directory/odm.img"
+
+standard_image_bytes=0
+for partition in system system_ext product vendor odm; do
+  size="$(stat -c %s "$image_directory/$partition.img")"
+  ((size % 4096 == 0)) ||
+    fail "$partition image size is not 4096-byte aligned"
+  ((standard_image_bytes += size))
+done
+
+((standard_image_bytes <= standard_image_ceiling)) ||
+  fail "standard images need $standard_image_bytes bytes, exceeding the preserved live budget of $standard_image_ceiling"
+
+temporary_directory="$(mktemp -d -t nord2t-lineage-audit.XXXXXXXX)"
+cleanup() {
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+
+stock_directory="$temporary_directory/stock"
+nord2t-extract-stock --profile boot --output "$stock_directory" >/dev/null
+nord2t-audit-boot \
+  "$image_directory/boot.img" \
+  "$stock_directory/images/boot.img" \
+  >"$temporary_directory/boot-audit.txt"
+
+verify_directory="$temporary_directory/verify"
+mkdir "$verify_directory"
+for image in "${images[@]}"; do
+  ln -s "$image_directory/$image.img" "$verify_directory/$image.img"
+done
+ln -s "$stock_directory/images/dtbo.img" "$verify_directory/dtbo.img"
+
+for vbmeta in vbmeta vbmeta_system vbmeta_vendor; do
+  avbtool info_image \
+    --image "$verify_directory/$vbmeta.img" \
+    >"$temporary_directory/$vbmeta-info.txt"
+done
+
+grep -Fq "Algorithm:                SHA256_RSA4096" \
+  "$temporary_directory/vbmeta-info.txt" ||
+  fail "top-level vbmeta does not use the expected bring-up algorithm"
+grep -Fq "Flags:                    3" \
+  "$temporary_directory/vbmeta-info.txt" ||
+  fail "top-level vbmeta is not explicitly unlock-only"
+
+for partition in vbmeta_system vbmeta_vendor; do
+  grep -Fq "Partition Name:          $partition" \
+    "$temporary_directory/vbmeta-info.txt" ||
+    fail "top-level vbmeta does not chain $partition"
+done
+
+for partition in product system system_ext; do
+  grep -Fq "Partition Name:        $partition" \
+    "$temporary_directory/vbmeta_system-info.txt" ||
+    fail "vbmeta_system does not describe $partition"
+done
+
+grep -Fq "Partition Name:        vendor" \
+  "$temporary_directory/vbmeta_vendor-info.txt" ||
+  fail "vbmeta_vendor does not describe vendor"
+
+avbtool verify_image \
+  --image "$verify_directory/vbmeta.img" \
+  --follow_chain_partitions \
+  >"$temporary_directory/avb-verify.txt"
+
+echo "Karen full-userspace image audit passed."
+grep -E \
+  '^(image_sha256|kernel_sha256|dtb_sha256|adb_security|flash_gate)=' \
+  "$temporary_directory/boot-audit.txt"
+for image in "${images[@]}"; do
+  echo "$image.size=$(stat -c %s "$image_directory/$image.img")"
+  echo "$image.sha256=$(sha256sum "$image_directory/$image.img" | cut -d ' ' -f 1)"
+done
+echo "standard_image_bytes=$standard_image_bytes"
+echo "standard_image_ceiling=$standard_image_ceiling"
+echo "stock_vendor=exact"
+echo "stock_odm=exact"
+echo "avb_chain=verified"

@@ -144,6 +144,15 @@ the recovery probe it does not enable insecure ADB. It builds Lineage `boot`,
 passes through byte-identical `.3001` `vendor` and `odm` images derived from
 the verified OTA. The full build also uses stock's complete first-stage mount
 table while `TARGET_RECOVERY_FSTAB` remains the minimal recovery-safe table.
+Audit all nine outputs before considering a hardware write:
+
+```bash
+nix run .#audit-lineage-images -- ./result
+```
+
+The audit verifies the boot structure, authenticated ADB, complete AVB chain,
+byte-exact stock `vendor` and `odm`, and the preserved live standard-image
+budget. Passing it is necessary but does not by itself authorize flashing.
 
 The pinned build completed successfully on `s-tau` and its resulting
 recovery-as-boot image passed the repository's structural audit. Its kernel

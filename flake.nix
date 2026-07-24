@@ -271,6 +271,21 @@
           text = builtins.readFile ./scripts/audit-boot-image;
         };
 
+        auditLineageImages = pkgs.writeShellApplication {
+          name = "nord2t-audit-lineage-images";
+          runtimeInputs = with pkgs; [
+            android-tools
+            auditBoot
+            coreutils
+            extractStock
+            gnugrep
+            jq
+          ];
+          text = builtins.replaceStrings ["@PARTITION_MANIFEST@"] ["${./firmware/partitions-3001.json}"] (
+            builtins.readFile ./scripts/audit-lineage-images
+          );
+        };
+
         snapshotDevice = pkgs.writeShellApplication {
           name = "nord2t-snapshot";
           runtimeInputs = with pkgs; [
@@ -450,7 +465,7 @@
             export USE_CCACHE=1
             export CCACHE_EXEC=/usr/bin/ccache
             export CCACHE_DIR="''${XDG_CACHE_HOME:-$HOME/.cache}/nord2t-ccache"
-            export CCACHE_MAXSIZE=100G
+            export CCACHE_MAXSIZE=400G
             mkdir -p "$CCACHE_DIR"
             export ANDROID_JAVA_HOME=${pkgs.jdk17.home}
             export TMPDIR=/tmp
@@ -526,8 +541,8 @@
                 "vendorimage"
                 "odmimage"
                 "vbmetaimage"
-                "vbmeta_systemimage"
-                "vbmeta_vendorimage"
+                "vbmetasystemimage"
+                "vbmetavendorimage"
               ];
               installPhase = ''
                 mkdir -p "$out"
@@ -558,6 +573,7 @@
           android-fhs = androidFhs;
           adaway-apk = adawayApk;
           audit-boot = auditBoot;
+          audit-lineage-images = auditLineageImages;
           default = nord2tPrivacy;
           extract-stock = extractStock;
           firmware-3001 = stockFirmware3001;
@@ -600,6 +616,10 @@
         audit-boot = {
           type = "app";
           program = "${self.packages.${system}.audit-boot}/bin/nord2t-audit-boot";
+        };
+        audit-lineage-images = {
+          type = "app";
+          program = "${self.packages.${system}.audit-lineage-images}/bin/nord2t-audit-lineage-images";
         };
         privacy = {
           type = "app";
@@ -644,6 +664,7 @@
         inherit
           (self.packages.${system})
           audit-boot
+          audit-lineage-images
           extract-stock
           privacy
           probe-preloader

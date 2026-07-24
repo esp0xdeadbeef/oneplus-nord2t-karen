@@ -306,13 +306,13 @@ nix run /path/to/oneplus-nord2t-karen#android-fhs -- -c '
   export KAREN_FULL_SYSTEM=true
   lunch lineage_karen-ap2a-userdebug
   m bootimage systemimage systemextimage productimage \
-    vendorimage odmimage vbmetaimage vbmeta_systemimage vbmeta_vendorimage
+    vendorimage odmimage vbmetaimage vbmetasystemimage vbmetavendorimage
 '
 ```
 
 Omit `--full` and `KAREN_FULL_SYSTEM` when rebuilding only the recovery probe.
 The FHS shell creates its cache directory before Soong starts and caps
-`ccache` at 100 GB. Keep the checkout's `out` directory between runs as well;
+`ccache` at 400 GB. Keep the checkout's `out` directory between runs as well;
 its Ninja and Soong state avoids substantially more work than compiler cache
 alone.
 
