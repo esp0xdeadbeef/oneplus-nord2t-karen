@@ -48,6 +48,11 @@ unrelated proprietary repositories; it retains every AOSP and Lineage project
 at the same pinned commit and content hash. Karen's matching stock inputs are
 derived independently from the verified `.3001` OTA.
 
+The pinned Lineage 21 `vendor/lineage` revision uses the newer Android 14
+bootanimation makefile layout. Robotnix 21.0 otherwise selects its older patch,
+so this repository explicitly selects Robotnix's own `-21` reproducibility
+patch while retaining the other upstream Robotnix patches.
+
 This target exists to make remote builds and source pinning testable during
 bring-up. It does not make the unbooted image safe to flash.
 

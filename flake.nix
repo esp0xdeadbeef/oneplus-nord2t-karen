@@ -153,6 +153,17 @@
             builtins.toJSON (upstreamLock // {inherit entries;})
           );
 
+        robotnixVendorLineagePatches = [
+          "${robotnix}/flavors/lineageos/0001-Remove-LineageOS-keys-21.patch"
+          (pkgs.replaceVars
+            "${robotnix}/flavors/lineageos/0002-bootanimation-Reproducibility-fix-21.patch"
+            {
+              inherit (pkgs) imagemagick;
+            })
+          "${robotnix}/flavors/lineageos/0003-kernel-Set-constant-kernel-timestamp-21.patch"
+          "${robotnix}/flavors/lineageos/0004-dont-run-repo-during-build.patch"
+        ];
+
         androidFhs = pkgs.buildFHSEnv {
           name = "nord2t-android-fhs";
           multiArch = pkgs.stdenv.hostPlatform.isx86_64;
@@ -246,6 +257,7 @@
               import ./lineage/robotnix-karen.nix {
                 deviceTree = karenDeviceTree;
                 lineageLockfile = robotnixLineage21Lock;
+                vendorLineagePatches = robotnixVendorLineagePatches;
               }
             )
           else null;

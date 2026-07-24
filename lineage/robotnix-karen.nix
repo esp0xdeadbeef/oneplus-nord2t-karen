@@ -2,6 +2,7 @@
 {
   deviceTree,
   lineageLockfile,
+  vendorLineagePatches,
 }: {lib, ...}: {
   flavor = "lineageos";
   flavorVersion = "21.0";
@@ -20,4 +21,9 @@
   # stock inputs independently, so do not realize those unrelated blobs.
   source.manifest.lockfile = lib.mkForce lineageLockfile;
   source.dirs."device/oneplus/karen".src = lib.mkForce deviceTree;
+
+  # The current pinned Lineage 21 vendor revision has the Android 14
+  # bootanimation layout. Robotnix 21.0 selects its older patch by default,
+  # while its newer `-21` patch applies cleanly to this exact source.
+  source.dirs."vendor/lineage".patches = lib.mkForce vendorLineagePatches;
 }
