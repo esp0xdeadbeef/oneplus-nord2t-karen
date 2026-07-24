@@ -122,6 +122,14 @@ untouched. It must not start until the host-side restore procedure has
 validated product, group limit, image hashes, required free space and return
 to stock recovery/boot.
 
+Approved root was used only to hash the five generic live read-only logical
+block devices. The running slot-A `system`, `system_ext`, `product`, `vendor`
+and `odm` hashes each match the corresponding `.3001` OTA image exactly. No
+radio, calibration, persistent or OPlus data partition was read. This proves
+that the pinned OTA contains byte-exact reverse images for every standard
+logical partition a first full-system test will modify; it does not yet prove
+that fastbootd can resize and restore them safely.
+
 ### Verified build and structural audit
 
 The pinned derivation completed successfully on `s-tau` on 2026-07-24. After
