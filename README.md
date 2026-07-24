@@ -24,8 +24,8 @@ phones.
 
 The inspected phone currently runs `CPH2399_14.0.0.3001(EX01)` with the
 2026-06-01 security patch. The official full EU OTA was independently verified
-and installed through OxygenOS Local install on 2026-07-24. A reversible
-privacy profile is active:
+and installed through OxygenOS Local install on 2026-07-24. Before the later
+bootloader-unlock wipe, a reversible privacy profile was tested:
 
 - Aurora Store 4.8.3 from F-Droid is installed;
 - Play Store, Play services and Google Services Framework are disabled for the
@@ -33,12 +33,15 @@ privacy profile is active:
 - 21 conservative telemetry targets and 24 Google-facing targets are disabled;
 - the bootloader was later unlocked, so Verified Boot now reports orange.
 
+The unlock wipe reset that user-0 package profile. The current audit finds no
+Aurora installation and all 21 hardening plus 24 Google-facing targets at
+their stock default state; the helper can reapply the profile separately.
 The phone booted successfully from the updated A/B slot. SELinux remains
-enforcing, storage remains encrypted, Aurora starts, and the telephony, SIM,
-connectivity, Wi-Fi, Bluetooth, camera and NFC system services are present.
-Calls, SMS, mobile data, Wi-Fi association, Bluetooth pairing, camera output,
-NFC, push notifications, banking apps and navigation still need real-world
-testing by the owner.
+enforcing, storage remains encrypted, and the telephony, SIM, connectivity,
+Wi-Fi, Bluetooth, camera and NFC system services are present. Calls, SMS,
+mobile data, Wi-Fi association, Bluetooth pairing, camera output, NFC, push
+notifications, banking apps and navigation still need real-world testing by
+the owner.
 
 The bootloader was unlocked and userdata was wiped on 2026-07-24 for recovery
 bring-up. Stock OxygenOS still boots from slot `a`, but Verified Boot now
@@ -46,6 +49,14 @@ reports orange/unlocked instead of green/locked. The working unlock path was
 fastbootd -> bootloader-fastboot over a cable connected directly to the
 laptop; bootloader-fastboot did not enumerate behind the Lenovo dock. See the
 [tested unlock procedure](docs/recovery.md#tested-bootloader-unlock).
+
+The full root stack can mask Android's `ro.boot.*` property view as
+`green/locked` for application compatibility. The raw kernel command line
+still reports `androidboot.vbmeta.device_state=unlocked` and
+`androidboot.verifiedbootstate=orange`. The audit and stock-boot helpers prefer
+that kernel source when approved root can read it and otherwise fail
+conservatively; bootloader-fastboot remains the final authority before a
+write.
 
 Disabling Play services breaks or degrades Firebase push, Google login, Wallet,
 Android Auto, RCS, Play Integrity and apps that require Google APIs. The helper

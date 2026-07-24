@@ -21,6 +21,8 @@ for script in "$root_script" "$unroot_script"; do
     '7ad447405db4e74276395123c8029c67c63adc3fc6d82c4c180ae6c2e31882c0' \
     "$script"
   grep -Fq 'fastboot_variable unlocked' "$script"
+  grep -Fq 'adb_bootloader_unlocked' "$script"
+  grep -Fq 'androidboot.vbmeta.device_state=unlocked' "$script"
   grep -Fq "flash \"boot_\$current_slot\"" "$script"
 
   if grep -Eq \
@@ -59,6 +61,8 @@ done
 grep -Fq 'ro.product.model)" == CPH2399' "$full_script"
 grep -Fq 'ro.product.device)" == OP557AL1' "$full_script"
 grep -Fq 'CPH2399_14.0.0.3001(EX01)' "$full_script"
+grep -Fq 'adb_bootloader_unlocked' "$full_script"
+grep -Fq 'androidboot.vbmeta.device_state=unlocked' "$full_script"
 grep -Fq 'REPLACE INTO settings' "$full_script"
 grep -Fq 'magisk --denylist disable' "$full_script"
 grep -Fq 'magisk --install-module' "$full_script"

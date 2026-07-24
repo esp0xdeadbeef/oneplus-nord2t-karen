@@ -29,5 +29,7 @@ grep -Fq 'model" != CPH2399' "$privacy_script"
 grep -Fq 'device" != OP557AL1' "$privacy_script"
 grep -Fq 'pm disable-user --user 0' "$privacy_script"
 grep -Fq 'pm default-state --user 0' "$privacy_script"
+grep -Fq 'boot_state_source=kernel_cmdline' "$privacy_script"
+grep -Fq 'read_kernel_androidboot vbmeta.device_state' "$privacy_script"
 
 echo "Package safety checks passed."

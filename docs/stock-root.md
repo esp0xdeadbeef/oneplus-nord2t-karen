@@ -175,6 +175,13 @@ The complete stack was installed and verified on the test phone on
 its runtime directory, Zygisk was enabled, Shamiko and Systemless Hosts were
 active, and denylist enforcement returned disabled as required.
 
+Vector subsequently masked the Android property view as `green/locked`, while
+the raw kernel command line remained `orange/unlocked`. Re-running the full
+stack or the Android-driven unroot route therefore checks the kernel command
+line when approved root is available. If that source cannot be read, the
+helper fails conservatively rather than trusting a disagreement. Every actual
+boot write still rechecks `unlocked: yes` in bootloader-fastboot.
+
 ### Xposed Edge
 
 Xposed Edge is a good example of the additional behavior an Xposed-compatible

@@ -2,8 +2,12 @@
 
 # Privacy profile
 
-The current profile changes package state for Android user 0. It does not
-modify read-only partitions and is reversible without root.
+The profile changes package state for Android user 0. It does not modify
+read-only partitions and is reversible without root. It was validated before
+the 2026-07-24 bootloader unlock, whose mandatory userdata wipe reset the
+profile. The current post-unlock audit reports no Aurora installation and
+`0/21` hardening plus `0/24` Google-facing targets disabled. Reapply a profile
+only when wanted; it is independent from stock-herstel and custom-ROM-porting.
 
 ## Profiles
 

@@ -31,6 +31,17 @@ read_property() {
   adb shell getprop "$1" | tr -d '\r'
 }
 
+read_kernel_androidboot() {
+  local cmdline
+  local key="$1"
+
+  cmdline="$(adb exec-out su -c cat /proc/cmdline 2>/dev/null || true)"
+  printf '%s\n' "$cmdline" |
+    tr ' ' '\n' |
+    awk -F= -v property="androidboot.$key" \
+      '$1 == property { sub(/^[^=]*=/, ""); print; exit }'
+}
+
 model="$(read_property ro.product.model)"
 device="$(read_property ro.product.device)"
 if [[ "$model" != CPH2399 || "$device" != OP557AL1 ]]; then
@@ -136,13 +147,40 @@ degoogle_packages=(
 )
 
 audit() {
+  local boot_state_source=android_properties
+  local bootloader_locked
+  local kernel_vbmeta_state
+  local kernel_verified_boot
+  local reported_bootloader_locked
+  local reported_verified_boot
+
+  reported_bootloader_locked="$(read_property ro.boot.flash.locked)"
+  reported_verified_boot="$(read_property ro.boot.verifiedbootstate)"
+  bootloader_locked="$reported_bootloader_locked"
+  kernel_vbmeta_state="$(read_kernel_androidboot vbmeta.device_state)"
+  kernel_verified_boot="$(read_kernel_androidboot verifiedbootstate)"
+  if [[ -n "$kernel_vbmeta_state" || -n "$kernel_verified_boot" ]]; then
+    boot_state_source=kernel_cmdline
+    case "$kernel_vbmeta_state" in
+      locked) bootloader_locked=1 ;;
+      unlocked) bootloader_locked=0 ;;
+    esac
+  fi
+
   echo "model=$model"
   echo "device=$device"
   echo "build=$(read_property ro.build.display.id)"
   echo "android=$(read_property ro.build.version.release)"
   echo "security_patch=$(read_property ro.build.version.security_patch)"
-  echo "bootloader_locked=$(read_property ro.boot.flash.locked)"
-  echo "verified_boot=$(read_property ro.boot.verifiedbootstate)"
+  echo "bootloader_locked=$bootloader_locked"
+  echo "verified_boot=${kernel_verified_boot:-$reported_verified_boot}"
+  echo "boot_state_source=$boot_state_source"
+  if [[ "$boot_state_source" == kernel_cmdline ]] &&
+    { [[ "$bootloader_locked" != "$reported_bootloader_locked" ]] ||
+      [[ "$kernel_verified_boot" != "$reported_verified_boot" ]]; }; then
+    echo "reported_bootloader_locked=$reported_bootloader_locked"
+    echo "reported_verified_boot=$reported_verified_boot"
+  fi
   echo "oem_unlock_allowed=$(read_property sys.oem_unlock_allowed)"
   echo "aurora_version=$(package_version com.aurora.store)"
   echo "play_store_state=$(package_state com.android.vending)"

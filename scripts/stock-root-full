@@ -114,6 +114,21 @@ adb_property() {
   adb -s "$serial" shell getprop "$1" | tr -d '\r'
 }
 
+adb_bootloader_unlocked() {
+  local cmdline
+
+  cmdline="$(adb -s "$serial" exec-out su -c cat /proc/cmdline 2>/dev/null || true)"
+  if grep -qw 'androidboot.vbmeta.device_state=unlocked' <<<"$cmdline"; then
+    return 0
+  fi
+  if grep -qw 'androidboot.vbmeta.device_state=locked' <<<"$cmdline"; then
+    return 1
+  fi
+
+  [[ "$(adb_property ro.boot.flash.locked)" == 0 ]] &&
+    [[ "$(adb_property ro.boot.vbmeta.device_state)" != locked ]]
+}
+
 wait_for_android() {
   for _ in $(seq 1 180); do
     if [[ "$(adb -s "$serial" get-state 2>/dev/null || true)" == device ]] &&
@@ -139,7 +154,7 @@ has_root() {
   fail "connected device is not OP557AL1"
 [[ "$(adb_property ro.build.display.id)" == "CPH2399_14.0.0.3001(EX01)" ]] ||
   fail "installed build is not the pinned .3001 baseline"
-[[ "$(adb_property ro.boot.flash.locked)" == 0 ]] ||
+adb_bootloader_unlocked ||
   fail "bootloader is not unlocked"
 
 if [[ "$assume_yes" != true ]]; then
