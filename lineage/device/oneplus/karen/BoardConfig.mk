@@ -2,6 +2,20 @@
 
 DEVICE_PATH := device/oneplus/karen
 
+# A/B
+AB_OTA_UPDATER := true
+AB_OTA_PARTITIONS := \
+    boot \
+    dtbo \
+    odm \
+    product \
+    system \
+    system_ext \
+    vbmeta \
+    vbmeta_system \
+    vbmeta_vendor \
+    vendor
+
 # Architecture
 TARGET_ARCH := arm64
 TARGET_ARCH_VARIANT := armv8-2a-dotprod
@@ -42,6 +56,7 @@ BOARD_RAMDISK_OFFSET := 0x11088000
 BOARD_KERNEL_TAGS_OFFSET := 0x07c08000
 BOARD_DTB_OFFSET := 0x07c08000
 BOARD_KERNEL_CMDLINE := bootopt=64S3,32N2,64N2 buildvariant=user
+BOARD_KERNEL_CMDLINE += androidboot.init_fatal_reboot_target=recovery
 
 BOARD_MKBOOTIMG_ARGS += --kernel_offset $(BOARD_KERNEL_OFFSET)
 BOARD_MKBOOTIMG_ARGS += --ramdisk_offset $(BOARD_RAMDISK_OFFSET)

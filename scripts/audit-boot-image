@@ -104,7 +104,6 @@ stock_size="$(stat -c %s "$stock_image")"
 matching_header_fields=(
   base
   board
-  cmdline
   dtb_offset
   hashtype
   header_version
@@ -135,7 +134,7 @@ done
 [[ "$(<"$candidate_prefix-dtb_offset")" == 0x07c08000 ]] ||
   fail "unexpected DTB offset"
 [[ "$(<"$candidate_prefix-cmdline")" == \
-  "bootopt=64S3,32N2,64N2 buildvariant=user" ]] ||
+  "bootopt=64S3,32N2,64N2 buildvariant=user androidboot.init_fatal_reboot_target=recovery" ]] ||
   fail "unexpected kernel command line"
 
 cmp -s "$candidate_prefix-kernel" "$stock_prefix-kernel" ||
@@ -168,6 +167,8 @@ fi
 bsdtar -xf "$candidate_prefix-ramdisk" -C "$candidate_ramdisk_directory"
 
 required_ramdisk_files=(
+  first_stage_ramdisk/fstab.mt6893
+  first_stage_ramdisk/system/bin/snapuserd
   init.recovery.mt6893.rc
   prop.default
   sepolicy

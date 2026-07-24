@@ -2,6 +2,8 @@
 
 DEVICE_PATH := device/oneplus/karen
 
+$(call inherit-product, $(SRC_TARGET_DIR)/product/virtual_ab_ota.mk)
+
 PRODUCT_SHIPPING_API_LEVEL := 31
 PRODUCT_USE_DYNAMIC_PARTITIONS := true
 PRODUCT_BUILD_SUPER_PARTITION := false
@@ -15,5 +17,6 @@ PRODUCT_SOONG_NAMESPACES += \
     $(DEVICE_PATH)
 
 PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/rootdir/etc/fstab.mt6893:$(TARGET_COPY_OUT_RAMDISK)/first_stage_ramdisk/fstab.mt6893 \
     frameworks/native/data/etc/android.hardware.usb.accessory.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.usb.accessory.xml \
     frameworks/native/data/etc/android.hardware.usb.host.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.usb.host.xml

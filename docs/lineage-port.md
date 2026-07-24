@@ -79,11 +79,13 @@ nix run .#audit-boot -- --allow-insecure-adb ./result/boot.img
 The audit verifies:
 
 - the exact 64 MiB boot partition size and Android boot header v2;
-- stock-matching base, page size, offsets and kernel command line;
+- stock-matching base, page size and offsets, plus the recovery-only init fatal
+  reboot target used by Lineage's comparable MediaTek recovery-as-boot trees;
 - a byte-identical `.3001` stock kernel and DTB;
 - a valid AVB hash footer for partition `boot`;
 - Lineage Recovery, `adbd`, fastbootd, init and SELinux policy in the ramdisk;
 - the current F2FS metadata-encryption parameters and logical EROFS mappings;
+- a first-stage fstab and virtual A/B `snapuserd` in the boot ramdisk;
 - absence of device-unique and security partitions from the recovery fstab.
 
 The pinned recovery-only Robotnix derivation sets Lineage's own
@@ -126,6 +128,22 @@ active `boot_a` booted normally and provided approved `uid=0(root)`. This
 proves that transport completion is not a hardware-boot result on this loader.
 Further recovery testing must use a slotted write with the pinned stock
 restore image immediately available.
+
+### Virtual A/B ramdisk correction
+
+The first two candidates predated the live root inspection and did not inherit
+Android's `virtual_ab_ota.mk`. Their recovery ramdisk consequently contained
+only `system/etc/recovery.fstab`, not stock's
+`first_stage_ramdisk/fstab.mt6893`, and had no first-stage `snapuserd`.
+
+The closest official Lineage MediaTek precedent,
+`android_device_xiaomi_rosemary`, uses the same header-v2,
+recovery-as-boot, 64-MiB boot and 8-MiB DTBO layout. It enables the A/B updater,
+inherits `virtual_ab_ota.mk` and adds
+`androidboot.init_fatal_reboot_target=recovery`. Karen now follows only those
+layout decisions while retaining its own verified offsets, fstab, stock
+kernel, DTB and DTBO. Its A/B update list explicitly includes the five
+Lineage-built logical partitions and the matching boot/AVB metadata.
 
 ### Interactive checkout
 
