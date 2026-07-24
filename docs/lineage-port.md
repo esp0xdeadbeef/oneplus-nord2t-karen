@@ -311,6 +311,11 @@ nix run /path/to/oneplus-nord2t-karen#android-fhs -- -c '
 ```
 
 Omit `--full` and `KAREN_FULL_SYSTEM` when rebuilding only the recovery probe.
+The FHS shell creates its cache directory before Soong starts and caps
+`ccache` at 100 GB. Keep the checkout's `out` directory between runs as well;
+its Ninja and Soong state avoids substantially more work than compiler cache
+alone.
+
 Do not flash the result until bootloader USB communication and exact stock
 slot restoration have both been proven. The rest of this document records what
 is needed to turn `karen` into an official, updatable device rather than a

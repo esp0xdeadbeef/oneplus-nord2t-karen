@@ -450,6 +450,8 @@
             export USE_CCACHE=1
             export CCACHE_EXEC=/usr/bin/ccache
             export CCACHE_DIR="''${XDG_CACHE_HOME:-$HOME/.cache}/nord2t-ccache"
+            export CCACHE_MAXSIZE=100G
+            mkdir -p "$CCACHE_DIR"
             export ANDROID_JAVA_HOME=${pkgs.jdk17.home}
             export TMPDIR=/tmp
             export LC_ALL=C
