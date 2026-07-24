@@ -56,6 +56,41 @@ patch while retaining the other upstream Robotnix patches.
 This target exists to make remote builds and source pinning testable during
 bring-up. It does not make the unbooted image safe to flash.
 
+### Full-system compatibility inputs
+
+The full userspace target is separate from the deliberately insecure recovery
+probe:
+
+```sh
+nix build .#stock-lineage-3001
+nix build .#karen-full-images
+```
+
+The first derivation extracts only `vendor` and `odm` from the pinned full
+OTA, verifies them against the partition manifest and expands only their
+generic filesystem trees. On `s-tau` on 2026-07-25 it produced:
+
+```text
+OTA SHA-256:    4ca89d77ce64e09f1b061db69e5589be7ad60d2c0403b2e9217e47862352c41f
+vendor bytes:   487354368
+vendor SHA-256: 6f12d0c8eeb8399b194951c6ce8abbc14c789453b6620c04241e8d95887c222c
+odm bytes:      1118810112
+odm SHA-256:    df850835446ecbeee14bbbe1a157e0dfc3d8f6af2bcb7e14a7f01e99dfb82cf3
+```
+
+The full target builds Lineage `boot`, `system`, `system_ext` and `product`,
+uses those exact stock `vendor` and `odm` images, and builds the associated
+`vbmeta`, `vbmeta_system` and `vbmeta_vendor` images. It does not inherit
+`WITH_ADB_INSECURE`. Its first-stage ramdisk uses the complete matching stock
+mount table so vendor services can see the OPlus logical and hardware-data
+mounts, while Lineage Recovery continues to use the deliberately reduced
+`TARGET_RECOVERY_FSTAB` and cannot offer sensitive partitions as wipe targets.
+
+None of those inputs contains device-unique data: they come from the public
+full OTA. Live `nvdata`, `nvram`, calibration, persistent and radio data stay
+on the phone and outside both the build and Git. A completed build still needs
+image, VINTF, AVB, size and restore audits before any full-system flash.
+
 ### Verified build and structural audit
 
 The pinned derivation completed successfully on `s-tau` on 2026-07-24. After

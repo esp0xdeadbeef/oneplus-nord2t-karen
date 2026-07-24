@@ -111,6 +111,9 @@ nix build .#karen-device-tree
 # Realize the locked Lineage source graph and build boot.img in a Nix sandbox.
 nix build .#karen-bootimage
 
+# Build the full bring-up image set with verified stock vendor/odm.
+nix build .#karen-full-images
+
 # Reproduce the current official-source kernel gate.
 nix build .#karen-source-kernel-bootimage
 
@@ -134,6 +137,13 @@ that OnePlus did not include. The reproducible failure is documented in the
 [LineageOS port assessment](docs/lineage-port.md); the working recovery and
 initial full-system bring-up therefore retain the verified `.3001` stock
 kernel while that source gate remains unresolved.
+
+`karen-full-images` is a bring-up bundle, not yet a flashable release. Unlike
+the recovery probe it does not enable insecure ADB. It builds Lineage `boot`,
+`system`, `system_ext` and `product`, creates the matching AVB metadata, and
+passes through byte-identical `.3001` `vendor` and `odm` images derived from
+the verified OTA. The full build also uses stock's complete first-stage mount
+table while `TARGET_RECOVERY_FSTAB` remains the minimal recovery-safe table.
 
 The pinned build completed successfully on `s-tau` and its resulting
 recovery-as-boot image passed the repository's structural audit. Its kernel
