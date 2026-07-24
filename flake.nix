@@ -11,17 +11,37 @@
     url = "file+https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk";
     flake = false;
   };
+  inputs.vector-module = {
+    url = "file+https://github.com/JingMatrix/Vector/releases/download/v2.0/Vector-v2.0-3021-Release.zip";
+    flake = false;
+  };
+  inputs.adaway-apk = {
+    url = "file+https://github.com/AdAway/AdAway/releases/download/v6.1.4/AdAway-6.1.4-20241027.apk";
+    flake = false;
+  };
+  inputs.hma-apk = {
+    url = "file+https://github.com/Xposed-Modules-Repo/com.tsng.hidemyapplist/releases/download/499-3.8.r499.3a346c0/HMA-V3.8.r499.3a346c0-release.apk";
+    flake = false;
+  };
+  inputs.shamiko-module = {
+    url = "file+https://github.com/LSPosed/LSPosed.github.io/releases/download/shamiko-414/Shamiko-v1.2.5-414-release.zip";
+    flake = false;
+  };
   inputs.robotnix = {
     url = "github:nix-community/robotnix";
     inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = {
+    adaway-apk,
+    hma-apk,
     self,
     magisk-apk,
     nixpkgs,
     robotnix,
+    shamiko-module,
     stock-firmware-3001,
+    vector-module,
   }: let
     eachSystem = function:
       nixpkgs.lib.genAttrs
@@ -56,6 +76,22 @@
 
         magiskApk = pkgs.runCommand "Magisk-v30.7.apk" {} ''
           ln -s ${magisk-apk} "$out"
+        '';
+
+        vectorModule = pkgs.runCommand "Vector-v2.0-3021-Release.zip" {} ''
+          ln -s ${vector-module} "$out"
+        '';
+
+        adawayApk = pkgs.runCommand "AdAway-6.1.4-20241027.apk" {} ''
+          ln -s ${adaway-apk} "$out"
+        '';
+
+        hmaApk = pkgs.runCommand "HMA-V3.8.r499.3a346c0-release.apk" {} ''
+          ln -s ${hma-apk} "$out"
+        '';
+
+        shamikoModule = pkgs.runCommand "Shamiko-v1.2.5-414-release.zip" {} ''
+          ln -s ${shamiko-module} "$out"
         '';
 
         nord2tPrivacy = pkgs.writeShellApplication {
@@ -152,6 +188,33 @@
           text = builtins.replaceStrings ["@STOCK_BOOT@"] ["${stockBoot3001}"] (
             builtins.readFile ./scripts/stock-unroot
           );
+        };
+
+        stockRootFull = pkgs.writeShellApplication {
+          name = "nord2t-stock-root-full";
+          runtimeInputs = with pkgs; [
+            android-tools
+            coreutils
+            gawk
+            gnugrep
+            gnused
+            stockRoot
+          ];
+          text =
+            builtins.replaceStrings
+            [
+              "@VECTOR_MODULE@"
+              "@ADAWAY_APK@"
+              "@HMA_APK@"
+              "@SHAMIKO_MODULE@"
+            ]
+            [
+              "${vectorModule}"
+              "${adawayApk}"
+              "${hmaApk}"
+              "${shamikoModule}"
+            ]
+            (builtins.readFile ./scripts/stock-root-full);
         };
 
         auditBoot = pkgs.writeShellApplication {
@@ -361,17 +424,22 @@
       in
         {
           android-fhs = androidFhs;
+          adaway-apk = adawayApk;
           audit-boot = auditBoot;
           default = nord2tPrivacy;
           extract-stock = extractStock;
           firmware-3001 = stockFirmware3001;
+          hma-apk = hmaApk;
           magisk-apk = magiskApk;
           privacy = nord2tPrivacy;
           probe-preloader = probePreloader;
+          shamiko-module = shamikoModule;
           snapshot = snapshotDevice;
           stock-boot-3001 = stockBoot3001;
           stock-root = stockRoot;
+          stock-root-full = stockRootFull;
           stock-unroot = stockUnroot;
+          vector-module = vectorModule;
           verify-firmware = verifyFirmware;
         }
         // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
@@ -410,6 +478,10 @@
         stock-root = {
           type = "app";
           program = "${self.packages.${system}.stock-root}/bin/nord2t-stock-root";
+        };
+        stock-root-full = {
+          type = "app";
+          program = "${self.packages.${system}.stock-root-full}/bin/nord2t-stock-root-full";
         };
         stock-unroot = {
           type = "app";

@@ -16,6 +16,19 @@ and stock boot SHA-256
 `7ad447405db4e74276395123c8029c67c63adc3fc6d82c4c180ae6c2e31882c0`.
 They also check the expected byte sizes. The APK is never fetched at runtime.
 
+The optional full stack pins four additional release artifacts as independent
+non-flake inputs:
+
+| Component | Version | Upstream artifact | SHA-256 |
+| --- | --- | --- | --- |
+| Vector | 2.0 (3021) | [`JingMatrix/Vector`](https://github.com/JingMatrix/Vector/releases/tag/v2.0) release ZIP | `d5e39669c02c2c699ab948eb8f3639b348eefb7749553224a9c62fa4a2f2dc18` |
+| Shamiko | 1.2.5 (414) | [`LSPosed/LSPosed.github.io`](https://github.com/LSPosed/LSPosed.github.io/releases/tag/shamiko-414) release ZIP | `308d31b2f52a80e49eb58f46bc4c764a6588a79e4b8d101b44860832023f88b4` |
+| Hide My Applist | 3.8 (499) | [LSPosed module repository](https://github.com/Xposed-Modules-Repo/com.tsng.hidemyapplist/releases/tag/499-3.8.r499.3a346c0) APK | `0adaa6bcdf7ee1e9e1c310f33b86f2f4d03f8839a10be8384e34d6cb5bd99c39` |
+| AdAway | 6.1.4 | [`AdAway/AdAway`](https://github.com/AdAway/AdAway/releases/tag/v6.1.4) APK | `09f8e1528a53e5ffad59e57a174e90d4e10c5092bf4f6a60ab6594f046614417` |
+
+`flake.lock` fixes the NAR for every artifact. `stock-root-full` additionally
+checks each raw file's byte size and SHA-256 before it accesses the phone.
+
 Realizing `stock-root` or `stock-unroot` for the first time can require the
 roughly 5.6 GB OTA because Nix derives the stock boot image from that source.
 Afterwards the Nix store reuses the verified result.
@@ -102,6 +115,86 @@ uid=0(root) gid=0(root) groups=0(root) context=u:r:magisk:s0
 Keep the generated patched image only as a local artifact. It is ignored by
 Git and must not be published as a device-independent stock image.
 
+## Full root stack
+
+Root enables two capabilities that are not available from the conservative
+rootless privacy profile:
+
+- an Xposed-compatible hooking framework can change system and app behavior
+  without rebuilding the ROM;
+- AdAway can provide system-wide host-level blocking through Magisk's
+  Systemless Hosts overlay instead of occupying Android's single VPN slot.
+
+Install the complete pinned stack with:
+
+```bash
+nix run .#stock-root-full -- --persist
+```
+
+The command requires the same exact `CPH2399` / `OP557AL1` `.3001` baseline
+and unlocked bootloader as `stock-root`. It asks for `CPH2399-full` before
+making changes unless `--yes` is supplied. If approved Magisk root is already
+working, it does not flash the boot slot again. Otherwise it invokes the
+pinned persistent `stock-root` path first.
+
+The helper then:
+
+1. verifies all four extra inputs by byte size and raw SHA-256;
+2. installs the AdAway and Hide My Applist APKs for user 0;
+3. enables Zygisk in Magisk 30.7;
+4. disables Magisk's built-in denylist enforcement, as explicitly required by
+   Shamiko;
+5. adds only denylist targets supplied on the command line;
+6. installs the Vector and Shamiko Magisk modules;
+7. creates Magisk's built-in-style Systemless Hosts module without overwriting
+   an existing hosts module;
+8. reboots and verifies root, Zygisk, both Android packages and all three
+   Magisk modules.
+
+Shamiko reads Magisk's denylist, but its own upstream instructions require
+**Enforce DenyList** to remain off. Add a complete package or one exact process
+with repeatable arguments:
+
+```bash
+nix run .#stock-root-full -- --persist \
+  --denylist com.example.app \
+  --denylist com.example.app:isolated_process
+```
+
+No package is added by default because the correct targets depend on the
+owner's installed apps. Re-running the helper is idempotent for the pinned
+apps and modules and can add more targets.
+
+Two deliberate manual steps remain:
+
+- open Vector, enable Hide My Applist and select only its required scopes;
+- open AdAway, choose root-based blocking and apply the desired hosts sources.
+
+The complete stack was installed and verified on the test phone on
+2026-07-24. It returned on slot `a` with Magisk `30.7:MAGISK:R`; Vector created
+its runtime directory, Zygisk was enabled, Shamiko and Systemless Hosts were
+active, and denylist enforcement returned disabled as required.
+
+### Xposed Edge
+
+Xposed Edge is a good example of the additional behavior an Xposed-compatible
+framework can provide, including edge gestures, key remapping and system
+actions beyond typical custom-ROM settings. It is not part of the automated
+stack. The last known release is 8.0.1 from 2022, its Google Play listing has
+been removed, and there is no current developer-controlled release endpoint
+that this flake can pin. Pulling a privileged hooking module from an arbitrary
+APK mirror would undermine the purpose of a reproducible privacy setup.
+
+If a legitimate developer-signed copy becomes available, add it as a separate
+locked input with a pinned signing certificate and content hash before
+installation. Do not substitute an unofficial repack.
+
+Vector, Shamiko and Hide My Applist substantially expand the trusted computing
+base: they inject code into Zygote or system/app processes. Shamiko is also
+distributed as a release binary rather than an auditable open-source build.
+These tools can improve control and compatibility, but they are not a security
+upgrade and do not guarantee Play Integrity or banking-app acceptance.
+
 ## Restore stock boot
 
 ```bash
@@ -114,11 +207,11 @@ active `boot_<slot>`. It removes the standard `com.topjohnwu.magisk` manager
 package after Android returns unless `--keep-app` is supplied.
 
 Restoring stock boot removes executable Magisk root but may leave inert files
-under encrypted userdata, such as prior module state. A factory reset is the
-clean route if those remnants also need to be removed. The command does not
-relock the bootloader. Relocking is a separate high-risk operation and must
-not be attempted until every active partition is known to be signed,
-unmodified stock.
+under encrypted userdata, such as prior module state, AdAway, Hide My Applist
+and their settings. A factory reset is the clean route if those remnants also
+need to be removed. The command does not relock the bootloader. Relocking is a
+separate high-risk operation and must not be attempted until every active
+partition is known to be signed, unmodified stock.
 
 If Android cannot boot, enter actual bootloader-fastboot over the direct USB
 port and use:

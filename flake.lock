@@ -1,5 +1,17 @@
 {
   "nodes": {
+    "adaway-apk": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-zwszYznjVRwNcIq5MhglmiEuey2TRBgQWTQgukSNjk4=",
+        "type": "file",
+        "url": "https://github.com/AdAway/AdAway/releases/download/v6.1.4/AdAway-6.1.4-20241027.apk"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/AdAway/AdAway/releases/download/v6.1.4/AdAway-6.1.4-20241027.apk"
+      }
+    },
     "androidPkgs": {
       "inputs": {
         "devshell": "devshell",
@@ -74,6 +86,18 @@
         "owner": "numtide",
         "repo": "flake-utils",
         "type": "github"
+      }
+    },
+    "hma-apk": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-d4rCvUkBYLvuypiDxleYnDa0aMQiigPV+zOcpSr49TU=",
+        "type": "file",
+        "url": "https://github.com/Xposed-Modules-Repo/com.tsng.hidemyapplist/releases/download/499-3.8.r499.3a346c0/HMA-V3.8.r499.3a346c0-release.apk"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/Xposed-Modules-Repo/com.tsng.hidemyapplist/releases/download/499-3.8.r499.3a346c0/HMA-V3.8.r499.3a346c0-release.apk"
       }
     },
     "magisk-apk": {
@@ -162,10 +186,26 @@
     },
     "root": {
       "inputs": {
+        "adaway-apk": "adaway-apk",
+        "hma-apk": "hma-apk",
         "magisk-apk": "magisk-apk",
         "nixpkgs": "nixpkgs",
         "robotnix": "robotnix",
-        "stock-firmware-3001": "stock-firmware-3001"
+        "shamiko-module": "shamiko-module",
+        "stock-firmware-3001": "stock-firmware-3001",
+        "vector-module": "vector-module"
+      }
+    },
+    "shamiko-module": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-szBhLDvim1xElUkC+P35q/mIxlICgGeW8iJrWtBwyWY=",
+        "type": "file",
+        "url": "https://github.com/LSPosed/LSPosed.github.io/releases/download/shamiko-414/Shamiko-v1.2.5-414-release.zip"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/LSPosed/LSPosed.github.io/releases/download/shamiko-414/Shamiko-v1.2.5-414-release.zip"
       }
     },
     "stock-firmware-3001": {
@@ -214,6 +254,18 @@
         "owner": "numtide",
         "repo": "treefmt-nix",
         "type": "github"
+      }
+    },
+    "vector-module": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-LXe9SdowTCq71dxA+jBp1hKlHprrCndUWrU5YFeSaE4=",
+        "type": "file",
+        "url": "https://github.com/JingMatrix/Vector/releases/download/v2.0/Vector-v2.0-3021-Release.zip"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/JingMatrix/Vector/releases/download/v2.0/Vector-v2.0-3021-Release.zip"
       }
     }
   },

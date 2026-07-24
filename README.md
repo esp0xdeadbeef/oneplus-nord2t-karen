@@ -72,6 +72,11 @@ and the stock `.3001` boot image derived from the OTA are both locked by
 `flake.lock` and checked against hard-coded size and SHA-256 pins before the
 root workflow uses them.
 
+The optional full rooted stack adds four more locked upstream artifacts:
+Vector 2.0, Shamiko 1.2.5, Hide My Applist 3.8 and AdAway 6.1.4. The helper
+checks their exact byte sizes and SHA-256 values in addition to Nix's lock
+hashes; it never resolves a “latest” URL at runtime.
+
 The repository then adds the local `karen` tree without committing proprietary
 or stock-derived binaries. There are three useful build paths:
 
@@ -214,6 +219,23 @@ Temporarily boot it, or explicitly make it persistent on only the active slot:
 nix run .#stock-root -- --boot
 nix run .#stock-root -- --persist
 ```
+
+Install the complete pinned root stack, optionally adding exact apps or
+processes to the Magisk denylist consumed by Shamiko:
+
+```bash
+nix run .#stock-root-full -- --persist
+nix run .#stock-root-full -- --persist \
+  --denylist com.example.app \
+  --denylist com.example.app:isolated_process
+```
+
+This enables Zygisk, installs Vector, Shamiko, Hide My Applist and AdAway, and
+creates Magisk's Systemless Hosts module. It deliberately leaves Magisk's
+denylist enforcement off because Shamiko requires that setting while reading
+the configured list itself. No app is added to the list by default. Hide My
+Applist must still be enabled and scoped in Vector; AdAway must still be
+opened once to select root-based blocking and apply its hosts sources.
 
 Restore the exact pinned stock boot image to the active slot:
 

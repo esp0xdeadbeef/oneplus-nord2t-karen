@@ -1,0 +1,258 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-stock-root-full --persist [--yes] [--denylist PACKAGE[:PROCESS]]...
+
+Persistently root the pinned CPH2399 .3001 stock boot when needed, then install
+the pinned Vector, Shamiko, Hide My Applist and AdAway releases. Zygisk is
+enabled, Magisk's built-in denylist enforcement is disabled as required by
+Shamiko, and every --denylist target is added to the list Shamiko consumes.
+
+No third-party app is added to the denylist by default. Repeat --denylist for
+each package or exact package process that should not see root.
+EOF
+}
+
+fail() {
+  echo "stock-root-full failed: $*" >&2
+  exit 1
+}
+
+persist=false
+assume_yes=false
+denylist_targets=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --persist)
+      persist=true
+      shift
+      ;;
+    --yes)
+      assume_yes=true
+      shift
+      ;;
+    --denylist)
+      [[ $# -ge 2 ]] || {
+        usage
+        exit 2
+      }
+      [[ "$2" =~ ^[A-Za-z0-9_.]+(:[A-Za-z0-9_.]+)?$ ]] ||
+        fail "invalid denylist target: $2"
+      denylist_targets+=("$2")
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+[[ "$persist" == true ]] || {
+  usage
+  fail "--persist is required because root modules and Magisk settings persist"
+}
+
+vector_module="@VECTOR_MODULE@"
+adaway_apk="@ADAWAY_APK@"
+hma_apk="@HMA_APK@"
+shamiko_module="@SHAMIKO_MODULE@"
+
+verify_file() {
+  local file="$1"
+  local expected_size="$2"
+  local expected_hash="$3"
+  local label="$4"
+
+  [[ -r "$file" && -f "$file" ]] ||
+    fail "$label is not a readable regular file"
+  [[ "$(stat -Lc %s "$file")" == "$expected_size" ]] ||
+    fail "$label size does not match its pin"
+  [[ "$(sha256sum "$file" | cut -d' ' -f1)" == "$expected_hash" ]] ||
+    fail "$label SHA-256 does not match its pin"
+}
+
+verify_file \
+  "$vector_module" \
+  8434264 \
+  d5e39669c02c2c699ab948eb8f3639b348eefb7749553224a9c62fa4a2f2dc18 \
+  "Vector module"
+verify_file \
+  "$adaway_apk" \
+  13955875 \
+  09f8e1528a53e5ffad59e57a174e90d4e10c5092bf4f6a60ab6594f046614417 \
+  "AdAway APK"
+verify_file \
+  "$hma_apk" \
+  3591847 \
+  0adaa6bcdf7ee1e9e1c310f33b86f2f4d03f8839a10be8384e34d6cb5bd99c39 \
+  "Hide My Applist APK"
+verify_file \
+  "$shamiko_module" \
+  6523936 \
+  308d31b2f52a80e49eb58f46bc4c764a6588a79e4b8d101b44860832023f88b4 \
+  "Shamiko module"
+
+mapfile -t adb_devices < <(
+  adb devices | awk 'NR > 1 && $2 == "device" { print $1 }'
+)
+[[ "${#adb_devices[@]}" == 1 ]] ||
+  fail "expected exactly one authorized ADB device"
+serial="${adb_devices[0]}"
+
+adb_property() {
+  adb -s "$serial" shell getprop "$1" | tr -d '\r'
+}
+
+wait_for_android() {
+  for _ in $(seq 1 180); do
+    if [[ "$(adb -s "$serial" get-state 2>/dev/null || true)" == device ]] &&
+      [[ "$(adb_property sys.boot_completed 2>/dev/null || true)" == 1 ]]; then
+      return
+    fi
+    sleep 1
+  done
+  fail "Android did not finish booting within 180 seconds"
+}
+
+has_root() {
+  adb -s "$serial" shell su -c id 2>/dev/null |
+    tr -d '\r' |
+    grep -Fq "uid=0(root)"
+}
+
+[[ "$(adb_property sys.boot_completed)" == 1 ]] ||
+  fail "Android has not finished booting"
+[[ "$(adb_property ro.product.model)" == CPH2399 ]] ||
+  fail "connected model is not CPH2399"
+[[ "$(adb_property ro.product.device)" == OP557AL1 ]] ||
+  fail "connected device is not OP557AL1"
+[[ "$(adb_property ro.build.display.id)" == "CPH2399_14.0.0.3001(EX01)" ]] ||
+  fail "installed build is not the pinned .3001 baseline"
+[[ "$(adb_property ro.boot.flash.locked)" == 0 ]] ||
+  fail "bootloader is not unlocked"
+
+if [[ "$assume_yes" != true ]]; then
+  printf '%s' \
+    "Install persistent root extras, change Magisk settings and reboot? Type CPH2399-full: " \
+    >&2
+  read -r confirmation
+  [[ "$confirmation" == CPH2399-full ]] || fail "confirmation declined"
+fi
+
+host_work="$(mktemp -d -t nord2t-stock-root-full.XXXXXXXX)"
+remote_work="/data/local/tmp/nord2t-stock-root-full-$$"
+remote_exists=false
+
+cleanup() {
+  if [[ "$remote_exists" == true ]]; then
+    adb -s "$serial" shell "rm -rf '$remote_work'" >/dev/null 2>&1 || true
+  fi
+  rm -rf -- "$host_work"
+}
+trap cleanup EXIT
+
+if ! has_root; then
+  nord2t-stock-root \
+    --persist \
+    --yes \
+    --output "$host_work/magisk-patched.img"
+  wait_for_android
+  if ! has_root; then
+    fail "Magisk booted but root is not approved; finish Magisk's one-time setup, approve Shell, then rerun this command"
+  fi
+fi
+
+magisk_version="$(adb -s "$serial" shell su -c "magisk -v" | tr -d '\r')"
+[[ "$magisk_version" == 30.7:* ]] ||
+  fail "running Magisk is not the pinned v30.7 baseline"
+
+adb -s "$serial" install --user 0 -r "$adaway_apk" >/dev/null
+adb -s "$serial" install --user 0 -r "$hma_apk" >/dev/null
+
+adb -s "$serial" shell "mkdir '$remote_work'"
+remote_exists=true
+adb -s "$serial" push "$vector_module" "$remote_work/vector.zip" >/dev/null
+adb -s "$serial" push "$shamiko_module" "$remote_work/shamiko.zip" >/dev/null
+
+adb -s "$serial" shell \
+  "su -c 'magisk --sqlite \"REPLACE INTO settings (key,value) VALUES (\\\"zygisk\\\",1);\"'"
+adb -s "$serial" shell su -c "magisk --denylist disable"
+
+for target in "${denylist_targets[@]}"; do
+  package="${target%%:*}"
+  if [[ "$target" == *:* ]]; then
+    adb -s "$serial" shell su -c \
+      "magisk --denylist add $package $target"
+  else
+    adb -s "$serial" shell su -c \
+      "magisk --denylist add $package"
+  fi
+done
+
+adb -s "$serial" shell \
+  "su -c 'magisk --install-module $remote_work/vector.zip'"
+adb -s "$serial" shell \
+  "su -c 'magisk --install-module $remote_work/shamiko.zip'"
+
+adb -s "$serial" shell "su -c '
+  if [[ ! -d /data/adb/modules/hosts ]]; then
+    mkdir -p /data/adb/modules/hosts/system/etc
+    cp /system/etc/hosts /data/adb/modules/hosts/system/etc/hosts
+    chmod 0755 /data/adb/modules/hosts /data/adb/modules/hosts/system
+    chmod 0755 /data/adb/modules/hosts/system/etc
+    chmod 0644 /data/adb/modules/hosts/system/etc/hosts
+    printf \"id=hosts\\nname=Systemless Hosts\\nversion=1.0\\nversionCode=1\\nauthor=Magisk\\ndescription=Magisk app built-in systemless hosts module\\n\" \
+      >/data/adb/modules/hosts/module.prop
+    chmod 0644 /data/adb/modules/hosts/module.prop
+    touch /data/adb/modules/hosts/update
+  fi
+'"
+
+adb -s "$serial" shell "rm -rf '$remote_work'"
+remote_exists=false
+adb -s "$serial" reboot
+wait_for_android
+
+has_root || fail "Android returned without approved Magisk root"
+
+for package in org.adaway com.tsng.hidemyapplist; do
+  adb -s "$serial" shell pm path "$package" |
+    grep -Fq "package:" ||
+    fail "expected Android package is missing after reboot: $package"
+done
+
+for module in zygisk_vector zygisk_shamiko hosts; do
+  adb -s "$serial" shell \
+    "su -c 'test -d /data/adb/modules/$module && test ! -e /data/adb/modules/$module/disable'" ||
+    fail "expected active Magisk module is missing: $module"
+done
+
+zygisk_setting="$(
+  adb -s "$serial" shell \
+    "su -c 'magisk --sqlite \"SELECT value FROM settings WHERE key=\\\"zygisk\\\";\"'" |
+    tr -d '\r'
+)"
+grep -Fq "value=1" <<<"$zygisk_setting" ||
+  fail "Magisk reports Zygisk disabled after reboot"
+
+if adb -s "$serial" shell su -c "magisk --denylist status" >/dev/null 2>&1; then
+  fail "Magisk denylist enforcement is enabled, which conflicts with Shamiko"
+fi
+
+echo "Pinned full stock-root stack installed and verified."
+echo "Vector v2.0 and Shamiko v1.2.5 are active with Zygisk."
+echo "Magisk denylist enforcement is off as required by Shamiko."
+echo "Hide My Applist v3.8 and AdAway v6.1.4 are installed."
+echo "Open Vector to enable and scope Hide My Applist."
+echo "Open AdAway, select root-based blocking and apply the hosts sources."
