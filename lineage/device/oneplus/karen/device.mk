@@ -10,13 +10,14 @@ PRODUCT_BUILD_SUPER_PARTITION := false
 
 PRODUCT_PACKAGES += \
     fastbootd \
+    fstab.mt6893.first_stage_ramdisk \
     fstab.mt6893.ramdisk \
-    init.recovery.mt6893.rc
+    init.recovery.mt6893.rc \
+    snapuserd_ramdisk
 
 PRODUCT_SOONG_NAMESPACES += \
     $(DEVICE_PATH)
 
 PRODUCT_COPY_FILES += \
-    $(DEVICE_PATH)/rootdir/etc/fstab.mt6893:$(TARGET_COPY_OUT_RAMDISK)/first_stage_ramdisk/fstab.mt6893 \
     frameworks/native/data/etc/android.hardware.usb.accessory.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.usb.accessory.xml \
     frameworks/native/data/etc/android.hardware.usb.host.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.usb.host.xml
