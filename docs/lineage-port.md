@@ -86,6 +86,17 @@ mount table so vendor services can see the OPlus logical and hardware-data
 mounts, while Lineage Recovery continues to use the deliberately reduced
 `TARGET_RECOVERY_FSTAB` and cannot offer sensitive partitions as wipe targets.
 
+An earlier full-userspace derivation completed all 164,803 Android build tasks
+on `s-tau` in 1 hour 19 minutes. Its `boot`, `system`, `system_ext`, `product`
+and top-level `vbmeta` images were structurally valid, and the boot audit
+confirmed authenticated ADB plus the exact stock kernel and DTB. The result
+was rejected before hardware use: it generated a 16,510,976-byte `vendor`
+image and a 454,656-byte `odm` image instead of the 487,354,368-byte and
+1,118,810,112-byte stock images, and its install output omitted
+`vbmeta_system` and `vbmeta_vendor`. The current target therefore treats both
+stock images as explicit prebuilts and requests every chained AVB image, but
+that corrected result still needs its own complete audit.
+
 None of those inputs contains device-unique data: they come from the public
 full OTA. Live `nvdata`, `nvram`, calibration, persistent and radio data stay
 on the phone and outside both the build and Git. A completed build still needs
