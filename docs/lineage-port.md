@@ -140,6 +140,13 @@ untouched. It must not start until the host-side restore procedure has
 validated product, group limit, image hashes, required free space and return
 to stock recovery/boot.
 
+The required mode transition was exercised non-destructively on 2026-07-25.
+`fastboot reboot fastboot` moved bootloader-fastboot into fastbootd and
+`fastboot reboot bootloader` returned to bootloader-fastboot; `is-userspace`
+reported `yes` and `no` respectively. Host helpers must account for
+`fastboot devices` labelling those modes `fastbootd` and `fastboot` rather
+than treating both labels as ordinary bootloader-fastboot.
+
 Approved root was used only to hash the five generic live read-only logical
 block devices. The running slot-A `system`, `system_ext`, `product`, `vendor`
 and `odm` hashes each match the corresponding `.3001` OTA image exactly. No

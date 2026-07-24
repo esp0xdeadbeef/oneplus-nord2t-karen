@@ -154,6 +154,13 @@ An inactive-slot Lineage Recovery test subsequently proved the complete
 `boot_b` write, slot switch, recovery boot and exact stock restoration
 roundtrip.
 
+The reverse non-destructive route was also verified on 2026-07-25:
+`fastboot reboot fastboot` entered fastbootd from bootloader-fastboot and
+`fastboot reboot bootloader` returned. `fastboot getvar is-userspace` reported
+`yes` in fastbootd and `no` in the bootloader. The host labels these modes
+`fastbootd` and `fastboot` respectively in the second column of
+`fastboot devices`.
+
 ## Tested inactive-slot recovery roundtrip
 
 The corrected Lineage Recovery bring-up image was tested on 2026-07-24 without
