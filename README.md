@@ -44,6 +44,45 @@ Android Auto, RCS, Play Integrity and apps that require Google APIs. The helper
 therefore provides restore actions. It deliberately keeps critical telephony,
 emergency, network, permission, OTA, camera, WebView and input components.
 
+## Reproducible LineageOS bring-up
+
+The experimental LineageOS 21 recovery build has two independent pinned source
+layers:
+
+- `stock-firmware-3001` is the exact official EU OTA, locked by `flake.lock`
+  and checked again against the whole-file and partition hashes in
+  `firmware/`;
+- `robotnix` is locked to an exact revision and imports its generated
+  LineageOS `repo.lock`. That lock is Robotnix's Nix equivalent of
+  `repo manifest -r`: every Android project has a fixed Git commit and Nix
+  content hash.
+
+The repository then adds the local `karen` tree without committing proprietary
+or stock-derived binaries. There are three useful build paths:
+
+```bash
+# Derive the stock kernel, DTB and DTBO and assemble the device tree.
+nix build .#karen-device-tree
+
+# Realize the locked Lineage source graph and build boot.img in a Nix sandbox.
+nix build .#karen-bootimage
+
+# Enter the FHS environment for faster, mutable Android-tree iteration.
+nix run .#android-fhs
+```
+
+The first clean build of `karen-bootimage` must fetch and realize the complete
+LineageOS/AOSP source graph. Those repositories become ordinary immutable Nix
+store paths and are reused by later builds. A large Nix-capable machine such as
+`s-tau` can run the same flake over SSH; no declarative host exception or
+machine-specific build configuration is part of this repository.
+
+Neither a successful build nor an image in the Nix store makes it safe to
+flash. The image still needs a structural audit, bootloader USB must work
+reliably, and exact stock-slot restoration must be proven first. See the
+[LineageOS port assessment](docs/lineage-port.md) for the current gates and
+bring-up sequence.
+
 ## Use
 
 Enter the development shell:
