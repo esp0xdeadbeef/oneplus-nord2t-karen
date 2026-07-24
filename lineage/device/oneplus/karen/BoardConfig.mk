@@ -74,13 +74,6 @@ TARGET_RECOVERY_PIXEL_FORMAT := RGBX_8888
 TARGET_RECOVERY_UI_BLANK_UNBLANK_ON_INIT := true
 TARGET_RECOVERY_UI_MARGIN_HEIGHT := 90
 
-# The pinned Robotnix recovery-only derivation enables this explicitly so a
-# headless bring-up can be diagnosed before /data contains an authorized host
-# key. Never enable it for an installable system build.
-ifeq ($(KAREN_RECOVERY_BRINGUP),true)
-WITH_ADB_INSECURE := true
-endif
-
 # Partitions
 BOARD_USES_METADATA_PARTITION := true
 BOARD_ROOT_EXTRA_FOLDERS += metadata

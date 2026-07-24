@@ -86,9 +86,8 @@ The audit verifies:
 - the current F2FS metadata-encryption parameters and logical EROFS mappings;
 - absence of device-unique and security partitions from the recovery fstab.
 
-The pinned recovery-only Robotnix derivation sets
-`KAREN_RECOVERY_BRINGUP=true`. The Karen board configuration maps that explicit
-marker to Lineage's `WITH_ADB_INSECURE` switch so a wiped device can provide a
+The pinned recovery-only Robotnix derivation sets Lineage's own
+`WITH_ADB_INSECURE=true` product-make switch so a wiped device can provide a
 headless diagnostic shell. This must never be set for an installable system
 build. The audit rejects `ro.adb.secure=0` by default and accepts it only with
 the explicit `--allow-insecure-adb` bring-up flag.
@@ -117,7 +116,7 @@ OxygenOS on slot `a`. Stock reported `ro.boot.bootreason=lk_crash`,
 image required authenticated ADB, while the unlock wipe had removed the
 authorized device-side key, so it did not yield a diagnostic recovery shell.
 The next probe therefore changes only the recovery ADB authentication setting
-through the explicit bring-up marker described above.
+through the explicitly scoped Robotnix environment described above.
 
 ### Interactive checkout
 
