@@ -41,6 +41,16 @@ After installing the verified full EU OTA on 2026-07-24, the phone reported:
 - locked bootloader and green Verified Boot;
 - SELinux enforcing and encrypted user data.
 
+Later bring-up deliberately unlocked the bootloader and wiped userdata. The
+current tested state is:
+
+- active slot `a`;
+- unlocked bootloader and orange Verified Boot;
+- exact `.3001` stock kernel/DTB with a reproducibly Magisk-patched ramdisk;
+- Magisk `30.7` additional setup completed;
+- explicitly approved ADB shell root;
+- SELinux still enforcing and userdata still encrypted.
+
 These are observations, not build-time constants. Re-run the inventory after
 each OTA:
 
@@ -54,6 +64,10 @@ Rooting before inventory is counterproductive: unlocking performs a factory
 reset and changes the security state being measured. The public full OTA is a
 better source for proprietary blobs, while rootless ADB can collect the
 hardware and framework declarations needed for planning.
+
+That rootless baseline was collected before unlocking. Root was added only
+afterwards to inspect partitions absent from the OTA and loader failure state;
+it must not replace the baseline security inventory.
 
 `nord2t-snapshot` records only:
 

@@ -69,6 +69,12 @@ Grant the request in the Magisk app when prompted. Output containing
 not infer that the patched image itself is bad: the current loader may have
 fallen back to the slotted image after its `lk_crash` path.
 
+That fallback is now confirmed on the test phone. The temporary Magisk image
+transferred in full, the loader disconnected with `Status read failed`, and
+Android returned with boot reason `lk_crash`, without `magiskd` or `su`. The
+helper now treats that state as a failed temporary probe instead of reporting
+success.
+
 ## Persistent stock root
 
 ```bash
@@ -81,6 +87,17 @@ then writes only `boot_a` or `boot_b`, whichever is active, and reboots. It
 does not write `vbmeta`, `vendor_boot`, `super`, userdata, the inactive boot
 slot or any device-unique partition. `--yes` may skip the prompt in an already
 supervised workflow.
+
+The persistent path was tested on slot `a` on 2026-07-24. Bootloader-fastboot
+reported successful send and write of exactly 64 MiB to `boot_a`; Android then
+returned with normal `PMIC_cold_reboot`, and `magiskd` ran as root. Magisk may
+still request its one-time additional setup before exposing `su` to ADB. That
+setup and its requested reboot also completed successfully. After allowing
+only the `[SharedUID] Shell` policy in Magisk, the final probe returned:
+
+```text
+uid=0(root) gid=0(root) groups=0(root) context=u:r:magisk:s0
+```
 
 Keep the generated patched image only as a local artifact. It is ignored by
 Git and must not be published as a device-independent stock image.
@@ -102,3 +119,15 @@ clean route if those remnants also need to be removed. The command does not
 relock the bootloader. Relocking is a separate high-risk operation and must
 not be attempted until every active partition is known to be signed,
 unmodified stock.
+
+If Android cannot boot, enter actual bootloader-fastboot over the direct USB
+port and use:
+
+```bash
+nix run .#stock-unroot -- --persist --from-fastboot
+```
+
+That mode additionally requires the tested bootloader product
+`k6893v1_64_k419`, hardware revision `ca00`, `is-userspace: no` and an unlocked
+bootloader before it writes the active slot. It does not depend on authorized
+ADB. If ADB does not return after the write, app removal cannot be automated.

@@ -74,10 +74,33 @@ checked against
 refuses to overwrite an existing destination.
 
 The full OTA does not contain `vendor_boot`, although both live A/B
-`vendor_boot` partitions exist. The locked phone refused read-only fastboot
-fetches of `boot` and `vendor_boot`; obtaining a live copy would therefore
-require an unlocked or rooted route. Do not dump or publish `nvram`, `nvdata`,
-`persist` or similar device-unique partitions.
+`vendor_boot` partitions exist. Rooted readback later proved that both
+partitions are exactly 64 MiB of zero bytes, with identical SHA-256
+`3b6a07d0d404fab4e23b6d34bc6696a6a312dd92821332385e5af7c01c421351`.
+There is no hidden vendor ramdisk to copy into the recovery build.
+
+The same allowlisted readback showed that slot A's padded `dtbo`, `vbmeta`,
+`vbmeta_system` and `vbmeta_vendor` have exact `.3001` payload prefixes and
+only zero padding. Slot B does not: its boot header reports security patch
+`2024-12`, matching the older pre-update generation. Treat slot B as an older
+fallback, not as a `.3001` restore source. Do not dump or publish `nvram`,
+`nvdata`, `persist` or similar device-unique partitions.
+
+The local, Git-ignored capture was made with an explicit allowlist:
+
+```sh
+for partition in \
+  boot_a boot_b vendor_boot_a vendor_boot_b dtbo_a dtbo_b \
+  vbmeta_a vbmeta_b vbmeta_system_a vbmeta_system_b \
+  vbmeta_vendor_a vbmeta_vendor_b; do
+  adb exec-out \
+    "su -c 'dd if=/dev/block/by-name/$partition bs=4194304 2>/dev/null'" \
+    >"$CACHE/$partition.img"
+done
+```
+
+Set `CACHE` to a private path outside Git and verify every byte size and hash
+before use. Never broaden this loop to all entries below `/dev/block/by-name`.
 
 The deeper preloader/BROM status and its additional prerequisites are tracked
 in [hardbrick-recovery.md](hardbrick-recovery.md).
@@ -118,10 +141,13 @@ an emergency recovery asset.
   files do not guarantee recovery.
 - Bootloader unlocking wipes the phone.
 
-Userspace fastboot (`adb reboot fastboot`) was tested non-destructively on
-`.3001`: it identified a secure, locked two-slot device and rebooted cleanly
-back to green Verified Boot. This proves host communication with fastbootd,
-not that bootloader-fastboot, temporary booting or arbitrary flashing is safe.
+Userspace fastboot (`adb reboot fastboot`) was initially tested
+non-destructively while locked. Later testing after unlock proved the route
+from fastbootd to bootloader-fastboot over a direct laptop USB port. Temporary
+`fastboot boot` is not usable on this loader: both exact stock and patched
+control images transferred, disconnected and returned through `lk_crash`.
+Active-slot `boot_a` flashing was subsequently proven with the audited Magisk
+control image and its exact pinned stock-unroot counterpart remains available.
 
 ## Tested bootloader unlock
 

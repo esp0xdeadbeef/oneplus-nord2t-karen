@@ -110,6 +110,13 @@ flashed persistently. See the
 [LineageOS port assessment](docs/lineage-port.md) for the current gates and
 bring-up sequence.
 
+A Magisk-patched stock control image confirmed the loader behavior: temporary
+`fastboot boot` returned to slot A with `lk_crash` and no Magisk process, while
+writing the same audited image to active `boot_a` booted normally and started
+`magiskd`. Magisk's additional setup then completed and an explicitly approved
+ADB shell returned `uid=0(root)`. Consequently, a successful transfer followed
+by transport loss is not evidence that this loader executed a temporary image.
+
 ## Use
 
 Enter the development shell:
@@ -212,6 +219,8 @@ The persistent commands require an unlocked bootloader and an on-device-style
 confirmation unless `--yes` is supplied. They refuse any phone or installed
 build other than the tested `CPH2399` / `OP557AL1` `.3001` baseline. See
 [Stock root and unroot](docs/stock-root.md) before using either write path.
+For a bootloop where Android/ADB is unavailable, `stock-unroot` also has a
+separately gated `--from-fastboot` recovery mode.
 
 The default firmware directory is
 `$XDG_CACHE_HOME/nord2t-recovery`, falling back to

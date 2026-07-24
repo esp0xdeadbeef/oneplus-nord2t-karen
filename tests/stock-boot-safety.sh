@@ -43,5 +43,8 @@ grep -Fq \
 grep -Fq "fastboot -s \"\$serial\" boot \"\$output\"" "$root_script"
 grep -Fq 'Magisk did not change the stock ramdisk' "$root_script"
 grep -Fq "[[ \"\$persist\" == true ]]" "$unroot_script"
+grep -Fq 'fastboot_variable product)" == k6893v1_64_k419' "$unroot_script"
+grep -Fq 'fastboot_variable hw-revision)" == ca00' "$unroot_script"
+grep -Fq "[[ \"\$from_fastboot\" == true ]]" "$unroot_script"
 
 echo "Stock boot safety checks passed."

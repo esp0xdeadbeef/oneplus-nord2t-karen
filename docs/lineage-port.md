@@ -118,6 +118,15 @@ authorized device-side key, so it did not yield a diagnostic recovery shell.
 The next probe therefore changes only the recovery ADB authentication setting
 through the explicitly scoped Robotnix environment described above.
 
+The insecure-ADB recovery probe behaved the same way and also returned to
+stock. A stronger control then used the exact `.3001` stock boot image patched
+with pinned Magisk `30.7`: temporary `fastboot boot` again returned with
+`lk_crash` and no Magisk process, while writing the byte-identical control to
+active `boot_a` booted normally and provided approved `uid=0(root)`. This
+proves that transport completion is not a hardware-boot result on this loader.
+Further recovery testing must use a slotted write with the pinned stock
+restore image immediately available.
+
 ### Interactive checkout
 
 The following fallback is useful while iterating on Android makefiles because
@@ -219,19 +228,32 @@ for this non-GKI device and defaults to Lineage Recovery, so an updated TWRP
 would only be a bring-up aid. The downloaded release and current stock boot
 were unpacked and compared in the [TWRP image audit](twrp-audit.md).
 
-## What root would and would not add
+## What root added and did not add
 
 Magisk can patch the exact `.3001` stock `boot.img` after the bootloader is
 unlocked. The patch must be made on this phone from its matching stock image;
 using somebody else's patched boot image risks a non-booting slot. Unlocking
 also wipes the phone.
 
-Root is not needed to obtain `vendor`, `odm`, `system_ext`, `product`, `boot`,
-`dtbo` or AVB metadata: `nix run .#extract-stock` extracts and verifies those
-directly from the signed full OTA. Root would primarily help with live
-diagnostics and partitions absent from that payload, notably `vendor_boot`.
-Device-unique radio, calibration and persistent partitions must never become
-porting blobs or repository artifacts.
+Root is not needed to obtain `vendor`, `odm`, `system_ext`, `product`, stock
+`boot`, `dtbo` or AVB metadata: `nix run .#extract-stock` extracts and verifies
+those directly from the signed full OTA. Root was used only after that
+baseline to collect live diagnostics and inspect partitions absent from the
+payload.
+
+Both live `vendor_boot` slots proved to be 64 MiB of zero bytes. The stock
+kernel therefore uses its boot-header-v2 ramdisk and there is no
+`vendor_boot` content to import. Slot A's live DTBO and AVB payload prefixes
+match `.3001`; slot B retains a 2024-12-era boot generation. Nine modules were
+loaded on stock: `bt_drv_6893`, `connfem`, `conninfra`,
+`fmradio_drv_connac2x`, `fpsgo`, `gps_drv`, `trace_mmstat`,
+`wlan_drv_gen4m` and `wmt_chrdev_wifi`.
+
+The rooted kernel configuration confirms EROFS, F2FS, dm-verity, modules,
+module signatures, overlayfs, pstore, SELinux and USB configfs. The local
+capture is kept outside Git. Device-unique radio, calibration and persistent
+partitions were not read and must never become porting blobs or repository
+artifacts.
 
 ## Work estimate
 
@@ -289,8 +311,8 @@ not itself the eventual Lineage device tree.
 
 ## Minimum gate before flashing
 
-Do not put this daily-driver phone into an unlocked state until all of the
-following exist:
+The phone is now deliberately unlocked for bring-up. Do not flash a custom
+system or relock it until all of the following exist:
 
 - a bootable image produced from reviewable source;
 - a current, exact `CPH2399` blob and firmware baseline;

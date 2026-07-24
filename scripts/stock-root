@@ -252,5 +252,15 @@ else
 fi
 
 wait_for_android
-echo "Android is up. Confirm the Magisk prompt, then verify root with:"
+if ! adb -s "$serial" shell ps -A |
+  tr -d '\r' |
+  awk '$NF == "magiskd" { found = 1 } END { exit !found }'; then
+  if [[ "$mode" == boot ]]; then
+    fail "temporary image was not executed; loader returned to the slotted boot image"
+  fi
+  fail "Android returned without magiskd; restore stock boot before retrying"
+fi
+
+echo "Android is up and magiskd is running."
+echo "Complete any one-time setup in the Magisk app, then verify root with:"
 echo "  adb -s $serial shell su -c id"

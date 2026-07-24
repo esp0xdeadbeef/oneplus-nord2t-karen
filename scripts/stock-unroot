@@ -5,12 +5,13 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: nord2t-stock-unroot --persist [--yes] [--keep-app]
+usage: nord2t-stock-unroot --persist [--from-fastboot] [--yes] [--keep-app]
 
 Permanently restore the pinned, unmodified CPH2399 .3001 stock boot image to
 the currently active boot slot. By default the standard Magisk app package is
 also removed after Android boots. --yes skips only the interactive flash
-confirmation.
+confirmation. --from-fastboot recovers the active slot when Android cannot
+boot; the phone must already be in bootloader-fastboot, not fastbootd.
 EOF
 }
 
@@ -22,6 +23,7 @@ fail() {
 persist=false
 assume_yes=false
 keep_app=false
+from_fastboot=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,6 +37,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --keep-app)
       keep_app=true
+      shift
+      ;;
+    --from-fastboot)
+      from_fastboot=true
       shift
       ;;
     -h | --help)
@@ -65,29 +71,12 @@ expected_boot_size=67108864
 [[ "$(sha256sum "$stock_boot" | cut -d' ' -f1)" == "$expected_boot_hash" ]] ||
   fail "stock boot image SHA-256 does not match its pin"
 
-mapfile -t adb_devices < <(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }')
-[[ "${#adb_devices[@]}" == 1 ]] ||
-  fail "expected exactly one authorized ADB device"
-serial="${adb_devices[0]}"
-
 adb_property() {
   adb -s "$serial" shell getprop "$1" | tr -d '\r'
 }
 
-[[ "$(adb_property sys.boot_completed)" == 1 ]] ||
-  fail "Android has not finished booting"
-[[ "$(adb_property ro.product.model)" == CPH2399 ]] ||
-  fail "connected model is not CPH2399"
-[[ "$(adb_property ro.product.device)" == OP557AL1 ]] ||
-  fail "connected device is not OP557AL1"
-[[ "$(adb_property ro.build.display.id)" == "CPH2399_14.0.0.3001(EX01)" ]] ||
-  fail "installed build is not the pinned .3001 baseline"
-[[ "$(adb_property ro.boot.flash.locked)" == 0 ]] ||
-  fail "bootloader is not unlocked"
-
 wait_for_fastboot() {
-  local attempt
-  for attempt in $(seq 1 60); do
+  for _ in $(seq 1 60); do
     if fastboot -s "$serial" devices | grep -Fq "$serial"; then
       return
     fi
@@ -103,17 +92,49 @@ fastboot_variable() {
     head -n 1
 }
 
-adb -s "$serial" reboot fastboot
-wait_for_fastboot
-[[ "$(fastboot_variable is-userspace)" == yes ]] ||
-  fail "expected fastbootd before entering bootloader-fastboot"
+if [[ "$from_fastboot" == true ]]; then
+  mapfile -t fastboot_devices < <(
+    fastboot devices | awk '$2 == "fastboot" { print $1 }'
+  )
+  [[ "${#fastboot_devices[@]}" == 1 ]] ||
+    fail "expected exactly one device already in fastboot"
+  serial="${fastboot_devices[0]}"
+else
+  mapfile -t adb_devices < <(
+    adb devices | awk 'NR > 1 && $2 == "device" { print $1 }'
+  )
+  [[ "${#adb_devices[@]}" == 1 ]] ||
+    fail "expected exactly one authorized ADB device"
+  serial="${adb_devices[0]}"
 
-fastboot -s "$serial" reboot bootloader
-wait_for_fastboot
+  [[ "$(adb_property sys.boot_completed)" == 1 ]] ||
+    fail "Android has not finished booting"
+  [[ "$(adb_property ro.product.model)" == CPH2399 ]] ||
+    fail "connected model is not CPH2399"
+  [[ "$(adb_property ro.product.device)" == OP557AL1 ]] ||
+    fail "connected device is not OP557AL1"
+  [[ "$(adb_property ro.build.display.id)" == "CPH2399_14.0.0.3001(EX01)" ]] ||
+    fail "installed build is not the pinned .3001 baseline"
+  [[ "$(adb_property ro.boot.flash.locked)" == 0 ]] ||
+    fail "bootloader is not unlocked"
+
+  adb -s "$serial" reboot fastboot
+  wait_for_fastboot
+  [[ "$(fastboot_variable is-userspace)" == yes ]] ||
+    fail "expected fastbootd before entering bootloader-fastboot"
+
+  fastboot -s "$serial" reboot bootloader
+  wait_for_fastboot
+fi
+
 [[ "$(fastboot_variable is-userspace)" == no ]] ||
   fail "device is not in bootloader-fastboot"
 [[ "$(fastboot_variable unlocked)" == yes ]] ||
   fail "bootloader is not unlocked"
+[[ "$(fastboot_variable product)" == k6893v1_64_k419 ]] ||
+  fail "bootloader product is not the tested Karen platform"
+[[ "$(fastboot_variable hw-revision)" == ca00 ]] ||
+  fail "bootloader hardware revision is not the tested CPH2399 revision"
 current_slot="$(fastboot_variable current-slot)"
 [[ "$current_slot" == a || "$current_slot" == b ]] ||
   fail "unexpected active slot: $current_slot"
@@ -127,16 +148,20 @@ fi
 fastboot -s "$serial" flash "boot_$current_slot" "$stock_boot"
 fastboot -s "$serial" reboot
 
+android_ready=false
 for attempt in $(seq 1 180); do
   if [[ "$(adb -s "$serial" get-state 2>/dev/null || true)" == device ]] &&
     [[ "$(adb_property sys.boot_completed 2>/dev/null || true)" == 1 ]]; then
+    android_ready=true
     break
   fi
-  [[ "$attempt" != 180 ]] || fail "Android did not finish booting within 180 seconds"
+  if [[ "$attempt" == 180 && "$from_fastboot" != true ]]; then
+    fail "Android did not finish booting within 180 seconds"
+  fi
   sleep 1
 done
 
-if [[ "$keep_app" != true ]] &&
+if [[ "$android_ready" == true && "$keep_app" != true ]] &&
   adb -s "$serial" shell pm path com.topjohnwu.magisk |
   grep -Fq package:; then
   adb -s "$serial" uninstall com.topjohnwu.magisk >/dev/null
@@ -145,3 +170,6 @@ fi
 
 echo "Pinned stock boot restored to boot_$current_slot."
 echo "The bootloader remains unlocked; this command does not relock it."
+if [[ "$android_ready" != true ]]; then
+  echo "ADB did not return; verify Android manually and remove the Magisk app if present."
+fi

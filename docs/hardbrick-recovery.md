@@ -3,21 +3,24 @@
 # Hardbrick recovery
 
 This document separates recovery levels that are often all called “unbrick”.
-Android, fastbootd and the transient preloader interface have been observed on
-this host, but a complete destructive stock flash round-trip is still pending.
+Android, fastbootd, bootloader-fastboot and the transient preloader interface
+have been observed on this host, but a complete BROM/DA stock flash round-trip
+is still pending.
 
 ## Recovery ladder
 
 1. **Android/stock recovery:** ADB is available, or signed OxygenOS recovery
    can apply the full `.3001` OTA.
 2. **Userspace fastbootd:** `adb reboot fastboot` exposes a secure A/B
-   fastbootd interface. It can inspect dynamic partitions. Flashing remains
-   blocked while the bootloader is locked.
-3. **Bootloader fastboot:** not currently exposed over USB. Both
-   `adb reboot bootloader` and `fastboot reboot bootloader` enter the black
-   OPlus screen showing `DB: product name is match`, without a host fastboot
-   device. Power plus Volume Up for roughly ten seconds, followed by Power,
-   restores a normal boot.
+   fastbootd interface. It can inspect dynamic partitions. The bootloader is
+   now unlocked.
+3. **Bootloader fastboot:** proven through `fastboot reboot bootloader` from
+   fastbootd, but only over a cable connected directly to the laptop. Behind
+   the Lenovo dock the black OPlus screen showed `DB: product name is match`
+   without a host USB device. Direct USB exposed `is-userspace: no`, allowed
+   the bootloader unlock and successfully wrote an audited Magisk control to
+   active `boot_a`. Temporary `fastboot boot` is not usable: transferred
+   images return through `lk_crash`.
 4. **OPlus/MediaTek preloader:** `adb reboot edl` transiently exposes USB
    `22d9:0006`. A read-only mtkclient target-configuration handshake now
    succeeds. After a completed handshake the phone remains on the black
@@ -87,6 +90,11 @@ The payload does **not** include:
 - device-unique `nvram`, `nvdata`, `nvcfg`, `persist`, `proinfo`, `protect*`
   and calibration data.
 
+Rooted readback proved that both absent live `vendor_boot` partitions are
+entirely zero-filled. It also mapped the active slot's non-unique boot
+partitions and verified the padded DTBO/AVB contents against `.3001`. Slot B
+is older, with a 2024-12 boot header, and is not a current restore source.
+
 Never replace or publish those device-unique partitions. If read access through
 preloader is proven, encrypted offline backups may be made locally before any
 deep flashing experiment.
@@ -112,12 +120,14 @@ erase, format, whole-flash or preloader write command.
 - GPT can be read twice with identical hashes.
 - Both UFS boot regions and the active GPT partition table are backed up.
 - Security flags and any required DA/auth path are recorded.
-- `.3001` partition images are mapped to the physical slot names without
-  guessing.
+- every `.3001` firmware image is mapped to its physical slot name without
+  guessing; boot/DTBO/AVB on slot A are mapped, while the remaining
+  boot-chain mapping is incomplete.
 - Anti-rollback state is understood; older `.605` or Android 12 firmware is
   not written merely because a public service package exists.
 - A read-back comparison verifies every written non-unique partition.
 - Android boots stock with green Verified Boot after relocking.
 
-Until those checks pass, fastbootd plus signed stock recovery is the tested
-softbrick route, while true BROM recovery remains an active bring-up item.
+Until those checks pass, fastbootd, bootloader-fastboot and the pinned
+stock-boot restoration are tested softbrick routes, while true BROM recovery
+remains an active bring-up item.
