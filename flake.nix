@@ -31,6 +31,14 @@
     url = "github:nix-community/robotnix";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+  inputs.oneplus-kernel-source = {
+    url = "github:OnePlusOSS/android_kernel_oneplus_mt6893/a5cdca1a88dc328a44dee724193830254fc551da";
+    flake = false;
+  };
+  inputs.oneplus-kernel-modules = {
+    url = "github:OnePlusOSS/android_vendor_mediatek_kernel_modules_mt6893/a198b1d0e4ca41cf48d62793e65a9484ad833312";
+    flake = false;
+  };
 
   outputs = {
     adaway-apk,
@@ -38,6 +46,8 @@
     self,
     magisk-apk,
     nixpkgs,
+    oneplus-kernel-modules,
+    oneplus-kernel-source,
     robotnix,
     shamiko-module,
     stock-firmware-3001,
@@ -92,6 +102,14 @@
 
         shamikoModule = pkgs.runCommand "Shamiko-v1.2.5-414-release.zip" {} ''
           ln -s ${shamiko-module} "$out"
+        '';
+
+        oneplusKernelSource = pkgs.runCommand "oneplus-karen-kernel-source" {} ''
+          ln -s ${oneplus-kernel-source} "$out"
+        '';
+
+        oneplusKernelModules = pkgs.runCommand "oneplus-karen-kernel-modules" {} ''
+          ln -s ${oneplus-kernel-modules}/vendor/mediatek/kernel_modules "$out"
         '';
 
         nord2tPrivacy = pkgs.writeShellApplication {
@@ -422,6 +440,20 @@
             )
           else null;
 
+        karenSourceKernelRobotnix =
+          if system == "x86_64-linux"
+          then
+            robotnix.lib.robotnixSystem (
+              import ./lineage/robotnix-karen.nix {
+                buildSourceKernel = true;
+                deviceTree = karenDeviceTree;
+                kernelSource = oneplusKernelSource;
+                lineageLockfile = robotnixLineage21Lock;
+                vendorLineagePatches = robotnixVendorLineagePatches;
+              }
+            )
+          else null;
+
         karenBootimage =
           if system == "x86_64-linux"
           then
@@ -431,6 +463,20 @@
               installPhase = ''
                 mkdir -p "$out"
                 cp --reflink=auto "$ANDROID_PRODUCT_OUT/boot.img" "$out/boot.img"
+              '';
+            }
+          else null;
+
+        karenSourceKernelBootimage =
+          if system == "x86_64-linux"
+          then
+            karenSourceKernelRobotnix.config.build.mkAndroid {
+              name = "lineage-21-karen-source-kernel-bootimage";
+              makeTargets = ["bootimage"];
+              installPhase = ''
+                mkdir -p "$out"
+                cp --reflink=auto "$ANDROID_PRODUCT_OUT/boot.img" "$out/boot.img"
+                cp --reflink=auto "$ANDROID_PRODUCT_OUT/kernel" "$out/kernel"
               '';
             }
           else null;
@@ -444,6 +490,8 @@
           firmware-3001 = stockFirmware3001;
           hma-apk = hmaApk;
           magisk-apk = magiskApk;
+          oneplus-kernel-modules = oneplusKernelModules;
+          oneplus-kernel-source = oneplusKernelSource;
           privacy = nord2tPrivacy;
           probe-preloader = probePreloader;
           read-gpt = readGpt;
@@ -459,6 +507,7 @@
         // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
           karen-bootimage = karenBootimage;
           karen-device-tree = karenDeviceTree;
+          karen-source-kernel-bootimage = karenSourceKernelBootimage;
         }
     );
 

@@ -262,6 +262,32 @@ synced for an older 2024 OxygenOS 14 release. They match the 4.19 kernel family,
 but not the exact 2026 `.3001` binary baseline, so source availability does not
 remove the kernel-maintenance work.
 
+### Reproducible source-kernel gate
+
+The flake locks both official repositories and exposes a diagnostic build:
+
+```sh
+nix build .#karen-source-kernel-bootimage
+```
+
+On `s-tau` this reaches the pinned Lineage Soong bootstrap, then stops before
+kernel compilation because generated kernel includes resolve through dangling
+links. The published kernel checkout has 102 dangling symlinks, including the
+14 include paths Soong requests at this stage. They target missing components
+such as `vendor/oplus/kernel/oplus_performance`, charger, touchpanel, sensor,
+secure, storage and audio sources. The separately published matching module
+repository contains `vendor/mediatek/kernel_modules`; it does not supply the
+referenced `vendor/oplus` tree.
+
+This is an upstream source-completeness gate, not a compiler error. Creating
+empty targets would be invalid because the selected defconfig enables the
+corresponding OPlus features. Importing similarly named source from an
+unrelated Oppo product would also lose device and release provenance. Until a
+matching reviewable source layer is available, recovery and initial full
+Lineage bring-up must retain the already verified `.3001` stock kernel, DTB
+and DTBO. Such a build can establish userspace compatibility on this test
+phone, but it cannot satisfy the eventual source-built-kernel requirement.
+
 The verified full Android 14 OTA in this repository's manifest is the preferred
 source for matching proprietary blobs. Rooting the currently installed system
 is not a prerequisite. The

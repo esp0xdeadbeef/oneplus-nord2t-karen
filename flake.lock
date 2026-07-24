@@ -160,6 +160,40 @@
         "type": "github"
       }
     },
+    "oneplus-kernel-modules": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1714378041,
+        "narHash": "sha256-w3fsRqTYpP71W0xf5LKU/eTArIbIuUvCxpYRaBkcnkg=",
+        "owner": "OnePlusOSS",
+        "repo": "android_vendor_mediatek_kernel_modules_mt6893",
+        "rev": "a198b1d0e4ca41cf48d62793e65a9484ad833312",
+        "type": "github"
+      },
+      "original": {
+        "owner": "OnePlusOSS",
+        "repo": "android_vendor_mediatek_kernel_modules_mt6893",
+        "rev": "a198b1d0e4ca41cf48d62793e65a9484ad833312",
+        "type": "github"
+      }
+    },
+    "oneplus-kernel-source": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1714377659,
+        "narHash": "sha256-IIClfjSj9+DPaloeksu3Z8gUVxuKOy7QzEFwq3QxdGk=",
+        "owner": "OnePlusOSS",
+        "repo": "android_kernel_oneplus_mt6893",
+        "rev": "a5cdca1a88dc328a44dee724193830254fc551da",
+        "type": "github"
+      },
+      "original": {
+        "owner": "OnePlusOSS",
+        "repo": "android_kernel_oneplus_mt6893",
+        "rev": "a5cdca1a88dc328a44dee724193830254fc551da",
+        "type": "github"
+      }
+    },
     "robotnix": {
       "inputs": {
         "androidPkgs": "androidPkgs",
@@ -190,6 +224,8 @@
         "hma-apk": "hma-apk",
         "magisk-apk": "magisk-apk",
         "nixpkgs": "nixpkgs",
+        "oneplus-kernel-modules": "oneplus-kernel-modules",
+        "oneplus-kernel-source": "oneplus-kernel-source",
         "robotnix": "robotnix",
         "shamiko-module": "shamiko-module",
         "stock-firmware-3001": "stock-firmware-3001",

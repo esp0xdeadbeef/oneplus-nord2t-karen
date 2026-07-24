@@ -111,6 +111,9 @@ nix build .#karen-device-tree
 # Realize the locked Lineage source graph and build boot.img in a Nix sandbox.
 nix build .#karen-bootimage
 
+# Reproduce the current official-source kernel gate.
+nix build .#karen-source-kernel-bootimage
+
 # Compare a candidate with the pinned stock boot image and inspect its ramdisk.
 nix run .#audit-boot -- ./result/boot.img
 
@@ -123,6 +126,14 @@ LineageOS/AOSP source graph. Those repositories become ordinary immutable Nix
 store paths and are reused by later builds. A large Nix-capable machine such as
 `s-tau` can run the same flake over SSH; no declarative host exception or
 machine-specific build configuration is part of this repository.
+
+The source-kernel target pins OnePlus's corresponding MT6893 kernel and
+MediaTek module repositories exactly. It currently fails closed because the
+published kernel contains links to a substantial `vendor/oplus` source layer
+that OnePlus did not include. The reproducible failure is documented in the
+[LineageOS port assessment](docs/lineage-port.md); the working recovery and
+initial full-system bring-up therefore retain the verified `.3001` stock
+kernel while that source gate remains unresolved.
 
 The pinned build completed successfully on `s-tau` and its resulting
 recovery-as-boot image passed the repository's structural audit. Its kernel
