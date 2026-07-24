@@ -98,6 +98,13 @@ system confirmed virtual A/B metadata version 10.2, a 12,348,030,976-byte
 group contains the five standard partitions plus ten OPlus partitions:
 `my_engineering`, `my_product`, `my_stock`, `my_heytap`, `my_company`,
 `my_carrier`, `my_region`, `my_preload`, `my_bigball` and `my_manifest`.
+Those ten OPlus allocations occupy 3,527,249,920 bytes in total. Leaving them
+byte-for-byte in place gives the five standard logical images a combined
+8,816,586,752-byte ceiling. The current stock standard allocations use
+3,549,384,704 bytes and the complete group uses 7,076,634,624 bytes. A
+hardware-test helper must recompute those figures from a fresh read-only
+`lpdump` immediately before writing and refuse the test if the names, group or
+available standard-image budget have changed.
 
 Android's unmodified dynamic-partition build configuration accepts the
 standard partition set, not those OPlus names. The initial test plan must
