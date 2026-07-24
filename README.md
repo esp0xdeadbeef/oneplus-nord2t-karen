@@ -25,17 +25,24 @@ phones.
 The inspected phone currently runs `CPH2399_14.0.0.3001(EX01)` with the
 2026-06-01 security patch. The official full EU OTA was independently verified
 and installed through OxygenOS Local install on 2026-07-24. Before the later
-bootloader-unlock wipe, a reversible privacy profile was tested:
+bootloader-unlock wipe, the package changes of a reversible privacy profile
+were tested:
 
-- Aurora Store 4.8.3 from F-Droid is installed;
+- Aurora Store 4.8.3 from F-Droid was installed;
 - Play Store, Play services and Google Services Framework are disabled for the
   owner profile;
 - 21 conservative telemetry targets and 24 Google-facing targets are disabled;
 - the bootloader was later unlocked, so Verified Boot now reports orange.
 
+The owner subsequently confirmed that Aurora Store was not usable in that
+configuration. The exact failure cause has not been isolated, so the profile
+is not a validated daily setup even though its package-state changes and
+restore actions worked.
+
 The unlock wipe reset that user-0 package profile. The current audit finds no
 Aurora installation and all 21 hardening plus 24 Google-facing targets at
-their stock default state; the helper can reapply the profile separately.
+their stock default state. Leave that baseline in place unless the Aurora
+failure or another app-distribution route is tested separately.
 The phone booted successfully from the updated A/B slot. SELinux remains
 enforcing, storage remains encrypted, and the telephony, SIM, connectivity,
 Wi-Fi, Bluetooth, camera and NFC system services are present. Calls, SMS,
@@ -57,6 +64,12 @@ still reports `androidboot.vbmeta.device_state=unlocked` and
 that kernel source when approved root can read it and otherwise fail
 conservatively; bootloader-fastboot remains the final authority before a
 write.
+
+For an unmasked debugging baseline, the test phone was subsequently restored
+to exact stock `boot_a`, verified without root, and rooted again with only the
+pinned Magisk 30.7 workflow. Zygisk is disabled; Vector, Shamiko and Systemless
+Hosts are absent; Hide My Applist and AdAway are uninstalled. Both Android's
+property view and the raw kernel command line now report `unlocked/orange`.
 
 Disabling Play services breaks or degrades Firebase push, Google login, Wallet,
 Android Auto, RCS, Play Integrity and apps that require Google APIs. The helper
@@ -154,7 +167,8 @@ nix run .#privacy -- audit
 nix run .#privacy -- inventory
 ```
 
-Apply the currently selected de-Googled profile:
+Apply the experimental de-Googled profile only after accounting for the
+observed unusable Aurora configuration:
 
 ```bash
 nix run .#privacy -- degoogle

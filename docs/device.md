@@ -58,6 +58,12 @@ still reports `androidboot.vbmeta.device_state=unlocked` and
 `androidboot.verifiedbootstate=orange`. Use `nix run .#privacy -- audit` to
 compare the authoritative kernel view with any masked property view.
 
+That full stack was later removed to provide an unmasked debugging baseline.
+The phone completed an exact stock-boot unroot round-trip and was then rooted
+again with only Magisk 30.7. Zygisk is disabled, all three added Magisk modules
+are absent, and the two full-stack apps are uninstalled. The ordinary Android
+properties and raw kernel command line now both report `unlocked/orange`.
+
 These are observations, not build-time constants. Re-run the inventory after
 each OTA:
 

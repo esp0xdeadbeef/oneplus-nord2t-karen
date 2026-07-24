@@ -182,6 +182,22 @@ line when approved root is available. If that source cannot be read, the
 helper fails conservatively rather than trusting a disagreement. Every actual
 boot write still rechecks `unlocked: yes` in bootloader-fastboot.
 
+The test phone was later returned to plain Magisk for unmasked debugging.
+While root was still available, Zygisk was disabled, the exact
+`zygisk_vector`, `zygisk_shamiko` and `hosts` module directories were removed,
+and the Hide My Applist and AdAway packages were uninstalled. The pinned
+`stock-unroot --persist --yes` route then restored exact stock `boot_a`; a
+completed rootless boot exposed the real `unlocked/orange` properties and no
+`magiskd`. Finally, the pinned `stock-root --persist --yes` route restored only
+Magisk 30.7. Approved root works, SELinux remains enforcing, Zygisk remains
+disabled, the three modules remain absent, and both the Android properties and
+raw kernel command line report `unlocked/orange`.
+
+This cleanup before unrooting is significant. `stock-unroot` deliberately
+changes only the active boot image and removes the Magisk app; it does not
+delete module or app state from encrypted userdata. Re-rooting without first
+removing or disabling that state can reactivate the previous full stack.
+
 ### Xposed Edge
 
 Xposed Edge is a good example of the additional behavior an Xposed-compatible
