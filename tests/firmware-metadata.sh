@@ -32,6 +32,9 @@ jq -e --slurpfile partitions "$partition_manifest" '
     $partitions[0].profiles.port == $partitions[0].profiles.stock
   )
   and (
+    ($partitions[0].profiles.lineage | sort) == ["odm", "vendor"]
+  )
+  and (
     [$partitions[0].treePartitions[] as $name
       | $partitions[0].profiles.blobs | index($name)]
     | all(. != null)

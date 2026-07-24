@@ -25,6 +25,10 @@
       "my_bigball",
       "my_manifest"
     ],
+    "lineage": [
+      "vendor",
+      "odm"
+    ],
     "firmware": [
       "audio_dsp",
       "boot",

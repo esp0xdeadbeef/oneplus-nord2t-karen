@@ -2,6 +2,8 @@
 {
   buildSourceKernel ? false,
   deviceTree,
+  fullSystem ? false,
+  insecureRecoveryAdb ? false,
   kernelSource ? null,
   lineageLockfile,
   vendorLineagePatches,
@@ -15,12 +17,6 @@ lib.mkMerge [
     variant = "userdebug";
     release = "ap2a";
     stateVersion = "3";
-
-    # This derivation builds only the temporary recovery-as-boot probe. Use
-    # Lineage's own product-make switch to disable ADB authentication so a
-    # freshly wiped device can provide bring-up logs. Never set this on an
-    # installable system build.
-    envVars.WITH_ADB_INSECURE = "true";
 
     # Build scratch space is already isolated by Nix. Keeping ccache disabled
     # makes the result independent from mutable host state.
@@ -37,6 +33,17 @@ lib.mkMerge [
     # while its newer `-21` patch applies cleanly to this exact source.
     source.dirs."vendor/lineage".patches = lib.mkForce vendorLineagePatches;
   }
+
+  (lib.mkIf insecureRecoveryAdb {
+    # Only the temporary recovery-as-boot probe disables ADB authentication so
+    # a freshly wiped device can provide bring-up logs. Never set this on an
+    # installable system build.
+    envVars.WITH_ADB_INSECURE = "true";
+  })
+
+  (lib.mkIf fullSystem {
+    envVars.KAREN_FULL_SYSTEM = "true";
+  })
 
   (lib.mkIf buildSourceKernel {
     assertions = [

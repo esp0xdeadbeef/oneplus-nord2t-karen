@@ -60,6 +60,7 @@ Extract the porting inputs from the current OTA without rooting the phone:
 ```bash
 nix run .#extract-stock -- --profile boot
 nix run .#extract-stock -- --profile blobs
+nix run .#extract-stock -- --profile lineage
 nix run .#extract-stock -- --profile firmware
 nix run .#extract-stock -- --profile stock
 ```
@@ -67,9 +68,10 @@ nix run .#extract-stock -- --profile stock
 The first profile produces the pinned `boot`, `dtbo`, `vbmeta`,
 `vbmeta_system` and `vbmeta_vendor` images. `blobs` produces and rootlessly
 expands all 13 EROFS system/vendor/OPlus partitions. `firmware` contains the
-boot chain, modem, TEE and coprocessor images. `stock` produces every one of
-the 34 payload images without expanding the filesystem trees. All outputs are
-checked against
+boot chain, modem, TEE and coprocessor images. The narrower `lineage` profile
+produces only verified `vendor` and `odm` images plus their trees for the
+full-system compatibility build. `stock` produces every one of the 34 payload
+images without expanding the filesystem trees. All outputs are checked against
 [`partitions-3001.json`](../firmware/partitions-3001.json), and the extractor
 refuses to overwrite an existing destination.
 

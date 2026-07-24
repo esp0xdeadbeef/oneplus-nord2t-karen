@@ -13,6 +13,7 @@ $XDG_CACHE_HOME/nord2t-recovery, or $HOME/.cache/nord2t-recovery.
 Profiles:
   boot      boot, dtbo and AVB metadata
   blobs     every EROFS system/vendor/OPlus partition plus extracted trees
+  lineage   verified vendor and odm images plus their extracted trees
   firmware  boot-chain, modem, TEE and coprocessor firmware
   stock     every image present in the OTA payload
   port      every payload image plus extracted EROFS trees (default)
@@ -94,9 +95,13 @@ if [[ "${#partitions[@]}" -eq 0 ]]; then
 fi
 
 extract_trees=false
-if [[ "$profile" == blobs || "$profile" == port ]]; then
+if [[ "$profile" == blobs || "$profile" == lineage || "$profile" == port ]]; then
   extract_trees=true
-  mapfile -t tree_partitions < <(jq -r '.treePartitions[]' "$partition_manifest")
+  if [[ "$profile" == lineage ]]; then
+    tree_partitions=("${partitions[@]}")
+  else
+    mapfile -t tree_partitions < <(jq -r '.treePartitions[]' "$partition_manifest")
+  fi
 fi
 
 if [[ -e "$output" ]]; then

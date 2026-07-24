@@ -183,6 +183,13 @@
             install -m 0644 "$stock_directory/images/boot.img" "$out"
           '';
 
+        stockLineage3001 =
+          pkgs.runCommand "CPH2399_14.0.0.3001-lineage-vendor" {
+            nativeBuildInputs = [extractStock];
+          } ''
+            nord2t-extract-stock --profile lineage --output "$out"
+          '';
+
         stockRoot = pkgs.writeShellApplication {
           name = "nord2t-stock-root";
           runtimeInputs = with pkgs; [
@@ -313,6 +320,28 @@
             install -m 0644 "$stock_dir/images/dtbo.img" "$out/prebuilt/dtbo.img"
           '';
 
+        karenFullDeviceTree = pkgs.runCommand "lineage-device-oneplus-karen-full" {} ''
+          cp --no-preserve=ownership -r ${karenDeviceTree} "$out"
+          chmod -R u+w "$out"
+
+          mkdir -p "$out/prebuilt/stock" "$out/prebuilt/stock-vintf"
+          install -m 0644 \
+            ${stockLineage3001}/images/vendor.img \
+            "$out/prebuilt/stock/vendor.img"
+          install -m 0644 \
+            ${stockLineage3001}/images/odm.img \
+            "$out/prebuilt/stock/odm.img"
+          install -m 0644 \
+            ${stockLineage3001}/trees/vendor/etc/fstab.mt6893 \
+            "$out/rootdir/etc/fstab.mt6893.full"
+          cp --no-preserve=ownership -r \
+            ${stockLineage3001}/trees/vendor/etc/vintf \
+            "$out/prebuilt/stock-vintf/vendor"
+          cp --no-preserve=ownership -r \
+            ${stockLineage3001}/trees/odm/etc/vintf \
+            "$out/prebuilt/stock-vintf/odm"
+        '';
+
         robotnixLineage21Lock = let
           upstreamLock =
             builtins.fromJSON
@@ -434,6 +463,7 @@
             robotnix.lib.robotnixSystem (
               import ./lineage/robotnix-karen.nix {
                 deviceTree = karenDeviceTree;
+                insecureRecoveryAdb = true;
                 lineageLockfile = robotnixLineage21Lock;
                 vendorLineagePatches = robotnixVendorLineagePatches;
               }
@@ -447,7 +477,21 @@
               import ./lineage/robotnix-karen.nix {
                 buildSourceKernel = true;
                 deviceTree = karenDeviceTree;
+                insecureRecoveryAdb = true;
                 kernelSource = oneplusKernelSource;
+                lineageLockfile = robotnixLineage21Lock;
+                vendorLineagePatches = robotnixVendorLineagePatches;
+              }
+            )
+          else null;
+
+        karenFullRobotnix =
+          if system == "x86_64-linux"
+          then
+            robotnix.lib.robotnixSystem (
+              import ./lineage/robotnix-karen.nix {
+                deviceTree = karenFullDeviceTree;
+                fullSystem = true;
                 lineageLockfile = robotnixLineage21Lock;
                 vendorLineagePatches = robotnixVendorLineagePatches;
               }
@@ -463,6 +507,33 @@
               installPhase = ''
                 mkdir -p "$out"
                 cp --reflink=auto "$ANDROID_PRODUCT_OUT/boot.img" "$out/boot.img"
+              '';
+            }
+          else null;
+
+        karenFullImages =
+          if system == "x86_64-linux"
+          then
+            karenFullRobotnix.config.build.mkAndroid {
+              name = "lineage-21-karen-full-images";
+              makeTargets = [
+                "bootimage"
+                "systemimage"
+                "systemextimage"
+                "productimage"
+                "vendorimage"
+                "odmimage"
+                "vbmetaimage"
+                "vbmeta_systemimage"
+                "vbmeta_vendorimage"
+              ];
+              installPhase = ''
+                mkdir -p "$out"
+                for image in \
+                  boot system system_ext product vendor odm \
+                  vbmeta vbmeta_system vbmeta_vendor; do
+                  cp --reflink=auto "$ANDROID_PRODUCT_OUT/$image.img" "$out/$image.img"
+                done
               '';
             }
           else null;
@@ -498,6 +569,7 @@
           shamiko-module = shamikoModule;
           snapshot = snapshotDevice;
           stock-boot-3001 = stockBoot3001;
+          stock-lineage-3001 = stockLineage3001;
           stock-root = stockRoot;
           stock-root-full = stockRootFull;
           stock-unroot = stockUnroot;
@@ -507,6 +579,7 @@
         // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
           karen-bootimage = karenBootimage;
           karen-device-tree = karenDeviceTree;
+          karen-full-images = karenFullImages;
           karen-source-kernel-bootimage = karenSourceKernelBootimage;
         }
     );
