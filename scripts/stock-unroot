@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-stock-unroot --persist [--yes] [--keep-app]
+
+Permanently restore the pinned, unmodified CPH2399 .3001 stock boot image to
+the currently active boot slot. By default the standard Magisk app package is
+also removed after Android boots. --yes skips only the interactive flash
+confirmation.
+EOF
+}
+
+fail() {
+  echo "stock-unroot failed: $*" >&2
+  exit 1
+}
+
+persist=false
+assume_yes=false
+keep_app=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --persist)
+      persist=true
+      shift
+      ;;
+    --yes)
+      assume_yes=true
+      shift
+      ;;
+    --keep-app)
+      keep_app=true
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+[[ "$persist" == true ]] || {
+  usage
+  fail "--persist is required because unrooting writes the active boot slot"
+}
+
+stock_boot="@STOCK_BOOT@"
+expected_boot_hash=7ad447405db4e74276395123c8029c67c63adc3fc6d82c4c180ae6c2e31882c0
+expected_boot_size=67108864
+
+[[ -r "$stock_boot" && -f "$stock_boot" ]] ||
+  fail "stock boot image is not a readable regular file"
+[[ "$(stat -c %s "$stock_boot")" == "$expected_boot_size" ]] ||
+  fail "stock boot image size does not match its pin"
+[[ "$(sha256sum "$stock_boot" | cut -d' ' -f1)" == "$expected_boot_hash" ]] ||
+  fail "stock boot image SHA-256 does not match its pin"
+
+mapfile -t adb_devices < <(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }')
+[[ "${#adb_devices[@]}" == 1 ]] ||
+  fail "expected exactly one authorized ADB device"
+serial="${adb_devices[0]}"
+
+adb_property() {
+  adb -s "$serial" shell getprop "$1" | tr -d '\r'
+}
+
+[[ "$(adb_property sys.boot_completed)" == 1 ]] ||
+  fail "Android has not finished booting"
+[[ "$(adb_property ro.product.model)" == CPH2399 ]] ||
+  fail "connected model is not CPH2399"
+[[ "$(adb_property ro.product.device)" == OP557AL1 ]] ||
+  fail "connected device is not OP557AL1"
+[[ "$(adb_property ro.build.display.id)" == "CPH2399_14.0.0.3001(EX01)" ]] ||
+  fail "installed build is not the pinned .3001 baseline"
+[[ "$(adb_property ro.boot.flash.locked)" == 0 ]] ||
+  fail "bootloader is not unlocked"
+
+wait_for_fastboot() {
+  local attempt
+  for attempt in $(seq 1 60); do
+    if fastboot -s "$serial" devices | grep -Fq "$serial"; then
+      return
+    fi
+    sleep 1
+  done
+  fail "device did not enumerate in fastboot within 60 seconds"
+}
+
+fastboot_variable() {
+  local variable="$1"
+  fastboot -s "$serial" getvar "$variable" 2>&1 |
+    sed -nE "s/.*${variable}: ([^[:space:]]+).*/\\1/p" |
+    head -n 1
+}
+
+adb -s "$serial" reboot fastboot
+wait_for_fastboot
+[[ "$(fastboot_variable is-userspace)" == yes ]] ||
+  fail "expected fastbootd before entering bootloader-fastboot"
+
+fastboot -s "$serial" reboot bootloader
+wait_for_fastboot
+[[ "$(fastboot_variable is-userspace)" == no ]] ||
+  fail "device is not in bootloader-fastboot"
+[[ "$(fastboot_variable unlocked)" == yes ]] ||
+  fail "bootloader is not unlocked"
+current_slot="$(fastboot_variable current-slot)"
+[[ "$current_slot" == a || "$current_slot" == b ]] ||
+  fail "unexpected active slot: $current_slot"
+
+if [[ "$assume_yes" != true ]]; then
+  printf 'Permanently restore stock boot_%s? Type CPH2399: ' "$current_slot" >&2
+  read -r confirmation
+  [[ "$confirmation" == CPH2399 ]] || fail "confirmation declined"
+fi
+
+fastboot -s "$serial" flash "boot_$current_slot" "$stock_boot"
+fastboot -s "$serial" reboot
+
+for attempt in $(seq 1 180); do
+  if [[ "$(adb -s "$serial" get-state 2>/dev/null || true)" == device ]] &&
+    [[ "$(adb_property sys.boot_completed 2>/dev/null || true)" == 1 ]]; then
+    break
+  fi
+  [[ "$attempt" != 180 ]] || fail "Android did not finish booting within 180 seconds"
+  sleep 1
+done
+
+if [[ "$keep_app" != true ]] &&
+  adb -s "$serial" shell pm path com.topjohnwu.magisk |
+  grep -Fq package:; then
+  adb -s "$serial" uninstall com.topjohnwu.magisk >/dev/null
+  echo "Removed the standard Magisk app package."
+fi
+
+echo "Pinned stock boot restored to boot_$current_slot."
+echo "The bootloader remains unlocked; this command does not relock it."

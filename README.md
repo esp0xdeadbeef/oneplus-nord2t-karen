@@ -8,8 +8,9 @@ Nord 2T 5G.
 This is not a ROM and it does not contain flashable images. As of 2026-07-24,
 `CPH2399` is not officially supported by GrapheneOS or LineageOS. The safest
 maintainable configuration currently available for this phone is an up-to-date
-official OxygenOS installation with the stock bootloader locked, followed by
-reversible package hardening.
+official OxygenOS installation, followed by reversible package hardening. The
+bootloader of the test phone is currently unlocked for recovery and LineageOS
+bring-up.
 
 The scripts refuse to operate on a device unless ADB reports both:
 
@@ -30,7 +31,7 @@ privacy profile is active:
 - Play Store, Play services and Google Services Framework are disabled for the
   owner profile;
 - 21 conservative telemetry targets and 24 Google-facing targets are disabled;
-- the bootloader remains locked and Verified Boot remains green.
+- the bootloader was later unlocked, so Verified Boot now reports orange.
 
 The phone booted successfully from the updated A/B slot. SELinux remains
 enforcing, storage remains encrypted, Aurora starts, and the telephony, SIM,
@@ -65,6 +66,11 @@ layers:
   content hash. The flake deterministically removes only the unrelated
   TheMuppets vendor trees for other phones before evaluation; Karen's stock
   inputs come from the separately verified OTA.
+
+The official Magisk v30.7 APK is also a non-flake input. Its release artifact
+and the stock `.3001` boot image derived from the OTA are both locked by
+`flake.lock` and checked against hard-coded size and SHA-256 pins before the
+root workflow uses them.
 
 The repository then adds the local `karen` tree without committing proprietary
 or stock-derived binaries. There are three useful build paths:
@@ -183,6 +189,30 @@ That fixed-output derivation is roughly 5.6 GB. Pass its printed path as the
 final argument to `nix run .#extract-stock -- ...` if the normal cache is not
 being used.
 
+Build a verified Magisk-patched stock boot image without flashing it:
+
+```bash
+nix run .#stock-root
+```
+
+Temporarily boot it, or explicitly make it persistent on only the active slot:
+
+```bash
+nix run .#stock-root -- --boot
+nix run .#stock-root -- --persist
+```
+
+Restore the exact pinned stock boot image to the active slot:
+
+```bash
+nix run .#stock-unroot -- --persist
+```
+
+The persistent commands require an unlocked bootloader and an on-device-style
+confirmation unless `--yes` is supplied. They refuse any phone or installed
+build other than the tested `CPH2399` / `OP557AL1` `.3001` baseline. See
+[Stock root and unroot](docs/stock-root.md) before using either write path.
+
 The default firmware directory is
 `$XDG_CACHE_HOME/nord2t-recovery`, falling back to
 `$HOME/.cache/nord2t-recovery`. Firmware, APKs, dumps and snapshots are ignored
@@ -194,6 +224,7 @@ by Git.
 - [Privacy profile](docs/privacy.md)
 - [OS choice](docs/os-options.md)
 - [Update and recovery](docs/recovery.md)
+- [Stock root and unroot](docs/stock-root.md)
 - [Hardbrick recovery](docs/hardbrick-recovery.md)
 - [TWRP image audit](docs/twrp-audit.md)
 - [LineageOS port assessment](docs/lineage-port.md)
@@ -204,8 +235,7 @@ Run all repository checks with:
 nix flake check --all-systems
 ```
 
-No unlock, root or flash command is automated by this repository. Bootloader
-unlocking erases user data and gives up the stock Verified Boot trust state.
-The current extraction work makes a port reproducible; it does not make an
-image safe to flash. Only add such a workflow after a bootable, auditable image
-and exact recovery path exist for `CPH2399`.
+Bootloader unlocking erases user data and gives up the stock Verified Boot
+trust state. The root helpers deliberately limit writes to the active boot
+slot and always retain a pinned stock-unroot route; they do not make the
+experimental LineageOS image safe to flash.

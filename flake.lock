@@ -76,6 +76,18 @@
         "type": "github"
       }
     },
+    "magisk-apk": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-fu9E2ugTC06O9fd+DkFx3UOXeFFXFXoaa6o2utu2o5g=",
+        "type": "file",
+        "url": "https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1784796856,
@@ -150,6 +162,7 @@
     },
     "root": {
       "inputs": {
+        "magisk-apk": "magisk-apk",
         "nixpkgs": "nixpkgs",
         "robotnix": "robotnix",
         "stock-firmware-3001": "stock-firmware-3001"

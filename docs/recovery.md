@@ -82,6 +82,12 @@ require an unlocked or rooted route. Do not dump or publish `nvram`, `nvdata`,
 The deeper preloader/BROM status and its additional prerequisites are tracked
 in [hardbrick-recovery.md](hardbrick-recovery.md).
 
+The pinned stock boot image can now also be used for a controlled Magisk root
+probe and exact active-slot restoration. The default root command only creates
+and audits a patched image; persistent root and unroot both require an
+explicit `--persist` flag and confirmation. See
+[stock-root.md](stock-root.md).
+
 The verifier checks:
 
 - byte size, MD5 and SHA-256;

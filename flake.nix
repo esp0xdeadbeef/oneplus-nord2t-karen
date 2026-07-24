@@ -7,6 +7,10 @@
     url = "file+https://gauss-componentotamanual.allawnofs.com/remove-eb367d9da8d667fc2c147fd33ff303b2/component-ota/26/06/16/a7aba01a7bed432681c874768c8c9b65.zip";
     flake = false;
   };
+  inputs.magisk-apk = {
+    url = "file+https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk";
+    flake = false;
+  };
   inputs.robotnix = {
     url = "github:nix-community/robotnix";
     inputs.nixpkgs.follows = "nixpkgs";
@@ -14,6 +18,7 @@
 
   outputs = {
     self,
+    magisk-apk,
     nixpkgs,
     robotnix,
     stock-firmware-3001,
@@ -47,6 +52,10 @@
 
         stockFirmware3001 = pkgs.runCommand "CPH2399_14.0.0.3001_OTA.zip" {} ''
           ln -s ${stock-firmware-3001} "$out"
+        '';
+
+        magiskApk = pkgs.runCommand "Magisk-v30.7.apk" {} ''
+          ln -s ${magisk-apk} "$out"
         '';
 
         nord2tPrivacy = pkgs.writeShellApplication {
@@ -96,6 +105,53 @@
               "${stockFirmware3001}"
             ]
             (builtins.readFile ./scripts/extract-stock);
+        };
+
+        stockBoot3001 =
+          pkgs.runCommand "CPH2399_14.0.0.3001-boot.img" {
+            nativeBuildInputs = [extractStock];
+          } ''
+            stock_directory="$TMPDIR/stock"
+            nord2t-extract-stock --profile boot --output "$stock_directory"
+            install -m 0644 "$stock_directory/images/boot.img" "$out"
+          '';
+
+        stockRoot = pkgs.writeShellApplication {
+          name = "nord2t-stock-root";
+          runtimeInputs = with pkgs; [
+            android-tools
+            coreutils
+            gawk
+            gnugrep
+            gnused
+            mkbootimg-osm0sis
+            unzip
+          ];
+          text =
+            builtins.replaceStrings
+            [
+              "@MAGISK_APK@"
+              "@STOCK_BOOT@"
+            ]
+            [
+              "${magiskApk}"
+              "${stockBoot3001}"
+            ]
+            (builtins.readFile ./scripts/stock-root);
+        };
+
+        stockUnroot = pkgs.writeShellApplication {
+          name = "nord2t-stock-unroot";
+          runtimeInputs = with pkgs; [
+            android-tools
+            coreutils
+            gawk
+            gnugrep
+            gnused
+          ];
+          text = builtins.replaceStrings ["@STOCK_BOOT@"] ["${stockBoot3001}"] (
+            builtins.readFile ./scripts/stock-unroot
+          );
         };
 
         auditBoot = pkgs.writeShellApplication {
@@ -309,9 +365,13 @@
           default = nord2tPrivacy;
           extract-stock = extractStock;
           firmware-3001 = stockFirmware3001;
+          magisk-apk = magiskApk;
           privacy = nord2tPrivacy;
           probe-preloader = probePreloader;
           snapshot = snapshotDevice;
+          stock-boot-3001 = stockBoot3001;
+          stock-root = stockRoot;
+          stock-unroot = stockUnroot;
           verify-firmware = verifyFirmware;
         }
         // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
@@ -346,6 +406,14 @@
         snapshot = {
           type = "app";
           program = "${self.packages.${system}.snapshot}/bin/nord2t-snapshot";
+        };
+        stock-root = {
+          type = "app";
+          program = "${self.packages.${system}.stock-root}/bin/nord2t-stock-root";
+        };
+        stock-unroot = {
+          type = "app";
+          program = "${self.packages.${system}.stock-unroot}/bin/nord2t-stock-unroot";
         };
         verify-firmware = {
           type = "app";
@@ -401,6 +469,19 @@
             src = ./.;
           } ''
             bash "$src"/tests/package-safety.sh
+            touch "$out"
+          '';
+
+        stock-boot-safety =
+          pkgs.runCommand "nord2t-stock-boot-safety" {
+            nativeBuildInputs = [
+              pkgs.bash
+              pkgs.coreutils
+              pkgs.gnugrep
+            ];
+            src = ./.;
+          } ''
+            bash "$src"/tests/stock-boot-safety.sh
             touch "$out"
           '';
       }
