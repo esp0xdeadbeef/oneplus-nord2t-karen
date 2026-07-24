@@ -101,11 +101,26 @@ group contains the five standard partitions plus ten OPlus partitions:
 
 Android's unmodified dynamic-partition build configuration accepts the
 standard partition set, not those OPlus names. The initial test plan must
-therefore update only audited individual inactive-slot images through
-fastbootd and leave every live OPlus logical partition in place. Do not build
-or install an OTA or generated `super.img` until the target-files metadata can
+therefore leave every live OPlus logical partition in place. Do not build or
+install an OTA or generated `super.img` until the target-files metadata can
 round-trip all 15 partition names without deleting, shrinking or moving the
 OPlus partitions.
+
+The other super metadata slots do not provide a ready-made inactive-system
+test target. Slot 0 is enabled and contains the populated `main` group above.
+Slot 1 is enabled but contains only 15 size-less placeholders and no group;
+slot 2 is unavailable. This is consistent with a virtual A/B device after its
+snapshot update has completed, not with two independently populated physical
+sets of logical partitions. The proven `boot_b` recovery test cannot simply be
+extended to `system_b`.
+
+A full userspace hardware test must therefore enter fastbootd, update only the
+audited standard logical images, and have all exact `.3001` standard images
+available for a reverse fastbootd write. That operation is destructive to the
+current stock userspace even though the ten OPlus logical images remain
+untouched. It must not start until the host-side restore procedure has
+validated product, group limit, image hashes, required free space and return
+to stock recovery/boot.
 
 ### Verified build and structural audit
 
