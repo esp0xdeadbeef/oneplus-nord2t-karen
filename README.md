@@ -69,6 +69,9 @@ nix build .#karen-device-tree
 # Realize the locked Lineage source graph and build boot.img in a Nix sandbox.
 nix build .#karen-bootimage
 
+# Compare a candidate with the pinned stock boot image and inspect its ramdisk.
+nix run .#audit-boot -- ./result/boot.img
+
 # Enter the FHS environment for faster, mutable Android-tree iteration.
 nix run .#android-fhs
 ```
@@ -79,11 +82,14 @@ store paths and are reused by later builds. A large Nix-capable machine such as
 `s-tau` can run the same flake over SSH; no declarative host exception or
 machine-specific build configuration is part of this repository.
 
-Neither a successful build nor an image in the Nix store makes it safe to
-flash. The image still needs a structural audit, bootloader USB must work
-reliably, and exact stock-slot restoration must be proven first. See the
-[LineageOS port assessment](docs/lineage-port.md) for the current gates and
-bring-up sequence.
+The pinned build completed successfully on `s-tau` and its resulting
+recovery-as-boot image passed the repository's structural audit. Its kernel
+and DTB are byte-identical to `.3001` stock, while the ramdisk contains the
+expected Lineage Recovery, authenticated ADB, fastbootd, fstab and SELinux
+policy. This is still an unsigned test image. Bootloader USB must work
+reliably, and exact stock-slot restoration must be proven before it is
+flashed. See the [LineageOS port assessment](docs/lineage-port.md) for the
+current gates and bring-up sequence.
 
 ## Use
 
@@ -118,6 +124,17 @@ Create a privacy-filtered, rootless device snapshot:
 ```bash
 nix run .#snapshot
 ```
+
+Probe only the MediaTek preloader security flags, while deleting the raw
+identifier-bearing output:
+
+```bash
+nix run .#probe-preloader
+```
+
+This reboots Android into the black OPlus preloader screen. No flash command
+is sent, but the phone must afterwards be restarted by holding Power and
+Volume Up for about ten seconds.
 
 Verify locally cached official recovery packages, including hashes, metadata,
 payload hashes, OTA whole-file signatures and signer certificate:

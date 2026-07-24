@@ -56,6 +56,43 @@ patch while retaining the other upstream Robotnix patches.
 This target exists to make remote builds and source pinning testable during
 bring-up. It does not make the unbooted image safe to flash.
 
+### Verified build and structural audit
+
+The pinned derivation completed successfully on `s-tau` on 2026-07-24. After
+the source graph was present in the Nix store, Android built all 10,263
+required targets and produced:
+
+```text
+image size:   67108864 bytes
+image SHA-256: 83f84198841415fd4934ce5fc283e64922562d1cc95e40acfb37c909de8607e2
+kernel SHA-256: 917716ae774cc32f71d1b7f7962e472ece9e5f82c1676e4362ac90b7219dac10
+DTB SHA-256: 3f556b701b84247e529d4c05a46c7e45c9e29cffd4aca2c18822290de8d603c6
+```
+
+Reproduce the comparison with:
+
+```sh
+nix build .#karen-bootimage
+nix run .#audit-boot -- ./result/boot.img
+```
+
+The audit verifies:
+
+- the exact 64 MiB boot partition size and Android boot header v2;
+- stock-matching base, page size, offsets and kernel command line;
+- a byte-identical `.3001` stock kernel and DTB;
+- a valid AVB hash footer for partition `boot`;
+- Lineage Recovery, `adbd`, fastbootd, init and SELinux policy in the ramdisk;
+- the current F2FS metadata-encryption parameters and logical EROFS mappings;
+- absence of device-unique and security partitions from the recovery fstab.
+
+The test image has an unsigned AVB footer (`Algorithm: NONE`) and test keys.
+Its header reports the pinned Lineage source patch level of 2026-04, while
+stock reports 2026-06. It is therefore correctly classified as an experimental
+unlock-only image, not as a signed release or a replacement security baseline.
+Structural success does not prove display, touch, USB or block-device behavior
+on hardware.
+
 ### Interactive checkout
 
 The following fallback is useful while iterating on Android makefiles because

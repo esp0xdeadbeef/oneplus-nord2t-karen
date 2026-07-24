@@ -62,6 +62,18 @@
           );
         };
 
+        probePreloader = pkgs.writeShellApplication {
+          name = "nord2t-probe-preloader";
+          runtimeInputs = with pkgs; [
+            android-tools
+            coreutils
+            gnugrep
+            gnused
+            mtkclient
+          ];
+          text = builtins.readFile ./scripts/probe-preloader;
+        };
+
         extractStock = pkgs.writeShellApplication {
           name = "nord2t-extract-stock";
           runtimeInputs = with pkgs; [
@@ -84,6 +96,22 @@
               "${stockFirmware3001}"
             ]
             (builtins.readFile ./scripts/extract-stock);
+        };
+
+        auditBoot = pkgs.writeShellApplication {
+          name = "nord2t-audit-boot";
+          runtimeInputs = with pkgs; [
+            android-tools
+            coreutils
+            extractStock
+            file
+            findutils
+            gawk
+            gnugrep
+            libarchive
+            mkbootimg-osm0sis
+          ];
+          text = builtins.readFile ./scripts/audit-boot-image;
         };
 
         snapshotDevice = pkgs.writeShellApplication {
@@ -277,10 +305,12 @@
       in
         {
           android-fhs = androidFhs;
+          audit-boot = auditBoot;
           default = nord2tPrivacy;
           extract-stock = extractStock;
           firmware-3001 = stockFirmware3001;
           privacy = nord2tPrivacy;
+          probe-preloader = probePreloader;
           snapshot = snapshotDevice;
           verify-firmware = verifyFirmware;
         }
@@ -301,9 +331,17 @@
           type = "app";
           program = "${self.packages.${system}.extract-stock}/bin/nord2t-extract-stock";
         };
+        audit-boot = {
+          type = "app";
+          program = "${self.packages.${system}.audit-boot}/bin/nord2t-audit-boot";
+        };
         privacy = {
           type = "app";
           program = "${self.packages.${system}.privacy}/bin/nord2t-privacy";
+        };
+        probe-preloader = {
+          type = "app";
+          program = "${self.packages.${system}.probe-preloader}/bin/nord2t-probe-preloader";
         };
         snapshot = {
           type = "app";
@@ -323,8 +361,10 @@
       }: {
         inherit
           (self.packages.${system})
+          audit-boot
           extract-stock
           privacy
+          probe-preloader
           snapshot
           verify-firmware
           ;
@@ -379,6 +419,8 @@
             git-lfs
             git-repo
             jq
+            libarchive
+            mkbootimg-osm0sis
             mtkclient
             openssl
             p7zip

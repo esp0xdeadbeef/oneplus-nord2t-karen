@@ -19,9 +19,10 @@ this host, but a complete destructive stock flash round-trip is still pending.
    device. Power plus Volume Up for roughly ten seconds, followed by Power,
    restores a normal boot.
 4. **OPlus/MediaTek preloader:** `adb reboot edl` transiently exposes USB
-   `22d9:0006`, then the watchdog returns to Android. This was observed
-   read-only. The host needs the repository's restricted udev rule before
-   `mtkclient` can test the handshake.
+   `22d9:0006`. A read-only mtkclient target-configuration handshake now
+   succeeds. After a completed handshake the phone remains on the black
+   preloader screen; Power plus Volume Up for roughly ten seconds restores a
+   normal stock boot.
 5. **MediaTek Boot ROM/service flashing:** not yet proven. A true hardbrick
    restore requires a compatible signed Download Agent or a working
    `mtkclient` exploit, correct GPT/scatter data and anti-rollback-safe
@@ -31,6 +32,35 @@ this host, but a complete destructive stock flash round-trip is still pending.
 The fact that preloader enumerates is valuable but does not prove flash access.
 Current OPlus MediaTek devices can require DAA, SLA and remote service
 authentication.
+
+## Verified preloader probe
+
+The current Nixpkgs mtkclient package identified hardware code `0x950` as
+`MT6891/MT6893 (Dimensity 1200)`. The exact connected phone reported:
+
+- Secure Boot Check enabled;
+- Download Agent Authentication enabled;
+- Serial Link Authentication disabled;
+- no root certificate requirement;
+- no separate memory-read or memory-write authentication flag;
+- no block on command `0xC8`.
+
+The successful command used raw USB and deliberately skipped the watchdog
+write:
+
+```bash
+nix run .#probe-preloader
+```
+
+mtkclient normally prints the device-unique ME ID and SoC ID and writes them
+to `hwparam.json`. The wrapper runs it in a temporary directory, prints only
+the non-unique security flags and deletes the raw output. Do not run the bare
+command from the repository root or publish its output.
+
+This proves the preloader control handshake, not Download Agent execution or
+UFS access. DAA remains enabled. The next destructive-recovery gate is to load
+a compatible, reviewable DA without writing storage, then read the GPT twice
+and compare hashes.
 
 ## Verified stock material
 
@@ -69,16 +99,16 @@ standard MediaTek USB vendor ID and the OPlus preloader product ID:
 ```nix
 SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", MODE="0660", GROUP="users", TAG+="uaccess"
 SUBSYSTEM=="usb", ATTR{idVendor}=="22d9", ATTR{idProduct}=="0006", MODE="0660", GROUP="users", TAG+="uaccess"
+SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", ATTRS{idVendor}=="22d9", ATTRS{idProduct}=="0006", MODE="0660", GROUP="users", TAG+="uaccess"
 ```
 
-Apply that host configuration outside this repository before repeating the
-read-only `mtkclient gettargetconfig` test. Do not begin with a write, erase,
-format, whole-flash or preloader command.
+That host configuration was applied and checked on `l-esp`. Raw USB is used
+for the short preloader probe because the ACM device exists for less than a
+second before the normal watchdog path resumes. Do not begin with a write,
+erase, format, whole-flash or preloader write command.
 
 ## Required proof before relying on hardbrick restore
 
-- `mtkclient gettargetconfig` or the signed service tool recognizes this exact
-  device without revealing identifiers in logs.
 - GPT can be read twice with identical hashes.
 - Both UFS boot regions and the active GPT partition table are backed up.
 - Security flags and any required DA/auth path are recorded.

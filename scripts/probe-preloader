@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+if [[ $# -ne 0 ]]; then
+  echo "usage: nord2t-probe-preloader" >&2
+  exit 2
+fi
+
+if [[ "$(adb get-state 2>/dev/null || true)" != device ]]; then
+  echo "No authorized Android device is connected through ADB." >&2
+  exit 1
+fi
+
+model="$(adb shell getprop ro.product.model | tr -d '\r')"
+device="$(adb shell getprop ro.product.device | tr -d '\r')"
+if [[ "$model" != CPH2399 || "$device" != OP557AL1 ]]; then
+  echo "Refusing preloader probe for model=$model device=$device" >&2
+  exit 1
+fi
+
+temporary_directory="$(mktemp -d -t nord2t-preloader-probe.XXXXXXXX)"
+probe_pid=""
+cleanup() {
+  if [[ -n "$probe_pid" ]] && kill -0 "$probe_pid" 2>/dev/null; then
+    kill "$probe_pid" 2>/dev/null || true
+    wait "$probe_pid" 2>/dev/null || true
+  fi
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+
+raw_log="$temporary_directory/mtkclient.log"
+(
+  cd "$temporary_directory"
+  timeout 30s mtk gettargetconfig --skipwdt >"$raw_log" 2>&1
+) &
+probe_pid="$!"
+
+sleep 1
+adb reboot edl
+
+set +e
+wait "$probe_pid"
+probe_status="$?"
+set -e
+probe_pid=""
+
+safe_pattern='CPU:|HW code:|Target config:|SBC enabled:|SLA enabled:|DAA enabled:|SWJTAG enabled:|Root cert required:|Mem read auth:|Mem write auth:|Cmd 0xC8 blocked:'
+safe_output="$temporary_directory/safe-output.txt"
+grep -E "$safe_pattern" "$raw_log" |
+  sed -E 's/^[^:]+ -[[:space:]]*//' \
+    >"$safe_output" || true
+
+if [[ "$probe_status" -ne 0 ]] ||
+  ! grep -Fq "SBC enabled:" "$safe_output"; then
+  echo "The read-only preloader probe did not complete." >&2
+  echo "The raw log, including any device identifiers, has been deleted." >&2
+  echo "Force a normal boot with Power + Volume Up for about 10 seconds." >&2
+  exit 1
+fi
+
+cat "$safe_output"
+echo
+echo "Read-only target configuration probe passed."
+echo "Device identifiers and mtkclient's hwparam.json were deleted."
+echo "The preloader remains on a black screen after this command."
+echo "Force a normal boot with Power + Volume Up for about 10 seconds."
