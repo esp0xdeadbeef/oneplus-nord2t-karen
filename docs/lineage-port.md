@@ -130,8 +130,9 @@ was rejected before hardware use: it generated a 16,510,976-byte `vendor`
 image and a 454,656-byte `odm` image instead of the 487,354,368-byte and
 1,118,810,112-byte stock images, and its install output omitted
 `vbmeta_system` and `vbmeta_vendor`. The current target therefore treats both
-stock images as explicit prebuilts and requests every chained AVB image, but
-that corrected result still needs its own complete audit.
+stock images as explicit prebuilts and requests every chained AVB image. The
+corrected second candidate subsequently passed the complete image, AVB and
+VINTF audits described below.
 
 None of those inputs contains device-unique data: they come from the public
 full OTA. Live `nvdata`, `nvram`, calibration, persistent and radio data stay
@@ -326,6 +327,32 @@ The live restored `boot_b` hash matched its pre-test backup exactly. OxygenOS
 Magisk-patched stock `boot_a` still provided the approved root shell. Runtime
 logs are retained privately outside Git because host captures can contain
 device identifiers.
+
+### First full-userspace write
+
+The VINTF-corrected second candidate passed the complete host audit and the
+fresh live-layout preflight on 2026-07-25. A first bounded install stopped on
+the first sparse `system_a` transfer with no Lineage data chunk reported as
+written. The exact stock rollback then successfully rewrote all five standard
+logical images and the slot-A boot/AVB chain without touching `dtbo`, vendor
+extensions or an OPlus logical partition.
+
+After adding a fastbootd settle delay and one bounded retry per allowlisted
+partition, the same audited candidate passed the live stock preflight again.
+The second install successfully resized and wrote `system_a`,
+`system_ext_a` and `product_a`, then wrote `vbmeta_system_a`,
+`vbmeta_vendor_a`, `vbmeta_a` and `boot_a` in bootloader-fastboot. Exact stock
+`vendor`, `odm`, `dtbo` and all ten OPlus logical partitions remained in
+place.
+
+On the first reboot, Android USB exposed an unauthorized ADB endpoint
+continuously and did not fall back to fastboot. Boot completion is not yet
+proven: the persistent host key awaits approval on the phone, and this
+Lineage userspace rejected an Android Open Accessory HID registration that
+could otherwise operate the dialog remotely. Do not classify this as a
+successful boot or a bootloop until authenticated ADB can read the general
+boot state. No device identifier, authorization key, radio data or
+calibration data is recorded in this repository.
 
 ### Interactive checkout
 

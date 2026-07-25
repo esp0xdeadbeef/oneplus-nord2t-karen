@@ -8,7 +8,7 @@ and rationale remain in [lineage-port.md](lineage-port.md).
 
 ## Current checkpoint
 
-- Git `main` and `origin/main` both contain code checkpoint `301ff4a`.
+- Git `main` and `origin/main` both contain code checkpoint `c963066`.
 - The repository worktree was clean after that push.
 - Android compilation runs only on `s-tau`.
 - The persistent checkout is
@@ -20,9 +20,9 @@ and rationale remain in [lineage-port.md](lineage-port.md).
   `karen-lineage-vintf-vndk-retry2.service`.
 - The compiler cache is
   `/home/deadbeef/.cache/nord2t-ccache` on `s-tau`, with a 400 GB limit.
-- The phone is on the exact `.3001` stock baseline, slot A, unlocked and using
-  only the basic Magisk debugging root. No Lineage userspace image has been
-  written.
+- The phone is on slot A with the second audited Lineage candidate written.
+  Its USB interface exposes `adbd`, but runtime boot completion is not yet
+  verified because the new persistent host key still awaits screen approval.
 
 The corrected nine-image bundle completed 117,156 actions on `s-tau` in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
@@ -63,6 +63,25 @@ each explicitly allowed partition one bounded full-image retry after a
 transfer failure. The stock restore succeeding with the same raw-image
 conversion is evidence for a transient endpoint/USB failure, not yet proof of
 its exact cause. Repeat the complete stock preflight before another install.
+
+Stock was authorized again and returned to the deliberately limited Magisk
+debug root with `stock-root --persist --yes`; no Zygisk or concealment modules
+were installed. The complete read-only preflight passed again. On the second
+bounded install, every sparse chunk of `system_a`, `system_ext_a` and
+`product_a` transferred and wrote successfully. The helper then entered
+bootloader-fastboot and successfully wrote the three audited slot-A AVB
+images and `boot_a`. It did not write `vendor`, `odm`, `dtbo` or any OPlus
+logical partition.
+
+After reboot, the phone remained in Android USB mode and exposed one
+unauthorized ADB endpoint for more than six minutes; it did not re-enumerate
+in fastboot. That proves neither a completed boot nor a bootloop. The
+normal-user host key now lives in the persistent `.android` mount configured
+by NixOS checkpoint `6b631d2f`; its contents remain outside Git. Lineage
+rejected the Android Open Accessory HID registration, so the RSA dialog could
+not be accepted remotely. The next safe action is to wake and unlock the
+phone, approve that key, then inspect `sys.boot_completed`, SELinux and
+general boot logs before deciding whether to continue or restore stock.
 
 The scoped ten-image stock rollback set is protected by an explicit GC root
 on `s-tau`:
