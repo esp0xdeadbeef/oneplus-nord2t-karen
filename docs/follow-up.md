@@ -45,8 +45,24 @@ Fresh candidate directory
 `/home/deadbeef/build/lineage-21-karen-images-20260725-2` passed the complete
 boot, authenticated-ADB, AVB-chain, exact stock vendor/odm and size audit.
 Its five standard images total 2,802,786,304 bytes against the preserved
-8,816,586,752-byte ceiling. It is the first host-approved flash candidate,
-but it has not yet passed the live-phone preflight and has not been written.
+8,816,586,752-byte ceiling. The live-phone preflight also passed against the
+exact slot-A `.3001` layout and rollback set.
+
+The first bounded install attempt entered fastbootd and resized `system_a`,
+then its first sparse data chunk failed with `Error reading sparse file`.
+No Lineage data chunk had reported success. The exact restore action was run
+without leaving fastbootd; it successfully rewrote all five stock standard
+logical images plus stock slot-A boot/AVB metadata and rebooted. No OPlus
+partition or `dtbo` was written. Android USB subsequently re-enumerated, but
+the newly rebooted phone still needs its screen unlocked before the new host
+ADB key can be authorized again, so post-restore property verification is
+pending.
+
+The write helper now waits five seconds after fastbootd enumeration and gives
+each explicitly allowed partition one bounded full-image retry after a
+transfer failure. The stock restore succeeding with the same raw-image
+conversion is evidence for a transient endpoint/USB failure, not yet proof of
+its exact cause. Repeat the complete stock preflight before another install.
 
 The scoped ten-image stock rollback set is protected by an explicit GC root
 on `s-tau`:

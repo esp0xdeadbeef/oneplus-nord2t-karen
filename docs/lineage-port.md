@@ -105,6 +105,23 @@ authenticated ADB, all AVB chains, exact stock vendor/odm and a
 8,816,586,752-byte ceiling. This is host-side permission to run the live
 read-only preflight, not evidence of a hardware boot.
 
+The live preflight subsequently confirmed the exact slot-A `.3001` baseline,
+all 15 logical partitions, the untouched OPlus allocation and the complete
+local rollback set. The first bounded install reached fastbootd and resized
+`system_a`, but fastbootd rejected the first Lineage sparse data chunk before
+any chunk reported success. Keeping the same USB mode, the restore action
+successfully wrote the exact stock `system`, `system_ext`, `product`, `vendor`
+and `odm` images, then exact slot-A boot and AVB metadata, and rebooted. It did
+not name or write any OPlus partition or `dtbo`.
+
+Because the same host fastboot and raw-image conversion completed every stock
+transfer immediately afterward, the failure is consistent with a transient
+fastbootd/USB readiness problem rather than a rejected image format, though
+that cause is not yet proven. The helper now adds a post-enumeration settle
+period and one bounded full-image retry per allowed partition. A second
+Lineage attempt still requires a fresh stock property/layout preflight and
+post-boot hardware evidence.
+
 An earlier full-userspace derivation completed all 164,803 Android build tasks
 on `s-tau` in 1 hour 19 minutes. Its `boot`, `system`, `system_ext`, `product`
 and top-level `vbmeta` images were structurally valid, and the boot audit

@@ -286,6 +286,32 @@ ensure_fastbootd() {
   fail "expected one authorized ADB, fastbootd or bootloader-fastboot device"
 }
 
+flash_partition() {
+  local expected_mode="$1"
+  local partition="$2"
+  local image="$3"
+  local attempt
+
+  for attempt in 1 2; do
+    if run_fastboot flash "$partition" "$image"; then
+      return 0
+    fi
+
+    [[ "$attempt" -lt 2 ]] || return 1
+    echo "Fastboot transfer failed; waiting for a stable $expected_mode retry." >&2
+    wait_for_fastboot_mode "$expected_mode" ||
+      fail "$expected_mode did not re-enumerate for the bounded retry"
+    sleep 5
+
+    if [[ "$expected_mode" == fastbootd ]]; then
+      verify_fastbootd
+    else
+      verify_bootloader_identity
+      ensure_bootloader_slot_a
+    fi
+  done
+}
+
 write_started=false
 report_interrupted_write() {
   local status="$?"
@@ -300,19 +326,28 @@ trap report_interrupted_write ERR
 
 ensure_fastbootd
 write_started=true
+# The MTK fastbootd endpoint can enumerate before its sparse-image reader is
+# ready. The first hardware attempt resized system successfully but rejected
+# its first data chunk; an immediate stock restore worked after settling.
+sleep 5
+verify_fastbootd
 
 if [[ "$action" == install ]]; then
   for partition in system system_ext product; do
-    run_fastboot flash "$partition" "$lineage_directory/$partition.img"
+    flash_partition \
+      fastbootd \
+      "$partition" \
+      "$lineage_directory/$partition.img"
   done
 
   reboot_fastbootd_to_bootloader
   for partition in vbmeta_system vbmeta_vendor vbmeta; do
-    run_fastboot \
-      flash "${partition}_a" \
+    flash_partition \
+      fastboot \
+      "${partition}_a" \
       "$lineage_directory/$partition.img"
   done
-  run_fastboot flash boot_a "$lineage_directory/boot.img"
+  flash_partition fastboot boot_a "$lineage_directory/boot.img"
   write_started=false
   run_fastboot reboot
 
@@ -321,18 +356,20 @@ if [[ "$action" == install ]]; then
   echo "Runtime boot verification is still required."
 else
   for partition in system system_ext product vendor odm; do
-    run_fastboot \
-      flash "$partition" \
+    flash_partition \
+      fastbootd \
+      "$partition" \
       "$restore_directory/images/$partition.img"
   done
 
   reboot_fastbootd_to_bootloader
   for partition in vbmeta_system vbmeta_vendor vbmeta; do
-    run_fastboot \
-      flash "${partition}_a" \
+    flash_partition \
+      fastboot \
+      "${partition}_a" \
       "$restore_directory/images/$partition.img"
   done
-  run_fastboot flash boot_a "$restore_directory/images/boot.img"
+  flash_partition fastboot boot_a "$restore_directory/images/boot.img"
   write_started=false
   run_fastboot reboot
 
