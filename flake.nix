@@ -278,6 +278,68 @@
             (builtins.readFile ./scripts/stock-root-full);
         };
 
+        lineageRoot = pkgs.writeShellApplication {
+          name = "nord2t-lineage-root";
+          runtimeInputs = with pkgs; [
+            android-tools
+            auditBoot
+            auditLineageImages
+            coreutils
+            erofs-utils
+            gawk
+            gnugrep
+            gnused
+            mkbootimg-osm0sis
+            unzip
+          ];
+          text = builtins.replaceStrings ["@MAGISK_APK@"] ["${magiskApk}"] (
+            builtins.readFile ./scripts/lineage-root
+          );
+        };
+
+        lineageUnroot = pkgs.writeShellApplication {
+          name = "nord2t-lineage-unroot";
+          runtimeInputs = with pkgs; [
+            android-tools
+            auditLineageImages
+            coreutils
+            erofs-utils
+            gawk
+            gnugrep
+            gnused
+          ];
+          text = builtins.readFile ./scripts/lineage-unroot;
+        };
+
+        lineageRootFull = pkgs.writeShellApplication {
+          name = "nord2t-lineage-root-full";
+          runtimeInputs = with pkgs; [
+            android-tools
+            auditLineageImages
+            coreutils
+            erofs-utils
+            gawk
+            gnugrep
+            gnused
+            lineageRoot
+          ];
+          text =
+            builtins.replaceStrings
+            [
+              "@VECTOR_MODULE@"
+              "@ADAWAY_APK@"
+              "@HMA_APK@"
+              "@SHAMIKO_MODULE@"
+            ]
+            [
+              "${vectorModule}"
+              "${adawayApk}"
+              "${hmaApk}"
+              "${shamikoModule}"
+            ]
+            (builtins.readFile ./scripts/lineage-root-full);
+        };
+
         auditBoot = pkgs.writeShellApplication {
           name = "nord2t-audit-boot";
           runtimeInputs = with pkgs; [
@@ -669,6 +731,9 @@
           firmware-3001 = stockFirmware3001;
           hma-apk = hmaApk;
           lineage-keybound-adb = lineageKeyboundAdb;
+          lineage-root = lineageRoot;
+          lineage-root-full = lineageRootFull;
+          lineage-unroot = lineageUnroot;
           lineage-userspace = lineageUserspace;
           magisk-apk = magiskApk;
           oneplus-kernel-modules = oneplusKernelModules;
@@ -715,6 +780,18 @@
         lineage-keybound-adb = {
           type = "app";
           program = "${self.packages.${system}.lineage-keybound-adb}/bin/nord2t-lineage-keybound-adb";
+        };
+        lineage-root = {
+          type = "app";
+          program = "${self.packages.${system}.lineage-root}/bin/nord2t-lineage-root";
+        };
+        lineage-root-full = {
+          type = "app";
+          program = "${self.packages.${system}.lineage-root-full}/bin/nord2t-lineage-root-full";
+        };
+        lineage-unroot = {
+          type = "app";
+          program = "${self.packages.${system}.lineage-unroot}/bin/nord2t-lineage-unroot";
         };
         audit-boot = {
           type = "app";
@@ -779,6 +856,9 @@
           audit-lineage-runtime
           extract-stock
           lineage-keybound-adb
+          lineage-root
+          lineage-root-full
+          lineage-unroot
           lineage-userspace
           privacy
           preflight-lineage-userspace

@@ -2,15 +2,14 @@
 
 # OnePlus Nord 2T (`CPH2399` / `karen`)
 
-Reproducible privacy, inventory and recovery tooling for the European OnePlus
-Nord 2T 5G.
+Reproducible privacy, inventory, stock recovery and unofficial LineageOS
+bring-up tooling for the European OnePlus Nord 2T 5G.
 
-This is not a ROM and it does not contain flashable images. As of 2026-07-24,
-`CPH2399` is not officially supported by GrapheneOS or LineageOS. The safest
-maintainable configuration currently available for this phone is an up-to-date
-official OxygenOS installation, followed by reversible package hardening. The
-bootloader of the test phone is currently unlocked for recovery and LineageOS
-bring-up.
+This repository does not commit flashable images. As of 2026-07-25, `CPH2399`
+is not officially supported by GrapheneOS or LineageOS. The local port now
+boots LineageOS 21 on the test phone, but remains a private bring-up build
+rather than a supported release. The exact official OxygenOS
+`CPH2399_14.0.0.3001(EX01)` inputs and bounded rollback paths remain pinned.
 
 For the current resumable checkpoint, active s-tau paths, mandatory next gates
 and rollback order, see [`docs/follow-up.md`](docs/follow-up.md).
@@ -25,11 +24,24 @@ phones.
 
 ## Current state
 
-The inspected phone currently runs `CPH2399_14.0.0.3001(EX01)` with the
-2026-06-01 security patch. The official full EU OTA was independently verified
-and installed through OxygenOS Local install on 2026-07-24. Before the later
-bootloader-unlock wipe, the package changes of a reversible privacy profile
-were tested:
+The test phone currently boots the private LineageOS
+`21.0-20260725-UNOFFICIAL-karen` build on slot A. Android 14 completes boot
+with file-based encryption and SELinux enforcing; the bootloader remains
+unlocked and Verified Boot reports orange. The successful first boot required
+Lineage Recovery's factory reset because stock userdata had an incompatible
+encryption policy on `/data/app`.
+
+Display, touch, camera, audio and internet have been exercised successfully.
+The passive runtime audit reports the expected framework, binder services,
+core processes, input devices and DRM node. Calls, SMS, mobile data, Wi-Fi
+association, Bluetooth pairing, NFC, GPS/navigation, suspend/resume, charging,
+push notifications and banking-app behavior still need explicit real-world
+checks.
+
+The official full EU `.3001` OTA was independently verified and installed
+through OxygenOS Local install on 2026-07-24 before Lineage bring-up. Before
+the later bootloader-unlock wipe, the package changes of a reversible privacy
+profile were tested:
 
 - Aurora Store 4.8.3 from F-Droid was installed;
 - Play Store, Play services and Google Services Framework are disabled for the
@@ -42,21 +54,15 @@ configuration. The exact failure cause has not been isolated, so the profile
 is not a validated daily setup even though its package-state changes and
 restore actions worked.
 
-The unlock wipe reset that user-0 package profile. The current audit finds no
-Aurora installation and all 21 hardening plus 24 Google-facing targets at
-their stock default state. Leave that baseline in place unless the Aurora
-failure or another app-distribution route is tested separately.
-The phone booted successfully from the updated A/B slot. SELinux remains
-enforcing, storage remains encrypted, and the telephony, SIM, connectivity,
-Wi-Fi, Bluetooth, camera and NFC system services are present. Calls, SMS,
-mobile data, Wi-Fi association, Bluetooth pairing, camera output, NFC, push
-notifications, banking apps and navigation still need real-world testing by
-the owner.
+The unlock wipe reset that user-0 package profile. It is a historical stock
+result, not the current Lineage package state. Do not treat the profile as a
+validated daily configuration unless the Aurora failure or another
+app-distribution route is tested separately.
 
 The bootloader was unlocked and userdata was wiped on 2026-07-24 for recovery
-bring-up. Stock OxygenOS still boots from slot `a`, but Verified Boot now
-reports orange/unlocked instead of green/locked. The working unlock path was
-fastbootd -> bootloader-fastboot over a cable connected directly to the
+bring-up. Exact stock rollback images remain available, but Lineage now
+occupies the active slot-A userspace and boot chain. The working unlock path
+was fastbootd -> bootloader-fastboot over a cable connected directly to the
 laptop; bootloader-fastboot did not enumerate behind the Lenovo dock. See the
 [tested unlock procedure](docs/recovery.md#tested-bootloader-unlock).
 
@@ -68,11 +74,10 @@ that kernel source when approved root can read it and otherwise fail
 conservatively; bootloader-fastboot remains the final authority before a
 write.
 
-For an unmasked debugging baseline, the test phone was subsequently restored
-to exact stock `boot_a`, verified without root, and rooted again with only the
-pinned Magisk 30.7 workflow. Zygisk is disabled; Vector, Shamiko and Systemless
-Hosts are absent; Hide My Applist and AdAway are uninstalled. Both Android's
-property view and the raw kernel command line now report `unlocked/orange`.
+On the former stock baseline, an exact stock `boot_a` unroot/root round trip
+was verified with pinned Magisk 30.7. The separate Lineage helpers below keep
+minimal root equally plain: Zygisk and concealment modules remain disabled
+unless the full profile is explicitly selected.
 
 Disabling Play services breaks or degrades Firebase push, Google login, Wallet,
 Android Auto, RCS, Play Integrity and apps that require Google APIs. The helper
@@ -393,6 +398,22 @@ build other than the tested `CPH2399` / `OP557AL1` `.3001` baseline. See
 For a bootloop where Android/ADB is unavailable, `stock-unroot` also has a
 separately gated `--from-fastboot` recovery mode.
 
+The working Lineage 21 port has separate image-directory-based equivalents:
+
+```bash
+nix run .#lineage-root -- /path/to/lineage-images --persist
+nix run .#lineage-root-full -- /path/to/lineage-images --persist
+nix run .#lineage-unroot -- /path/to/lineage-images --persist
+```
+
+Add `--allow-embedded-adb-key` only for a private key-bound bring-up bundle.
+Minimal Lineage root does not enable Zygisk or install concealment modules, so
+a clean baseline keeps runtime debugging representative. The full profile
+deliberately enables the same pinned concealment stack as `stock-root-full`.
+Unroot restores the exact audited Lineage `vbmeta_a`/`boot_a` pair. See
+[LineageOS root and unroot](docs/lineage-root.md) for the safety gates and the
+bootloop recovery form.
+
 The default firmware directory is
 `$XDG_CACHE_HOME/nord2t-recovery`, falling back to
 `$HOME/.cache/nord2t-recovery`. Firmware, APKs, dumps and snapshots are ignored
@@ -405,6 +426,7 @@ by Git.
 - [OS choice](docs/os-options.md)
 - [Update and recovery](docs/recovery.md)
 - [Stock root and unroot](docs/stock-root.md)
+- [LineageOS root and unroot](docs/lineage-root.md)
 - [Hardbrick recovery](docs/hardbrick-recovery.md)
 - [TWRP image audit](docs/twrp-audit.md)
 - [LineageOS port assessment](docs/lineage-port.md)
@@ -416,6 +438,6 @@ nix flake check --all-systems
 ```
 
 Bootloader unlocking erases user data and gives up the stock Verified Boot
-trust state. The root helpers deliberately limit writes to the active boot
-slot and always retain a pinned stock-unroot route; they do not make the
-experimental LineageOS image safe to flash.
+trust state. Root helpers deliberately constrain their boot-chain writes and
+retain exact audited unroot routes. The successful hardware boot does not turn
+this private LineageOS bring-up bundle into a supported flashable release.

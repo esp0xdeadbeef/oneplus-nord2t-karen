@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-lineage-unroot IMAGE_DIR --persist
+       [--allow-embedded-adb-key] [--from-fastboot] [--keep-app] [--yes]
+
+Restore the audited enforcing Lineage vbmeta_a/boot_a pair from IMAGE_DIR.
+The normal path starts from authorized Lineage ADB. --from-fastboot is the
+bootloop recovery path and requires one phone already in ordinary
+bootloader-fastboot. No logical, firmware, radio, calibration or OPlus
+partition can be named by this helper.
+EOF
+}
+
+fail() {
+  echo "lineage-unroot failed: $*" >&2
+  exit 1
+}
+
+if [[ $# -eq 1 && ("$1" == -h || "$1" == --help) ]]; then
+  usage
+  exit 0
+fi
+
+[[ $# -ge 1 ]] || {
+  usage
+  exit 2
+}
+
+image_directory="$(realpath "$1")"
+shift
+persist=false
+allow_embedded_adb_key=false
+from_fastboot=false
+keep_app=false
+assume_yes=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --persist)
+      persist=true
+      shift
+      ;;
+    --allow-embedded-adb-key)
+      allow_embedded_adb_key=true
+      shift
+      ;;
+    --from-fastboot)
+      from_fastboot=true
+      shift
+      ;;
+    --keep-app)
+      keep_app=true
+      shift
+      ;;
+    --yes)
+      assume_yes=true
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+[[ "$persist" == true ]] || {
+  usage
+  fail "--persist is required because unrooting writes vbmeta_a and boot_a"
+}
+[[ -d "$image_directory" ]] ||
+  fail "Lineage image directory is not readable"
+
+audit_arguments=()
+if [[ "$allow_embedded_adb_key" == true ]]; then
+  audit_arguments+=(--allow-embedded-adb-key)
+fi
+nord2t-audit-lineage-images \
+  "${audit_arguments[@]}" \
+  "$image_directory" \
+  >/dev/null ||
+  fail "source Lineage bundle did not pass its enforcing image audit"
+
+lineage_boot="$image_directory/boot.img"
+lineage_vbmeta="$image_directory/vbmeta.img"
+source_system_fingerprint="$(
+  dump.erofs \
+    --cat \
+    --path=/system/build.prop \
+    "$image_directory/system.img" \
+    2>/dev/null |
+    sed -n 's/^ro\.system\.build\.fingerprint=//p' |
+    head -n 1
+)"
+[[ -n "$source_system_fingerprint" ]] ||
+  fail "source Lineage system image has no build fingerprint"
+
+adb_property() {
+  adb -s "$adb_serial" shell getprop "$1" 2>/dev/null |
+    tr -d '\r'
+}
+
+fastboot_variable() {
+  local variable="$1"
+  fastboot -s "$fastboot_serial" getvar "$variable" 2>&1 |
+    sed -nE "s/.*${variable}: ([^[:space:]]+).*/\\1/p" |
+    head -n 1
+}
+
+wait_for_bootloader() {
+  for _ in $(seq 1 60); do
+    mapfile -t fastboot_devices < <(
+      fastboot devices |
+        awk '$2 == "fastboot" { print $1 }'
+    )
+    if [[ "${#fastboot_devices[@]}" -eq 1 ]]; then
+      fastboot_serial="${fastboot_devices[0]}"
+      return
+    fi
+    sleep 1
+  done
+  fail "ordinary bootloader-fastboot did not enumerate"
+}
+
+if [[ "$from_fastboot" == true ]]; then
+  wait_for_bootloader
+else
+  mapfile -t adb_devices < <(
+    adb devices |
+      awk 'NR > 1 && $2 == "device" { print $1 }'
+  )
+  [[ "${#adb_devices[@]}" -eq 1 ]] ||
+    fail "expected exactly one authorized ADB device"
+  adb_serial="${adb_devices[0]}"
+
+  [[ "$(adb_property sys.boot_completed)" == 1 ]] ||
+    fail "Android has not finished booting"
+  [[ "$(adb_property ro.product.model)" == CPH2399 ]] ||
+    fail "connected model is not CPH2399"
+  [[ "$(adb_property ro.product.device)" == OP557AL1 ]] ||
+    fail "connected device is not OP557AL1"
+  [[ -n "$(adb_property ro.lineage.version)" ]] ||
+    fail "running system is not LineageOS"
+  [[ "$(adb_property ro.system.build.fingerprint)" == "$source_system_fingerprint" ]] ||
+    fail "running Lineage system does not match the audited image bundle"
+  [[ "$(adb_property ro.boot.slot_suffix)" == _a ]] ||
+    fail "the audited Lineage slot A is not active"
+  [[ "$(adb_property ro.boot.flash.locked)" == 0 ]] ||
+    fail "bootloader is not unlocked"
+
+  adb -s "$adb_serial" reboot bootloader
+  wait_for_bootloader
+fi
+
+[[ "$(fastboot_variable is-userspace)" == no ]] ||
+  fail "device is not in ordinary bootloader-fastboot"
+[[ "$(fastboot_variable unlocked)" == yes ]] ||
+  fail "bootloader is not unlocked"
+[[ "$(fastboot_variable product)" == k6893v1_64_k419 ]] ||
+  fail "bootloader product is not the tested Karen platform"
+[[ "$(fastboot_variable hw-revision)" == ca00 ]] ||
+  fail "bootloader hardware revision is not the tested CPH2399 revision"
+[[ "$(fastboot_variable current-slot)" == a ]] ||
+  fail "audited Lineage slot A is not active"
+
+if [[ "$assume_yes" != true ]]; then
+  printf 'Restore exact enforcing Lineage vbmeta_a/boot_a? Type CPH2399-lineage: ' >&2
+  read -r confirmation
+  [[ "$confirmation" == CPH2399-lineage ]] ||
+    fail "confirmation declined"
+fi
+
+fastboot -s "$fastboot_serial" flash vbmeta_a "$lineage_vbmeta"
+fastboot -s "$fastboot_serial" flash boot_a "$lineage_boot"
+fastboot -s "$fastboot_serial" reboot
+
+if [[ "$from_fastboot" == true ]]; then
+  echo "Exact enforcing Lineage vbmeta_a/boot_a restored."
+  echo "Verify Android manually; the Magisk app and inert userdata state may remain."
+  exit 0
+fi
+
+android_ready=false
+for _ in $(seq 1 180); do
+  if [[ "$(adb -s "$adb_serial" get-state 2>/dev/null || true)" == device ]] &&
+    [[ "$(adb_property sys.boot_completed 2>/dev/null || true)" == 1 ]]; then
+    android_ready=true
+    break
+  fi
+  sleep 1
+done
+[[ "$android_ready" == true ]] ||
+  fail "Android did not finish booting within 180 seconds"
+
+adb -s "$adb_serial" shell pidof magiskd >/dev/null 2>&1 &&
+  fail "magiskd remains active after restoring the exact Lineage bootpair"
+[[ "$(adb -s "$adb_serial" shell getenforce 2>/dev/null | tr -d '\r')" == Enforcing ]] ||
+  fail "unrooted Lineage did not return with SELinux enforcing"
+[[ "$(adb_property ro.crypto.state)" == encrypted &&
+  "$(adb_property ro.crypto.type)" == file ]] ||
+  fail "unrooted Lineage did not return with file-based encryption"
+
+if [[ "$keep_app" != true ]] &&
+  adb -s "$adb_serial" shell pm path com.topjohnwu.magisk |
+  grep -Fq package:; then
+  adb -s "$adb_serial" uninstall com.topjohnwu.magisk >/dev/null
+  echo "Removed the standard Magisk app package."
+fi
+
+echo "Exact enforcing Lineage vbmeta_a/boot_a restored."
+echo "The bootloader remains unlocked; inert Magisk module data may remain in userdata."

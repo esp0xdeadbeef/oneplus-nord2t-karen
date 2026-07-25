@@ -10,6 +10,9 @@ board_config="$script_directory/lineage/device/oneplus/karen/BoardConfig.mk"
 boot_audit="$script_directory/scripts/audit-boot-image"
 image_audit="$script_directory/scripts/audit-lineage-images"
 keybound_helper="$script_directory/scripts/lineage-keybound-adb"
+lineage_root="$script_directory/scripts/lineage-root"
+lineage_root_full="$script_directory/scripts/lineage-root-full"
+lineage_unroot="$script_directory/scripts/lineage-unroot"
 runtime_audit="$script_directory/scripts/audit-lineage-runtime"
 
 critical_packages=(
@@ -64,6 +67,30 @@ if grep -Eq \
   'fastboot .*(erase|format|delete-logical-partition|create-logical-partition|resize-logical-partition)' \
   "$keybound_helper"; then
   echo "Key-bound ADB helper contains a destructive non-boot operation." >&2
+  exit 1
+fi
+# shellcheck disable=SC2016
+grep -Fq 'flash boot_a "$output"' "$lineage_root"
+grep -Fq 'No Zygisk, concealment or additional module was enabled.' "$lineage_root"
+grep -Fq 'ro.system.build.fingerprint' "$lineage_root"
+grep -Fq 'avbtool add_hash_footer' "$lineage_root"
+# shellcheck disable=SC2016
+grep -Fq 'flash vbmeta_a "$lineage_vbmeta"' "$lineage_unroot"
+# shellcheck disable=SC2016
+grep -Fq 'flash boot_a "$lineage_boot"' "$lineage_unroot"
+grep -Fq 'ro.system.build.fingerprint' "$lineage_unroot"
+grep -Fq 'Prefer' "$lineage_root_full"
+grep -Fq 'ROM and hardware debugging' "$lineage_root_full"
+if grep -Eq \
+  'fastboot .*flash (system|system_ext|product|vendor|odm|dtbo|vbmeta_system|vbmeta_vendor)' \
+  "$lineage_root" "$lineage_unroot"; then
+  echo "Lineage root helpers can write outside the bootpair." >&2
+  exit 1
+fi
+if grep -Eq \
+  'fastboot .*(erase|format|delete-logical-partition|create-logical-partition|resize-logical-partition)' \
+  "$lineage_root" "$lineage_unroot"; then
+  echo "Lineage root helpers contain a destructive non-boot operation." >&2
   exit 1
 fi
 grep -Fq 'voice_calls_sms_and_emergency_calls' "$runtime_audit"

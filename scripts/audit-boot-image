@@ -69,6 +69,7 @@ stock_image="${2:-}"
 
 temporary_directory="$(mktemp -d -t nord2t-boot-audit.XXXXXXXX)"
 cleanup() {
+  chmod -R u+rwX -- "$temporary_directory" 2>/dev/null || true
   rm -rf -- "$temporary_directory"
 }
 trap cleanup EXIT

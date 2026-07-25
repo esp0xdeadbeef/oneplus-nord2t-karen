@@ -1,0 +1,343 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+umask 077
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-lineage-root IMAGE_DIR [--allow-embedded-adb-key]
+                                    [--output FILE] [--persist] [--yes]
+
+Patch the audited enforcing Karen Lineage boot image in IMAGE_DIR with the
+pinned Magisk APK. By default only write the patched image. --persist writes
+only boot_a after rechecking the running Lineage build and ordinary
+bootloader-fastboot. --yes skips only that write confirmation.
+
+Karen's bootloader rejected temporary `fastboot boot` during bring-up, so this
+helper deliberately has no misleading temporary-boot mode. Use
+nord2t-lineage-unroot with the same IMAGE_DIR for the exact bootpair rollback.
+EOF
+}
+
+fail() {
+  echo "lineage-root failed: $*" >&2
+  exit 1
+}
+
+if [[ $# -eq 1 && ("$1" == -h || "$1" == --help) ]]; then
+  usage
+  exit 0
+fi
+
+[[ $# -ge 1 ]] || {
+  usage
+  exit 2
+}
+
+image_directory="$(realpath "$1")"
+shift
+allow_embedded_adb_key=false
+persist=false
+assume_yes=false
+output="$PWD/magisk-patched-lineage-21-karen-v30.7.img"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --allow-embedded-adb-key)
+      allow_embedded_adb_key=true
+      shift
+      ;;
+    --output)
+      [[ $# -ge 2 ]] || {
+        usage
+        exit 2
+      }
+      output="$2"
+      shift 2
+      ;;
+    --persist)
+      persist=true
+      shift
+      ;;
+    --yes)
+      assume_yes=true
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+[[ -d "$image_directory" ]] ||
+  fail "Lineage image directory is not readable"
+[[ ! -e "$output" ]] ||
+  fail "refusing to overwrite output: $output"
+
+magisk_apk="@MAGISK_APK@"
+lineage_boot="$image_directory/boot.img"
+expected_apk_hash=e0d32d2123532860f97123d927b1bb86c4e08e6fd8a48bfc6b5bee0afae9ebd5
+expected_apk_size=11613864
+expected_boot_size=67108864
+
+verify_file() {
+  local file="$1"
+  local expected_size="$2"
+  local expected_hash="$3"
+  local label="$4"
+
+  [[ -r "$file" && -f "$file" ]] ||
+    fail "$label is not a readable regular file"
+  [[ "$(stat -Lc %s "$file")" == "$expected_size" ]] ||
+    fail "$label size does not match its pin"
+  [[ "$(sha256sum "$file" | cut -d' ' -f1)" == "$expected_hash" ]] ||
+    fail "$label SHA-256 does not match its pin"
+}
+
+verify_file \
+  "$magisk_apk" \
+  "$expected_apk_size" \
+  "$expected_apk_hash" \
+  "Magisk APK"
+
+audit_arguments=()
+boot_audit_arguments=()
+if [[ "$allow_embedded_adb_key" == true ]]; then
+  audit_arguments+=(--allow-embedded-adb-key)
+  boot_audit_arguments+=(--allow-embedded-adb-key)
+fi
+
+host_work="$(mktemp -d -t nord2t-lineage-root.XXXXXXXX)"
+remote_work="/data/local/tmp/nord2t-lineage-root-$$"
+remote_exists=false
+
+cleanup() {
+  if [[ "$remote_exists" == true ]]; then
+    adb -s "$adb_serial" shell "rm -rf '$remote_work'" >/dev/null 2>&1 || true
+  fi
+  rm -rf -- "$host_work"
+}
+trap cleanup EXIT
+
+nord2t-audit-lineage-images \
+  "${audit_arguments[@]}" \
+  "$image_directory" \
+  >"$host_work/image-audit.txt" ||
+  fail "source Lineage bundle did not pass its enforcing image audit"
+grep -Fxq "selinux_mode=enforcing-default" "$host_work/image-audit.txt" ||
+  fail "source Lineage bundle is not SELinux enforcing"
+
+[[ "$(stat -c %s "$lineage_boot")" == "$expected_boot_size" ]] ||
+  fail "Lineage boot image does not fill the 64 MiB boot partition"
+original_boot_hash="$(sha256sum "$lineage_boot" | cut -d' ' -f1)"
+source_system_fingerprint="$(
+  dump.erofs \
+    --cat \
+    --path=/system/build.prop \
+    "$image_directory/system.img" \
+    2>/dev/null |
+    sed -n 's/^ro\.system\.build\.fingerprint=//p' |
+    head -n 1
+)"
+[[ -n "$source_system_fingerprint" ]] ||
+  fail "source Lineage system image has no build fingerprint"
+
+mapfile -t adb_devices < <(
+  adb devices |
+    awk 'NR > 1 && $2 == "device" { print $1 }'
+)
+[[ "${#adb_devices[@]}" -eq 1 ]] ||
+  fail "expected exactly one authorized ADB device"
+adb_serial="${adb_devices[0]}"
+
+adb_property() {
+  adb -s "$adb_serial" shell getprop "$1" 2>/dev/null |
+    tr -d '\r'
+}
+
+[[ "$(adb_property sys.boot_completed)" == 1 ]] ||
+  fail "Android has not finished booting"
+[[ "$(adb_property ro.product.model)" == CPH2399 ]] ||
+  fail "connected model is not CPH2399"
+[[ "$(adb_property ro.product.device)" == OP557AL1 ]] ||
+  fail "connected device is not OP557AL1"
+[[ -n "$(adb_property ro.lineage.version)" ]] ||
+  fail "running system is not LineageOS"
+[[ "$(adb_property ro.build.version.sdk)" == 34 ]] ||
+  fail "running Lineage platform is not Android 14"
+[[ "$(adb_property ro.system.build.fingerprint)" == "$source_system_fingerprint" ]] ||
+  fail "running Lineage system does not match the audited image bundle"
+[[ "$(adb_property ro.boot.slot_suffix)" == _a ]] ||
+  fail "the audited Lineage slot A is not active"
+[[ "$(adb_property ro.boot.flash.locked)" == 0 ]] ||
+  fail "bootloader is not unlocked"
+[[ "$(adb_property ro.boot.verifiedbootstate)" == orange ]] ||
+  fail "verified boot does not report the expected unlocked state"
+[[ "$(adb -s "$adb_serial" shell getenforce 2>/dev/null | tr -d '\r')" == Enforcing ]] ||
+  fail "running Lineage system is not SELinux enforcing"
+[[ "$(adb_property ro.crypto.state)" == encrypted &&
+  "$(adb_property ro.crypto.type)" == file ]] ||
+  fail "running Lineage storage is not file-based encrypted"
+
+mkdir -p "$host_work/payload" "$(dirname "$output")"
+unzip -p "$magisk_apk" assets/boot_patch.sh >"$host_work/payload/boot_patch.sh"
+unzip -p "$magisk_apk" assets/util_functions.sh >"$host_work/payload/util_functions.sh"
+unzip -p "$magisk_apk" assets/stub.apk >"$host_work/payload/stub.apk"
+unzip -p "$magisk_apk" lib/arm64-v8a/libbusybox.so >"$host_work/payload/busybox"
+unzip -p "$magisk_apk" lib/arm64-v8a/libinit-ld.so >"$host_work/payload/init-ld"
+unzip -p "$magisk_apk" lib/arm64-v8a/libmagisk.so >"$host_work/payload/magisk"
+unzip -p "$magisk_apk" lib/arm64-v8a/libmagiskboot.so >"$host_work/payload/magiskboot"
+unzip -p "$magisk_apk" lib/arm64-v8a/libmagiskinit.so >"$host_work/payload/magiskinit"
+install -m 0600 "$lineage_boot" "$host_work/payload/lineage-boot.img"
+
+adb -s "$adb_serial" shell "mkdir '$remote_work'"
+remote_exists=true
+adb -s "$adb_serial" push "$host_work/payload/." "$remote_work/" >/dev/null
+adb -s "$adb_serial" shell "
+  cd '$remote_work' &&
+  chmod 0755 boot_patch.sh util_functions.sh busybox init-ld magisk magiskboot magiskinit &&
+  BOOTMODE=true \
+  KEEPVERITY=true \
+  KEEPFORCEENCRYPT=true \
+  PATCHVBMETAFLAG=false \
+  RECOVERYMODE=false \
+  LEGACYSAR=false \
+  ./busybox sh ./boot_patch.sh ./lineage-boot.img
+"
+adb -s "$adb_serial" pull "$remote_work/new-boot.img" "$output" >/dev/null
+chmod 0600 "$output"
+
+[[ -r "$output" && -f "$output" ]] ||
+  fail "patched boot image is not a readable regular file"
+[[ "$(stat -c %s "$output")" == "$expected_boot_size" ]] ||
+  fail "patched boot image does not fill the 64 MiB boot partition"
+
+# Magisk preserves the original unsigned AVB footer while changing the
+# ramdisk, leaving that self-descriptor stale. Rebuild only the boot image's
+# Algorithm NONE hash footer; the separately audited top-level vbmeta remains
+# the explicit unlock-only trust boundary.
+avbtool erase_footer --image "$output" ||
+  fail "could not remove the stale Lineage boot AVB footer"
+avbtool add_hash_footer \
+  --image "$output" \
+  --partition_name boot \
+  --partition_size "$expected_boot_size" ||
+  fail "could not rebuild the Lineage boot AVB hash footer"
+chmod 0600 "$output"
+[[ "$(stat -c %s "$output")" == "$expected_boot_size" ]] ||
+  fail "rebuilt boot image does not fill the 64 MiB partition"
+
+patched_hash="$(sha256sum "$output" | cut -d' ' -f1)"
+[[ "$patched_hash" != "$original_boot_hash" ]] ||
+  fail "Magisk output is byte-identical to the Lineage source boot"
+
+mkdir -p "$host_work/original-unpack" "$host_work/patched-unpack"
+unpackbootimg -i "$lineage_boot" -o "$host_work/original-unpack" >/dev/null
+unpackbootimg -i "$output" -o "$host_work/patched-unpack" >/dev/null
+original_prefix="$host_work/original-unpack/$(basename "$lineage_boot")"
+patched_prefix="$host_work/patched-unpack/$(basename "$output")"
+
+for field in \
+  base board cmdline dtb dtb_offset hashtype header_version kernel \
+  kernel_offset os_patch_level os_version pagesize ramdisk_offset \
+  second_offset tags_offset; do
+  [[ -f "$original_prefix-$field" && -f "$patched_prefix-$field" ]] ||
+    fail "unpacked image is missing $field"
+  cmp -s "$original_prefix-$field" "$patched_prefix-$field" ||
+    fail "Magisk unexpectedly changed Lineage boot field: $field"
+done
+
+cmp -s "$original_prefix-ramdisk" "$patched_prefix-ramdisk" &&
+  fail "Magisk did not change the Lineage ramdisk"
+
+nord2t-audit-boot \
+  "${boot_audit_arguments[@]}" \
+  "$output" \
+  >"$host_work/patched-boot-audit.txt" ||
+  fail "Magisk output did not pass the Karen boot-structure audit"
+grep -Fxq "selinux_mode=enforcing-default" "$host_work/patched-boot-audit.txt" ||
+  fail "Magisk output is not SELinux enforcing"
+
+echo "Verified Magisk-patched Lineage image written: $output"
+echo "image_sha256=$patched_hash"
+
+if [[ "$persist" != true ]]; then
+  exit 0
+fi
+
+adb -s "$adb_serial" install --user 0 -r "$magisk_apk" >/dev/null
+adb -s "$adb_serial" shell "rm -rf '$remote_work'"
+remote_exists=false
+
+if [[ "$assume_yes" != true ]]; then
+  printf 'Permanently flash Magisk Lineage boot_a? Type CPH2399-lineage: ' >&2
+  read -r confirmation
+  [[ "$confirmation" == CPH2399-lineage ]] ||
+    fail "confirmation declined"
+fi
+
+adb -s "$adb_serial" reboot bootloader
+for _ in $(seq 1 60); do
+  mapfile -t fastboot_devices < <(
+    fastboot devices |
+      awk '$2 == "fastboot" { print $1 }'
+  )
+  if [[ "${#fastboot_devices[@]}" -eq 1 ]]; then
+    break
+  fi
+  sleep 1
+done
+[[ "${#fastboot_devices[@]}" -eq 1 ]] ||
+  fail "ordinary bootloader-fastboot did not enumerate"
+fastboot_serial="${fastboot_devices[0]}"
+
+fastboot_variable() {
+  local variable="$1"
+  fastboot -s "$fastboot_serial" getvar "$variable" 2>&1 |
+    sed -nE "s/.*${variable}: ([^[:space:]]+).*/\\1/p" |
+    head -n 1
+}
+
+[[ "$(fastboot_variable is-userspace)" == no ]] ||
+  fail "device is not in ordinary bootloader-fastboot"
+[[ "$(fastboot_variable unlocked)" == yes ]] ||
+  fail "bootloader is not unlocked"
+[[ "$(fastboot_variable product)" == k6893v1_64_k419 ]] ||
+  fail "bootloader product is not the tested Karen platform"
+[[ "$(fastboot_variable hw-revision)" == ca00 ]] ||
+  fail "bootloader hardware revision is not the tested CPH2399 revision"
+[[ "$(fastboot_variable current-slot)" == a ]] ||
+  fail "audited Lineage slot A is not active"
+
+fastboot -s "$fastboot_serial" flash boot_a "$output"
+fastboot -s "$fastboot_serial" reboot
+
+android_ready=false
+for _ in $(seq 1 180); do
+  if [[ "$(adb -s "$adb_serial" get-state 2>/dev/null || true)" == device ]] &&
+    [[ "$(adb_property sys.boot_completed 2>/dev/null || true)" == 1 ]]; then
+    android_ready=true
+    break
+  fi
+  sleep 1
+done
+[[ "$android_ready" == true ]] ||
+  fail "Android did not finish booting within 180 seconds"
+
+adb -s "$adb_serial" shell pidof magiskd >/dev/null 2>&1 ||
+  fail "Android returned without magiskd; use lineage-unroot with the source bundle"
+[[ "$(adb -s "$adb_serial" shell getenforce 2>/dev/null | tr -d '\r')" == Enforcing ]] ||
+  fail "rooted Lineage did not return with SELinux enforcing"
+[[ "$(adb_property ro.crypto.state)" == encrypted ]] ||
+  fail "rooted Lineage did not return with encryption active"
+
+echo "Rooted Lineage is up with magiskd, encryption and SELinux enforcing."
+echo "No Zygisk, concealment or additional module was enabled."
+echo "Approve Shell in the Magisk app before testing app-visible root."

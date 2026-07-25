@@ -58,6 +58,13 @@ suspend/resume and broader charging behavior still need explicit manual
 parity checks. The current boot image remains a private authenticated-ADB
 bring-up image; it is not a release image.
 
+Checkpoint work after the first boot adds separate `lineage-root`,
+`lineage-root-full` and `lineage-unroot` interfaces. Minimal root is designed
+to preserve useful debug observations by leaving Zygisk and concealment
+modules disabled. Full root is a deliberate opt-in profile. Both are tied to
+an explicit audited Lineage bundle, and unroot restores its exact
+`vbmeta_a`/`boot_a` pair.
+
 The corrected nine-image bundle completed 117,156 actions on `s-tau` in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
 first VINTF check was rejected before any phone write: Lineage's empty
