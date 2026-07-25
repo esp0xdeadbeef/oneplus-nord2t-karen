@@ -51,6 +51,8 @@ grep -Fq 'echo "${partition}_a"' \
 # shellcheck disable=SC2016
 grep -Fq '"$(fastbootd_partition_name "$partition")"' \
   "$script_directory/scripts/lineage-userspace"
+grep -Fq 'for partition in product system system_ext vendor odm' \
+  "$script_directory/scripts/lineage-userspace"
 grep -Fq 'flash_partition vbmeta_a' "$keybound_helper"
 grep -Fq 'flash_partition boot_a' "$keybound_helper"
 grep -Fq 'embedded ADB key does not match this normal-user host key' "$keybound_helper"

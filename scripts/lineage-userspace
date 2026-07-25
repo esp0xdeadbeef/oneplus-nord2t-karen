@@ -414,7 +414,10 @@ if [[ "$action" == install ]]; then
     echo "Runtime boot verification is still required."
   fi
 else
-  for partition in system system_ext product vendor odm; do
+  # The add-on-capable Lineage product image reserves most of the standard
+  # partition headroom. Shrink it to stock first so the larger stock
+  # system_ext image can be restored without a transient group overcommit.
+  for partition in product system system_ext vendor odm; do
     flash_partition \
       fastbootd \
       "$(fastbootd_partition_name "$partition")" \
