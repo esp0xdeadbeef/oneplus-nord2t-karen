@@ -5,12 +5,16 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: nord2t-audit-boot [--allow-insecure-adb] CANDIDATE_BOOT_IMG [STOCK_BOOT_IMG]
+usage: nord2t-audit-boot [--allow-insecure-adb]
+                         [--allow-embedded-adb-key]
+                         CANDIDATE_BOOT_IMG [STOCK_BOOT_IMG]
 
 Audit a Karen recovery-as-boot image against the pinned CPH2399 .3001 stock
 boot image. When STOCK_BOOT_IMG is omitted, the verified image is extracted
 from the flake's pinned official OTA. Insecure ADB is rejected unless the
-explicit flag is supplied for a temporary, unlocked bring-up image.
+explicit flag is supplied for a temporary, unlocked bring-up image. An
+embedded public ADB host key is independently rejected unless its explicit
+bring-up flag is supplied.
 EOF
 }
 
@@ -20,10 +24,30 @@ fail() {
 }
 
 allow_insecure_adb=false
-if [[ "${1:-}" == "--allow-insecure-adb" ]]; then
-  allow_insecure_adb=true
-  shift
-fi
+allow_embedded_adb_key=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --allow-insecure-adb)
+      allow_insecure_adb=true
+      shift
+      ;;
+    --allow-embedded-adb-key)
+      allow_embedded_adb_key=true
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    -*)
+      usage
+      fail "unknown option: $1"
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then
   usage
@@ -200,6 +224,25 @@ elif grep -Fxq "ro.adb.secure=0" "$properties"; then
   adb_security="insecure-bringup-only"
 else
   fail "ramdisk has no recognized ro.adb.secure setting"
+fi
+
+embedded_adb_keys="$candidate_ramdisk_directory/adb_keys"
+if [[ -e "$embedded_adb_keys" ]]; then
+  [[ "$allow_embedded_adb_key" == true ]] ||
+    fail "candidate ramdisk embeds an ADB host key; use --allow-embedded-adb-key only for local bring-up"
+  [[ "$adb_security" == authenticated ]] ||
+    fail "an embedded host key cannot compensate for disabled ADB authentication"
+  [[ -f "$embedded_adb_keys" && -s "$embedded_adb_keys" ]] ||
+    fail "embedded ADB host key is not a non-empty regular file"
+  [[ "$(awk 'NF { count++ } END { print count + 0 }' "$embedded_adb_keys")" == 1 ]] ||
+    fail "embedded ADB key file must contain exactly one public key"
+  adb_key_material="$(awk 'NF { print $1; exit }' "$embedded_adb_keys")"
+  printf '%s' "$adb_key_material" |
+    base64 --decode >"$temporary_directory/embedded-adb-key.bin" 2>/dev/null ||
+    fail "embedded ADB key is not valid base64"
+  [[ "$(stat -c %s "$temporary_directory/embedded-adb-key.bin")" == 524 ]] ||
+    fail "embedded ADB key is not an Android RSA public key"
+  adb_security="authenticated-embedded-host-key"
 fi
 
 grep -Fq "/dev/block/by-name/userdata /data f2fs" "$fstab" ||

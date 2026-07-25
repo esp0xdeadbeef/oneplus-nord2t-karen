@@ -5,11 +5,12 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: nord2t-audit-lineage-images IMAGE_DIR
+usage: nord2t-audit-lineage-images [--allow-embedded-adb-key] IMAGE_DIR
 
 Audit a complete Karen full-userspace image directory before any hardware
 write. The directory must contain boot, system, system_ext, product, vendor,
-odm, vbmeta, vbmeta_system and vbmeta_vendor images.
+odm, vbmeta, vbmeta_system and vbmeta_vendor images. An embedded public ADB
+host key is rejected unless explicitly allowed for a private bring-up bundle.
 EOF
 }
 
@@ -17,6 +18,12 @@ fail() {
   echo "Lineage image audit failed: $*" >&2
   exit 1
 }
+
+allow_embedded_adb_key=false
+if [[ "${1:-}" == --allow-embedded-adb-key ]]; then
+  allow_embedded_adb_key=true
+  shift
+fi
 
 if [[ $# -ne 1 ]]; then
   usage
@@ -98,7 +105,12 @@ trap cleanup EXIT
 
 stock_directory="$temporary_directory/stock"
 nord2t-extract-stock --profile boot --output "$stock_directory" >/dev/null
+boot_audit_arguments=()
+if [[ "$allow_embedded_adb_key" == true ]]; then
+  boot_audit_arguments+=(--allow-embedded-adb-key)
+fi
 nord2t-audit-boot \
+  "${boot_audit_arguments[@]}" \
   "$image_directory/boot.img" \
   "$stock_directory/images/boot.img" \
   >"$temporary_directory/boot-audit.txt"

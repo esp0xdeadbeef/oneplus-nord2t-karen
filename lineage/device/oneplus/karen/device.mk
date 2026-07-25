@@ -8,6 +8,12 @@ PRODUCT_SHIPPING_API_LEVEL := 31
 PRODUCT_USE_DYNAMIC_PARTITIONS := true
 PRODUCT_BUILD_SUPER_PARTITION := false
 
+ifneq ($(strip $(KAREN_DEBUG_ADB_KEYS)),)
+# Opt-in headless bring-up access. Point this at one local Android public key;
+# never copy the key into the device tree or enable this for release images.
+PRODUCT_ADB_KEYS := $(strip $(KAREN_DEBUG_ADB_KEYS))
+endif
+
 ifeq ($(KAREN_FULL_SYSTEM),true)
 # The pinned stock vendor requires the Android 12 VNDK snapshot. Android 14
 # no longer enables legacy VNDK snapshots by default.
