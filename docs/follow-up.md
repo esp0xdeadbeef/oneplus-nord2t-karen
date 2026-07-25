@@ -71,6 +71,15 @@ successfully installed on Lineage without F-Droid. Android 14 arm64
 MindTheGapps is pinned as an explicit optional input for the planned
 opinionated profile; vanilla and root-only variants remain separate.
 
+The first standard MindTheGapps sideload correctly reached Lineage Recovery
+but aborted before copying files because the three Lineage-owned images were
+EROFS and `/mnt/system` could not be mounted read-write. No wipe followed that
+failed add-on attempt and Lineage rebooted normally. The device tree now
+builds `system`, `system_ext` and `product` as ext4 with explicit add-on
+headroom, while exact stock `vendor`/`odm` stay EROFS. Rebuild and audit this
+candidate on `s-tau`, then repeat the official recovery sideload before the
+factory reset.
+
 The corrected nine-image bundle completed 117,156 actions on `s-tau` in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
 first VINTF check was rejected before any phone write: Lineage's empty

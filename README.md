@@ -267,10 +267,13 @@ Realize the optional Android 14 arm64 Google-app add-on without installing it:
 nix build .#mindthegapps-14-arm64
 ```
 
-LineageOS requires a factory reset when adding GApps to a system that has
-already booted without them. The vanilla, GApps, minimal-root, full-root and
-owner-opinionated flows therefore remain explicit layers rather than one
-implicit ROM definition.
+The Lineage-owned `system`, `system_ext` and `product` images use ext4 with
+explicit add-on headroom; exact stock `vendor` and `odm` remain EROFS. This
+allows the standard Lineage Recovery sideload route instead of baking Google
+apps into the vanilla ROM. LineageOS requires a factory reset when adding
+GApps to a system that has already booted without them. The vanilla, GApps,
+minimal-root, full-root and owner-opinionated flows therefore remain explicit
+layers rather than one implicit ROM definition.
 
 Create an identifier-filtered, rootless device snapshot:
 
