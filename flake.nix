@@ -339,6 +339,21 @@
           );
         };
 
+        lineageKeyboundAdb = pkgs.writeShellApplication {
+          name = "nord2t-lineage-keybound-adb";
+          runtimeInputs = with pkgs; [
+            android-tools
+            auditLineageImages
+            coreutils
+            gawk
+            gnugrep
+            gnused
+            libarchive
+            mkbootimg-osm0sis
+          ];
+          text = builtins.readFile ./scripts/lineage-keybound-adb;
+        };
+
         snapshotDevice = pkgs.writeShellApplication {
           name = "nord2t-snapshot";
           runtimeInputs = with pkgs; [
@@ -640,6 +655,7 @@
           extract-stock = extractStock;
           firmware-3001 = stockFirmware3001;
           hma-apk = hmaApk;
+          lineage-keybound-adb = lineageKeyboundAdb;
           lineage-userspace = lineageUserspace;
           magisk-apk = magiskApk;
           oneplus-kernel-modules = oneplusKernelModules;
@@ -682,6 +698,10 @@
         lineage-userspace = {
           type = "app";
           program = "${self.packages.${system}.lineage-userspace}/bin/nord2t-lineage-userspace";
+        };
+        lineage-keybound-adb = {
+          type = "app";
+          program = "${self.packages.${system}.lineage-keybound-adb}/bin/nord2t-lineage-keybound-adb";
         };
         audit-boot = {
           type = "app";
@@ -740,6 +760,7 @@
           audit-boot
           audit-lineage-images
           extract-stock
+          lineage-keybound-adb
           lineage-userspace
           privacy
           preflight-lineage-userspace

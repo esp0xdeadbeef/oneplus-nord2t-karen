@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage:
+  nord2t-lineage-keybound-adb install KEYBOUND_DIR BASE_DIR [--yes]
+  nord2t-lineage-keybound-adb restore BASE_DIR [--yes]
+
+Install a private, authenticated-ADB boot/vbmeta pair over the already
+installed audited BASE_DIR userspace. Restore writes the original BASE_DIR
+boot/vbmeta pair. The phone must already be in bootloader-fastboot on slot A.
+No logical partition, vendor, odm, dtbo or userdata image is written.
+EOF
+}
+
+fail() {
+  echo "Lineage key-bound ADB operation failed: $*" >&2
+  if [[ "${write_started:-false}" == true ]]; then
+    echo "A boot-chain write was interrupted." >&2
+    echo "Keep the phone in bootloader-fastboot and run the restore action." >&2
+  fi
+  exit 1
+}
+
+if [[ $# -eq 1 && ("$1" == -h || "$1" == --help) ]]; then
+  usage
+  exit 0
+fi
+
+[[ $# -ge 2 ]] || {
+  usage
+  exit 2
+}
+
+action="$1"
+shift
+assume_yes=false
+
+case "$action" in
+  install)
+    [[ $# -ge 2 ]] || {
+      usage
+      exit 2
+    }
+    keybound_directory="$(realpath "$1")"
+    base_directory="$(realpath "$2")"
+    shift 2
+    ;;
+  restore)
+    base_directory="$(realpath "$1")"
+    shift
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --yes)
+      assume_yes=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+[[ -d "$base_directory" ]] ||
+  fail "base image directory is not readable"
+if [[ "$action" == install ]]; then
+  [[ -d "$keybound_directory" ]] ||
+    fail "key-bound image directory is not readable"
+fi
+
+temporary_directory="$(mktemp -d -t nord2t-lineage-keybound-adb.XXXXXXXX)"
+cleanup() {
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+
+audit_bundle() {
+  local label="$1"
+  local output="$2"
+  shift 2
+
+  if nord2t-audit-lineage-images "$@" >"$output" 2>&1; then
+    return
+  fi
+  grep -E 'failed:' "$output" >&2 || true
+  fail "$label image audit did not pass"
+}
+
+audit_bundle \
+  base \
+  "$temporary_directory/base-audit.txt" \
+  "$base_directory"
+
+if [[ "$action" == install ]]; then
+  audit_bundle \
+    key-bound \
+    "$temporary_directory/keybound-audit.txt" \
+    --allow-embedded-adb-key \
+    "$keybound_directory"
+
+  for partition in \
+    system system_ext product vendor odm vbmeta_system vbmeta_vendor; do
+    cmp -s \
+      "$keybound_directory/$partition.img" \
+      "$base_directory/$partition.img" ||
+      fail "key-bound bundle unexpectedly changes $partition"
+  done
+  for partition in boot vbmeta; do
+    ! cmp -s \
+      "$keybound_directory/$partition.img" \
+      "$base_directory/$partition.img" ||
+      fail "key-bound bundle does not change $partition"
+  done
+
+  host_public_key="$HOME/.android/adbkey.pub"
+  host_private_key="$HOME/.android/adbkey"
+  [[ -f "$host_public_key" && -s "$host_public_key" ]] ||
+    fail "normal-user Android public key is unavailable"
+  [[ -f "$host_private_key" && -s "$host_private_key" ]] ||
+    fail "matching normal-user Android private key is unavailable"
+  [[ "$(stat -c %a "$host_private_key")" == 600 ]] ||
+    fail "normal-user Android private key permissions are not 0600"
+
+  unpack_directory="$temporary_directory/unpacked-keybound-boot"
+  mkdir "$unpack_directory"
+  unpackbootimg \
+    -i "$keybound_directory/boot.img" \
+    -o "$unpack_directory" \
+    >"$temporary_directory/unpack-output.txt"
+  ramdisk="$unpack_directory/boot.img-ramdisk"
+  [[ -s "$ramdisk" ]] ||
+    fail "key-bound boot image did not expose a ramdisk"
+  bsdtar -xOf "$ramdisk" adb_keys \
+    >"$temporary_directory/embedded-adb-key.pub" 2>/dev/null ||
+    fail "key-bound boot image has no embedded ADB key"
+  cmp -s "$temporary_directory/embedded-adb-key.pub" "$host_public_key" ||
+    fail "embedded ADB key does not match this normal-user host key"
+fi
+
+if [[ "$assume_yes" != true ]]; then
+  if [[ "$action" == install ]]; then
+    printf 'Write private key-bound boot/vbmeta to slot A? Type CPH2399-keybound: ' >&2
+    read -r confirmation
+    [[ "$confirmation" == CPH2399-keybound ]] ||
+      fail "confirmation declined"
+  else
+    printf 'Restore base Lineage boot/vbmeta to slot A? Type CPH2399-baseboot: ' >&2
+    read -r confirmation
+    [[ "$confirmation" == CPH2399-baseboot ]] ||
+      fail "confirmation declined"
+  fi
+fi
+
+mapfile -t fastboot_devices < <(
+  fastboot devices |
+    awk '$2 == "fastboot" { print $1 }'
+)
+[[ "${#fastboot_devices[@]}" -eq 1 ]] ||
+  fail "expected exactly one device already in bootloader-fastboot"
+fastboot_serial="${fastboot_devices[0]}"
+
+redact_fastboot_output() {
+  sed "s/${fastboot_serial//\//\\/}/<device>/g" "$1"
+}
+
+run_fastboot() {
+  local output="$temporary_directory/fastboot-output.txt"
+
+  if fastboot -s "$fastboot_serial" "$@" >"$output" 2>&1; then
+    redact_fastboot_output "$output"
+    return 0
+  fi
+  redact_fastboot_output "$output" >&2
+  return 1
+}
+
+fastboot_variable() {
+  local variable="$1"
+  local output="$temporary_directory/getvar-output.txt"
+
+  fastboot -s "$fastboot_serial" getvar "$variable" >"$output" 2>&1 ||
+    return 1
+  sed -nE "s/.*${variable}: ([^[:space:]]+).*/\\1/p" "$output" |
+    head -n 1
+}
+
+verify_bootloader_identity() {
+  [[ "$(fastboot_variable is-userspace)" == no ]] ||
+    fail "device is not in bootloader-fastboot"
+  [[ "$(fastboot_variable unlocked)" == yes ]] ||
+    fail "bootloader is not unlocked"
+  [[ "$(fastboot_variable product)" == k6893v1_64_k419 ]] ||
+    fail "bootloader product is not the tested Karen platform"
+  [[ "$(fastboot_variable hw-revision)" == ca00 ]] ||
+    fail "bootloader hardware revision is not the tested CPH2399 revision"
+  [[ "$(fastboot_variable current-slot)" == a ]] ||
+    fail "slot A is not active"
+}
+
+wait_for_bootloader() {
+  local attempt
+
+  for attempt in $(seq 1 60); do
+    if fastboot -s "$fastboot_serial" devices |
+      awk '$2 == "fastboot" { found = 1 } END { exit !found }'; then
+      return
+    fi
+    sleep 1
+  done
+  fail "bootloader-fastboot did not re-enumerate"
+}
+
+flash_partition() {
+  local partition="$1"
+  local image="$2"
+  local attempt
+
+  for attempt in 1 2; do
+    if run_fastboot flash "$partition" "$image"; then
+      return
+    fi
+    [[ "$attempt" -lt 2 ]] || return 1
+    echo "Fastboot transfer failed; waiting for one bounded retry." >&2
+    wait_for_bootloader
+    sleep 5
+    verify_bootloader_identity
+  done
+}
+
+verify_bootloader_identity
+
+if [[ "$action" == install ]]; then
+  write_directory="$keybound_directory"
+else
+  write_directory="$base_directory"
+fi
+
+write_started=false
+report_interrupted_write() {
+  local status="$?"
+
+  if [[ "$write_started" == true ]]; then
+    echo "A boot-chain write was interrupted." >&2
+    echo "Keep the phone in bootloader-fastboot and run the restore action." >&2
+  fi
+  exit "$status"
+}
+trap report_interrupted_write ERR
+
+write_started=true
+flash_partition vbmeta_a "$write_directory/vbmeta.img"
+flash_partition boot_a "$write_directory/boot.img"
+write_started=false
+run_fastboot reboot
+
+if [[ "$action" == install ]]; then
+  echo "Private key-bound Lineage boot pair written to slot A."
+  echo "Only vbmeta_a and boot_a were written; runtime verification is required."
+else
+  echo "Base Lineage boot pair restored to slot A."
+  echo "Only vbmeta_a and boot_a were written; runtime verification is required."
+fi

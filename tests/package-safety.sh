@@ -8,6 +8,7 @@ privacy_script="$script_directory/scripts/nord2t-privacy"
 device_makefile="$script_directory/lineage/device/oneplus/karen/device.mk"
 boot_audit="$script_directory/scripts/audit-boot-image"
 image_audit="$script_directory/scripts/audit-lineage-images"
+keybound_helper="$script_directory/scripts/lineage-keybound-adb"
 
 critical_packages=(
   com.android.permissioncontroller
@@ -39,6 +40,23 @@ grep -Fq 'read_kernel_androidboot vbmeta.device_state' "$privacy_script"
 grep -Fq 'PRODUCT_ADB_KEYS := $(strip $(KAREN_DEBUG_ADB_KEYS))' "$device_makefile"
 grep -Fq -- '--allow-embedded-adb-key' "$boot_audit"
 grep -Fq -- '--allow-embedded-adb-key' "$image_audit"
+grep -Fq 'flash_partition vbmeta_a' "$keybound_helper"
+grep -Fq 'flash_partition boot_a' "$keybound_helper"
+grep -Fq 'embedded ADB key does not match this normal-user host key' "$keybound_helper"
+grep -Fq 'expected exactly one device already in bootloader-fastboot' "$keybound_helper"
+grep -Fq 'slot A is not active' "$keybound_helper"
+if grep -Eq \
+  'flash_partition (system|system_ext|product|vendor|odm|dtbo|vbmeta_system|vbmeta_vendor)' \
+  "$keybound_helper"; then
+  echo "Key-bound ADB helper can write outside boot_a/vbmeta_a." >&2
+  exit 1
+fi
+if grep -Eq \
+  'fastboot .*(erase|format|delete-logical-partition|create-logical-partition|resize-logical-partition)' \
+  "$keybound_helper"; then
+  echo "Key-bound ADB helper contains a destructive non-boot operation." >&2
+  exit 1
+fi
 if find "$script_directory/lineage" \
   -type f \
   \( -name adb_keys -o -name 'adbkey*' -o -name '*.pub' \) \

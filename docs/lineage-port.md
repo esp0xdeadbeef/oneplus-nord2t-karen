@@ -354,6 +354,22 @@ successful boot or a bootloop until authenticated ADB can read the general
 boot state. No device identifier, authorization key, radio data or
 calibration data is recorded in this repository.
 
+As a headless fallback, the product now accepts an opt-in
+`KAREN_DEBUG_ADB_KEYS` path for one local Android public key while retaining
+`ro.adb.secure=1`. The normal audit rejects such a boot image; an explicit
+private bring-up audit validates that the file contains one Android RSA
+public key. A `s-tau` incremental build produced a complete private bundle,
+and a hybrid using only its changed boot/top-level-vbmeta pair with the
+installed candidate's other seven images passed the complete AVB and stock
+vendor/odm audit. These key-derived artifacts remain outside Git.
+
+The matching fastboot-only helper requires ordinary bootloader-fastboot,
+unlocked slot A, exact Karen bootloader identity, a byte-identical base for
+every non-boot-pair image, and a local private key matching the embedded
+public key. Its allowlist contains only `vbmeta_a` and `boot_a`, with a
+corresponding base-pair restore action. This is a diagnostic access path, not
+a release feature or evidence of runtime success.
+
 ### Interactive checkout
 
 The following fallback is useful while iterating on Android makefiles because

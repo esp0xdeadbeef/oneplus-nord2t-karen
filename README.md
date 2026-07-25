@@ -185,6 +185,31 @@ AVB metadata images. The restore action verifies every stock hash again before
 writing the five standard logical images plus stock slot-A boot/AVB metadata.
 Neither action can name or write an OPlus logical partition.
 
+For a private headless bring-up build, `KAREN_DEBUG_ADB_KEYS` may point to
+exactly one local Android public key while building on `s-tau`. This keeps
+`ro.adb.secure=1`; it does not enable open or root ADB. Images containing that
+key are rejected by the normal audit and must remain outside Git:
+
+```bash
+nix run .#audit-lineage-images -- \
+  --allow-embedded-adb-key ./private-keybound-result
+```
+
+If the matching base userspace is already installed and the phone has been
+put manually in ordinary bootloader-fastboot, the bounded helper can write or
+restore only its audited `boot_a`/`vbmeta_a` pair:
+
+```bash
+nix run .#lineage-keybound-adb -- \
+  install ./private-keybound-result ./base-result
+nix run .#lineage-keybound-adb -- restore ./base-result
+```
+
+The install path also requires the embedded public key to match the normal
+user's local `~/.android/adbkey` private key and requires every non-boot-pair
+image to be byte-identical to the base bundle. This is a bring-up fallback,
+not a release configuration.
+
 The pinned build completed successfully on `s-tau` and its resulting
 recovery-as-boot image passed the repository's structural audit. Its kernel
 and DTB are byte-identical to `.3001` stock, while the ramdisk contains the

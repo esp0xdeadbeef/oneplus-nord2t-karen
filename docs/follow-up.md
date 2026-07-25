@@ -83,6 +83,22 @@ not be accepted remotely. The next safe action is to wake and unlock the
 phone, approve that key, then inspect `sys.boot_completed`, SELinux and
 general boot logs before deciding whether to continue or restore stock.
 
+A key-bound fallback was prepared without weakening ADB authentication.
+Checkpoint `d2b48f5` adds the opt-in `KAREN_DEBUG_ADB_KEYS` build variable and
+makes the normal boot/image audits reject an embedded host key unless the
+private bring-up flag is explicit. The incremental `s-tau` build completed in
+2:58 and placed exactly one local Android public key in the boot ramdisk.
+
+Both the complete private bundle and a smaller hybrid consisting of its new
+`boot`/`vbmeta` pair plus the original candidate's other seven images passed
+the complete explicit audit, including the AVB chain and exact stock
+vendor/odm checks. Independent copies are stored in mode-0700 directories
+under `/home/deadbeef/build` on `s-tau` and the phone host; no key or
+key-derived image is in Git. Prefer approving the ordinary RSA dialog. If
+that remains impossible, put the phone manually in ordinary
+bootloader-fastboot and use `lineage-keybound-adb`; it verifies the matching
+local private key and can write or restore only `vbmeta_a` and `boot_a`.
+
 The scoped ten-image stock rollback set is protected by an explicit GC root
 on `s-tau`:
 
