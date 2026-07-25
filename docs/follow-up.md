@@ -21,6 +21,16 @@ and rationale remain in [lineage-port.md](lineage-port.md).
   only the basic Magisk debugging root. No Lineage userspace image has been
   written.
 
+The corrected nine-image bundle completed 117,156 actions on `s-tau` in
+1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
+first VINTF check was rejected before any phone write: Lineage's empty
+device-specific framework matrix did not declare the stock FCM-5
+MediaTek/OPlus HALs. Candidate directory
+`/home/deadbeef/build/lineage-21-karen-images-20260725-1` is therefore a
+diagnostic artifact, not a flash candidate. The next incremental change
+derives the exact optional framework matrix from the pinned stock `system`
+image and must repeat every gate.
+
 The scoped ten-image stock rollback set is protected by an explicit GC root
 on `s-tau`:
 

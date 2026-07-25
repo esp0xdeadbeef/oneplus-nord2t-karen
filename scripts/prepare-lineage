@@ -6,7 +6,8 @@ set -euo pipefail
 usage() {
   cat >&2 <<'EOF'
 usage: prepare-lineage [--full] [--stock-dir DIR]
-                       [--lineage-stock-dir DIR] LINEAGE_ROOT
+                       [--lineage-stock-dir DIR]
+                       [--restore-stock-dir DIR] LINEAGE_ROOT
 
 Prepare a LineageOS 21 checkout for the Karen recovery bring-up. The stock
 directory defaults to the verified boot-profile extraction below the user's
@@ -18,13 +19,20 @@ The script links the reviewable device tree into LINEAGE_ROOT and derives
 ignored kernel/DTB/DTBO inputs from the verified .3001 images. It never writes
 to the phone. With --full it also installs the verified stock vendor/odm
 images, VINTF metadata and full first-stage fstab from the `lineage`
-extraction profile.
+extraction profile. The framework VINTF extension comes from the verified
+system image in the `restore` profile.
 EOF
+}
+
+fail() {
+  echo "prepare-lineage failed: $*" >&2
+  exit 1
 }
 
 cache_root="${XDG_CACHE_HOME:-$HOME/.cache}"
 stock_dir="$cache_root/nord2t-recovery/extracted/CPH2399_14.0.0.3001-boot"
 lineage_stock_dir="$cache_root/nord2t-recovery/extracted/CPH2399_14.0.0.3001-lineage"
+restore_stock_dir="$cache_root/nord2t-recovery/extracted/CPH2399_14.0.0.3001-restore"
 full=false
 
 while [[ $# -gt 0 ]]; do
@@ -47,6 +55,14 @@ while [[ $# -gt 0 ]]; do
         exit 2
       }
       lineage_stock_dir="$2"
+      shift 2
+      ;;
+    --restore-stock-dir)
+      [[ $# -ge 2 ]] || {
+        usage
+        exit 2
+      }
+      restore_stock_dir="$2"
       shift 2
       ;;
     -h | --help)
@@ -119,7 +135,8 @@ if [[ "$full" == true ]]; then
     "$lineage_stock_dir/trees/vendor/etc/fstab.mt6893" \
     "$lineage_stock_dir/trees/vendor/etc/vintf/manifest.xml" \
     "$lineage_stock_dir/trees/vendor/etc/vintf/compatibility_matrix.xml" \
-    "$lineage_stock_dir/trees/odm/etc/vintf/manifest_dsds.xml"; do
+    "$lineage_stock_dir/trees/odm/etc/vintf/manifest_dsds.xml" \
+    "$restore_stock_dir/images/system.img"; do
     if [[ ! -r "$required_file" ]]; then
       echo "Required file is not readable: $required_file" >&2
       exit 1
@@ -127,6 +144,7 @@ if [[ "$full" == true ]]; then
   done
   verify_partition vendor "$lineage_stock_dir/images/vendor.img"
   verify_partition odm "$lineage_stock_dir/images/odm.img"
+  verify_partition system "$restore_stock_dir/images/system.img"
 fi
 
 work_dir="$(mktemp -d)"
@@ -152,6 +170,15 @@ install -m 0644 "$work_dir/unpacked/kernel" "$device_tree/prebuilt/kernel"
 install -m 0644 "$work_dir/unpacked/dtb" "$device_tree/prebuilt/dtbs/karen.dtb"
 install -m 0644 "$stock_dir/images/dtbo.img" "$device_tree/prebuilt/dtbo.img"
 if [[ "$full" == true ]]; then
+  framework_matrix="$work_dir/compatibility_matrix.device.xml"
+  fsck.erofs \
+    --extract="$framework_matrix" \
+    --path=/system/etc/vintf/compatibility_matrix.device.xml \
+    --no-preserve \
+    "$restore_stock_dir/images/system.img" >/dev/null
+  [[ -s "$framework_matrix" ]] ||
+    fail "stock system image did not contain its framework VINTF matrix"
+
   mkdir -p "$device_tree/prebuilt/stock"
   install -m 0644 \
     "$lineage_stock_dir/images/vendor.img" \
@@ -162,6 +189,9 @@ if [[ "$full" == true ]]; then
   install -m 0644 \
     "$lineage_stock_dir/trees/vendor/etc/fstab.mt6893" \
     "$device_tree/rootdir/etc/fstab.mt6893.full"
+  install -D -m 0644 \
+    "$framework_matrix" \
+    "$device_tree/prebuilt/stock-framework-vintf/compatibility_matrix.device.xml"
   for partition in vendor odm; do
     while IFS= read -r -d '' vintf_file; do
       relative_file="${vintf_file#"$lineage_stock_dir/trees/$partition/etc/vintf/"}"

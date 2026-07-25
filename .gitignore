@@ -23,6 +23,8 @@
 
 # Local stock-derived Lineage bring-up inputs
 /lineage/device/oneplus/karen/prebuilt/kernel
+/lineage/device/oneplus/karen/prebuilt/stock-framework-vintf/
+/lineage/device/oneplus/karen/prebuilt/stock-vintf/
 /lineage/device/oneplus/karen/rootdir/etc/fstab.mt6893.full
 
 # Device captures and diagnostics

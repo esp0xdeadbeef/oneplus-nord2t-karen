@@ -197,6 +197,22 @@
             nord2t-extract-stock --profile restore --output "$out"
           '';
 
+        stockFrameworkVintf3001 =
+          pkgs.runCommand "CPH2399_14.0.0.3001-framework-vintf" {
+            nativeBuildInputs = [pkgs.erofs-utils];
+          } ''
+            matrix="$TMPDIR/compatibility_matrix.device.xml"
+            fsck.erofs \
+              --extract="$matrix" \
+              --path=/system/etc/vintf/compatibility_matrix.device.xml \
+              --no-preserve \
+              ${stockRestore3001}/images/system.img >/dev/null
+            test -s "$matrix"
+            install -D -m 0644 \
+              "$matrix" \
+              "$out/compatibility_matrix.device.xml"
+          '';
+
         stockRoot = pkgs.writeShellApplication {
           name = "nord2t-stock-root";
           runtimeInputs = with pkgs; [
@@ -376,7 +392,10 @@
           cp --no-preserve=ownership -r ${karenDeviceTree} "$out"
           chmod -R u+w "$out"
 
-          mkdir -p "$out/prebuilt/stock" "$out/prebuilt/stock-vintf"
+          mkdir -p \
+            "$out/prebuilt/stock" \
+            "$out/prebuilt/stock-framework-vintf" \
+            "$out/prebuilt/stock-vintf"
           install -m 0644 \
             ${stockLineage3001}/images/vendor.img \
             "$out/prebuilt/stock/vendor.img"
@@ -386,6 +405,9 @@
           install -m 0644 \
             ${stockLineage3001}/trees/vendor/etc/fstab.mt6893 \
             "$out/rootdir/etc/fstab.mt6893.full"
+          install -m 0644 \
+            ${stockFrameworkVintf3001}/compatibility_matrix.device.xml \
+            "$out/prebuilt/stock-framework-vintf/compatibility_matrix.device.xml"
           cp --no-preserve=ownership -r \
             ${stockLineage3001}/trees/vendor/etc/vintf \
             "$out/prebuilt/stock-vintf/vendor"
@@ -437,6 +459,7 @@
               coreutils
               curl
               elfutils
+              erofs-utils
               file
               findutils
               flex
@@ -628,6 +651,7 @@
           shamiko-module = shamikoModule;
           snapshot = snapshotDevice;
           stock-boot-3001 = stockBoot3001;
+          stock-framework-vintf-3001 = stockFrameworkVintf3001;
           stock-lineage-3001 = stockLineage3001;
           stock-restore-3001 = stockRestore3001;
           stock-root = stockRoot;
