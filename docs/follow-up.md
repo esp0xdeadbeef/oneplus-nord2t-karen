@@ -90,6 +90,13 @@ uncompressed recovery ramdisk produced the clean vanilla candidate. Repeat
 the normal Lineage Recovery add-on sideload before the first boot of this
 candidate, followed by the required factory reset.
 
+On the first stock-restore attempt from the earlier Lineage build, recovery
+fastbootd returned an empty `current-slot` value even after bootloader-fastboot
+had confirmed and selected slot A. The helper stopped before its first write.
+It now records the verified bootloader slot across that exact transition and
+accepts a missing fastbootd value only within the same process; a fresh
+fastbootd invocation still has to round-trip through bootloader-fastboot.
+
 The corrected nine-image bundle completed 117,156 actions on `s-tau` in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
 first VINTF check was rejected before any phone write: Lineage's empty

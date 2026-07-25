@@ -239,15 +239,27 @@ ensure_bootloader_slot_a() {
     fail "could not make slot A active"
 }
 
+fastbootd_slot_a_verified=false
+
 verify_fastbootd() {
+  local current_slot
+
   [[ "$(fastboot_variable is-userspace)" == yes ]] ||
     fail "device is not in fastbootd"
-  [[ "$(fastboot_variable current-slot)" == a ]] ||
+  current_slot="$(fastboot_variable current-slot)"
+  [[ "$current_slot" == a ||
+    (-z "$current_slot" && "$fastbootd_slot_a_verified" == true) ]] ||
     fail "slot A is not active in fastbootd"
 }
 
 reboot_bootloader_to_fastbootd() {
   local output="$temporary_directory/reboot-fastboot-output.txt"
+
+  [[ "$(fastboot_variable is-userspace)" == no ]] ||
+    fail "cannot attest the active slot outside bootloader-fastboot"
+  [[ "$(fastboot_variable current-slot)" == a ]] ||
+    fail "slot A was not active before entering fastbootd"
+  fastbootd_slot_a_verified=true
 
   timeout 20 fastboot -s "$fastboot_serial" reboot fastboot \
     >"$output" 2>&1 || true

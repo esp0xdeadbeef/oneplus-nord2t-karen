@@ -31,6 +31,10 @@ grep -Fq -- '--stay-bootloader is valid only for install' \
   "$script_directory/scripts/lineage-userspace"
 grep -Fq 'Phone remains in bootloader-fastboot for the next audited step.' \
   "$script_directory/scripts/lineage-userspace"
+grep -Fq 'fastbootd_slot_a_verified=true' \
+  "$script_directory/scripts/lineage-userspace"
+grep -Fq 'slot A was not active before entering fastbootd' \
+  "$script_directory/scripts/lineage-userspace"
 grep -Fq 'flash_partition vbmeta_a' "$keybound_helper"
 grep -Fq 'flash_partition boot_a' "$keybound_helper"
 grep -Fq 'embedded ADB key does not match this normal-user host key' "$keybound_helper"
