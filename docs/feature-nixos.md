@@ -261,6 +261,118 @@ the missing `vendor/oplus` source layer. NixOS bootstrapping must not weaken
 that fail-closed source-kernel assessment or present the prebuilt stock kernel
 as a reproducible source build.
 
+## Kernel source map and fork strategy
+
+The absence of a complete MT6893 device tree from upstream Linux does not mean
+that the only public MT6893 material is OnePlus's incomplete 4.19 publication.
+Older MediaTek and OPlus-derived Android kernel trees contain substantial
+source that can be used as a donor and as protocol documentation.
+
+### Public MT6893 donor BSP
+
+Pin the `RKSU` branch of
+[`lijilong34/android_kernel_4.14_MT6853`](https://github.com/lijilong34/android_kernel_4.14_MT6853/tree/bd916df705eb0bb434ef26a59f39dc178b868287)
+at commit `bd916df705eb0bb434ef26a59f39dc178b868287` when using it as
+evidence. Despite the repository name and its support for several Oppo and
+Realme products, that snapshot contains hundreds of MT6893-specific paths,
+including:
+
+- an
+  [`mt6893.dts`](https://github.com/lijilong34/android_kernel_4.14_MT6853/blob/bd916df705eb0bb434ef26a59f39dc178b868287/arch/arm64/boot/dts/mediatek/mt6893.dts)
+  of more than 8,000 lines and a `k6893v1_64` reference-board tree;
+- M4U / IOMMU, CMDQ, USB PHY and storage implementations;
+- display, DSI, DDP and framebuffer code;
+- camera CCU, mailbox, sensor and calibration code;
+- CPU and GPU frequency management, DVFS, thermal and power data.
+
+A direct source comparison with the pinned OnePlus Android 14 kernel commit
+`a5cdca1a88dc328a44dee724193830254fc551da` establishes common MediaTek BSP
+ancestry rather than an accidental shared filename:
+
+- the donor
+  [`mt6893_battery_table.dtsi`](https://github.com/lijilong34/android_kernel_4.14_MT6853/blob/bd916df705eb0bb434ef26a59f39dc178b868287/arch/arm64/boot/dts/mediatek/bat_setting/mt6893_battery_table.dtsi)
+  is line-for-line identical to the
+  [OnePlus version](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6893/blob/a5cdca1a88dc328a44dee724193830254fc551da/arch/arm64/boot/dts/mediatek/bat_setting/mt6893_battery_table.dtsi);
+- the two `helio-dvfsrc-mt6893.c` implementations are nearly identical;
+- the large donor and OnePlus `mt6893.dts` files share extensive blocks.
+
+This materially reduces the amount of clean-room reconstruction that may be
+required. The donor can reveal register maps, interrupts, memory layouts,
+mailbox formats, firmware interaction and power sequencing missing from the
+published OnePlus tree.
+
+It is not automatically Karen-correct or Linux-6.x-ready. The tree includes
+multiple products, board revisions and root-related changes. Some MT6893
+sources inherit MT6885 names and assumptions, and code present in a tree may
+not have been enabled in the shipped configuration. Validate every imported
+fact against the `.3001` live device, resolved DTB, OnePlus 4.19 source and
+runtime traces. Preserve all GPL notices and history, and audit provenance
+before copying code rather than merging the complete donor branch.
+
+Use the four sources with distinct authority:
+
+| Source | Authority | Intended use |
+| --- | --- | --- |
+| Stock `.3001` kernel, resolved DTB and traces | Shipped Karen behavior | Ground truth for addresses, enabled hardware, protocols and sequencing |
+| OnePlus Android 14 kernel 4.19 | Newest published Nord 2T source | Device-specific delta and first source-kernel reconstruction target |
+| Pinned MediaTek/OPlus 4.14 donor | Older but more complete BSP evidence | Recover missing implementations and understand hardware contracts |
+| Upstream Linux 6.x and adjacent MediaTek SoCs | Current kernel interfaces | Native subsystem design and forward-port destination |
+
+For a 6.x port, use the older source as executable hardware documentation.
+Bring up one subsystem at a time with an existing upstream driver where
+possible, add MT6893 data and quirks, and port vendor code only where no native
+implementation exists. Preserve the old Android userspace UAPI only where the
+LineageOS compatibility container needs it; do not build a kernel-wide
+emulation of Linux 4.19 internals.
+
+### Fork decision
+
+Create a fork of
+[`OnePlusOSS/android_kernel_oneplus_mt6893`](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6893)
+when source-kernel work starts. Base its Karen branch on
+`oneplus/mt6893_14_14.0.0_nord_2t_5g` at
+`a5cdca1a88dc328a44dee724193830254fc551da`. This is the primary vendor-kernel
+fork for:
+
+- reconstructing or replacing the missing `vendor/oplus` dependencies;
+- enabling and testing kexec where the hardware and effective configuration
+  permit it;
+- retaining the exact Android 14 UAPI and firmware relationship;
+- producing a reproducible 4.19 control kernel before attempting broad
+  forward ports.
+
+Do not use the 4.14 donor as the primary fork. Keep its exact commit as a
+read-only Git remote or pinned source input and import only reviewed,
+attributed pieces. An archival fork is reasonable to preserve availability,
+but development should not inherit its unrelated device history and RKSU
+changes.
+
+Do not evolve the OnePlus 4.19 fork into 6.x through a giant version merge.
+When the first 6.x kexec experiments begin, create a separate fork or patch
+stack based on the selected supported upstream Linux LTS. Keep MT6893 and
+Karen commits reviewable by subsystem and pin the tested commit from this
+integration repository. A Mobile NixOS fork is needed only when the cleaned
+device module is ready to propose upstream.
+
+The repository boundaries are therefore:
+
+```text
+oneplus-nord2t-karen
+  integration, NixOS configuration, image audits and hardware safety
+
+fork: OnePlusOSS/android_kernel_oneplus_mt6893
+  reproducible vendor 4.19 control kernel and Android compatibility work
+
+pinned donor: lijilong34/android_kernel_4.14_MT6853
+  source archaeology only
+
+later fork: upstream Linux LTS
+  native 6.x MT6893 and Karen support
+
+later fork: mobile-nixos/mobile-nixos
+  upstreamable Karen device module only
+```
+
 ## Kexec-first strategy
 
 Before writing a NixOS boot image to either slot, use a rooted LineageOS
@@ -508,15 +620,18 @@ tests proving that neither product's allowed write set widened.
 Do not split merely because the root filesystem is NixOS. Create or use a
 second repository only for a real ownership boundary:
 
-1. A cleaned, generally useful `oneplus-karen` Mobile NixOS device definition
+1. Kernel source modifications start. Use the vendor and upstream forks
+   defined in the kernel source map while this repository owns their pinned
+   integration, tests and device-write policy.
+2. A cleaned, generally useful `oneplus-karen` Mobile NixOS device definition
    is ready for an upstream pull request. Develop that patch in a fork of
    `mobile-nixos`; keep this repository as the pinned integration and safety
    harness until the change is merged.
-2. Reusable MT6893 family support becomes relevant to multiple devices and
+3. Reusable MT6893 family support becomes relevant to multiple devices and
    belongs upstream rather than in Karen-specific code.
-3. A large Android compatibility project acquires an independent release,
+4. A large Android compatibility project acquires an independent release,
    issue, licensing or maintainer lifecycle.
-4. Conventional LineageOS device, kernel and vendor repositories are prepared
+5. Conventional LineageOS device, kernel and vendor repositories are prepared
    for upstream Android review, as already described in the LineageOS port
    assessment.
 
