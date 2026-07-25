@@ -309,6 +309,18 @@
           );
         };
 
+        auditLineageRuntime = pkgs.writeShellApplication {
+          name = "nord2t-audit-lineage-runtime";
+          runtimeInputs = with pkgs; [
+            android-tools
+            coreutils
+            gawk
+            gnugrep
+            gnused
+          ];
+          text = builtins.readFile ./scripts/audit-lineage-runtime;
+        };
+
         preflightLineageUserspace = pkgs.writeShellApplication {
           name = "nord2t-preflight-lineage-userspace";
           runtimeInputs = with pkgs; [
@@ -651,6 +663,7 @@
           adaway-apk = adawayApk;
           audit-boot = auditBoot;
           audit-lineage-images = auditLineageImages;
+          audit-lineage-runtime = auditLineageRuntime;
           default = nord2tPrivacy;
           extract-stock = extractStock;
           firmware-3001 = stockFirmware3001;
@@ -711,6 +724,10 @@
           type = "app";
           program = "${self.packages.${system}.audit-lineage-images}/bin/nord2t-audit-lineage-images";
         };
+        audit-lineage-runtime = {
+          type = "app";
+          program = "${self.packages.${system}.audit-lineage-runtime}/bin/nord2t-audit-lineage-runtime";
+        };
         privacy = {
           type = "app";
           program = "${self.packages.${system}.privacy}/bin/nord2t-privacy";
@@ -759,6 +776,7 @@
           (self.packages.${system})
           audit-boot
           audit-lineage-images
+          audit-lineage-runtime
           extract-stock
           lineage-keybound-adb
           lineage-userspace

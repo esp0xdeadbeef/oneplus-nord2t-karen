@@ -9,6 +9,7 @@ device_makefile="$script_directory/lineage/device/oneplus/karen/device.mk"
 boot_audit="$script_directory/scripts/audit-boot-image"
 image_audit="$script_directory/scripts/audit-lineage-images"
 keybound_helper="$script_directory/scripts/lineage-keybound-adb"
+runtime_audit="$script_directory/scripts/audit-lineage-runtime"
 
 critical_packages=(
   com.android.permissioncontroller
@@ -55,6 +56,18 @@ if grep -Eq \
   'fastboot .*(erase|format|delete-logical-partition|create-logical-partition|resize-logical-partition)' \
   "$keybound_helper"; then
   echo "Key-bound ADB helper contains a destructive non-boot operation." >&2
+  exit 1
+fi
+grep -Fq 'voice_calls_sms_and_emergency_calls' "$runtime_audit"
+grep -Fq 'charging_and_thermal_behavior' "$runtime_audit"
+grep -Fq 'echo "manual_check=' "$runtime_audit"
+grep -Fq 'ro.crypto.state' "$runtime_audit"
+grep -Fq 'ro.boot.verifiedbootstate' "$runtime_audit"
+grep -Fq 'getenforce' "$runtime_audit"
+if grep -Eqi \
+  '(android_id|serialno|imei|subscriber|iphonesubinfo|dumpsys (wifi|telephony)|ip addr|/sys/class/net|su -c|/dev/block/by-name/(nvram|nvdata|persist|proinfo|protect1|protect2))' \
+  "$runtime_audit"; then
+  echo "Runtime audit can read identifying or device-unique data." >&2
   exit 1
 fi
 if find "$script_directory/lineage" \

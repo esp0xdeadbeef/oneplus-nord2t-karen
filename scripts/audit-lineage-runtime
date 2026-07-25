@@ -1,0 +1,242 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-audit-lineage-runtime
+
+Run a passive, privacy-safe Lineage bring-up audit over one authorized ADB
+connection. The command reports only general boot, security, service, process,
+device-node-count and charging state. It does not read radio identifiers,
+network addresses, account data, hardware secrets or user content.
+EOF
+}
+
+fail() {
+  echo "Lineage runtime audit failed: $*" >&2
+  exit 1
+}
+
+if [[ $# -ne 0 ]]; then
+  usage
+  exit 2
+fi
+
+mapfile -t adb_devices < <(
+  adb devices |
+    awk 'NR > 1 && $2 == "device" { print $1 }'
+)
+[[ "${#adb_devices[@]}" -eq 1 ]] ||
+  fail "expected exactly one authorized ADB device"
+adb_serial="${adb_devices[0]}"
+
+adb_value() {
+  adb -s "$adb_serial" exec-out "$@" 2>/dev/null |
+    tr -d '\r'
+}
+
+property() {
+  adb_value getprop "$1"
+}
+
+pass_count=0
+fail_count=0
+
+pass_check() {
+  echo "pass=$1"
+  ((pass_count += 1))
+}
+
+fail_check() {
+  echo "fail=$1"
+  ((fail_count += 1))
+}
+
+check_equal() {
+  local label="$1"
+  local actual="$2"
+  local expected="$3"
+
+  if [[ "$actual" == "$expected" ]]; then
+    pass_check "$label"
+  else
+    fail_check "$label"
+  fi
+}
+
+check_nonempty() {
+  local label="$1"
+  local actual="$2"
+
+  if [[ -n "$actual" ]]; then
+    pass_check "$label"
+  else
+    fail_check "$label"
+  fi
+}
+
+check_one_of() {
+  local label="$1"
+  local actual="$2"
+  shift 2
+  local expected
+
+  for expected in "$@"; do
+    if [[ "$actual" == "$expected" ]]; then
+      pass_check "$label"
+      return
+    fi
+  done
+  fail_check "$label"
+}
+
+check_equal boot_completed "$(property sys.boot_completed)" 1
+check_equal model "$(property ro.product.model)" CPH2399
+check_one_of device "$(property ro.product.device)" OP557AL1 karen
+check_equal platform_api "$(property ro.build.version.sdk)" 34
+check_nonempty lineage_version "$(property ro.lineage.version)"
+check_equal active_slot "$(property ro.boot.slot_suffix)" _a
+check_equal bootloader_flash_state "$(property ro.boot.flash.locked)" 0
+check_equal vbmeta_device_state "$(property ro.boot.vbmeta.device_state)" unlocked
+check_equal verified_boot_state "$(property ro.boot.verifiedbootstate)" orange
+check_equal adb_authentication "$(property ro.adb.secure)" 1
+check_equal adb_shell_uid "$(adb_value id -u)" 2000
+check_equal selinux "$(adb_value getenforce)" Enforcing
+check_equal encryption_state "$(property ro.crypto.state)" encrypted
+check_equal encryption_type "$(property ro.crypto.type)" file
+check_equal vold "$(property init.svc.vold)" running
+check_equal zygote "$(property init.svc.zygote)" running
+check_equal zygote_secondary "$(property init.svc.zygote_secondary)" running
+
+temporary_directory="$(mktemp -d -t nord2t-lineage-runtime.XXXXXXXX)"
+cleanup() {
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+
+adb_value mount >"$temporary_directory/mounts.txt"
+if grep -Fq ' on /data type f2fs ' "$temporary_directory/mounts.txt"; then
+  pass_check data_f2fs
+else
+  fail_check data_f2fs
+fi
+
+adb_value service list >"$temporary_directory/services.txt"
+check_binder_service() {
+  local service="$1"
+
+  if grep -Fq "$service:" "$temporary_directory/services.txt"; then
+    pass_check "binder_$service"
+  else
+    fail_check "binder_$service"
+  fi
+}
+
+for service in \
+  activity \
+  package \
+  display \
+  input \
+  phone \
+  isub \
+  telecom \
+  wifi \
+  bluetooth_manager \
+  media.camera \
+  media.audio_flinger \
+  sensorservice \
+  location \
+  usb \
+  power; do
+  check_binder_service "$service"
+done
+
+check_process() {
+  local process="$1"
+
+  if [[ -n "$(adb_value pidof "$process")" ]]; then
+    pass_check "process_$process"
+  else
+    fail_check "process_$process"
+  fi
+}
+
+for process in \
+  system_server \
+  surfaceflinger \
+  audioserver \
+  cameraserver \
+  keystore2; do
+  check_process "$process"
+done
+
+input_event_count="$(
+  # The positional parameters expand on Android, not in this host shell.
+  # shellcheck disable=SC2016
+  adb_value sh -c \
+    'set -- /dev/input/event*; if [ -e "$1" ]; then echo "$#"; else echo 0; fi'
+)"
+if [[ "$input_event_count" =~ ^[0-9]+$ ]] &&
+  ((input_event_count > 0)); then
+  pass_check input_event_nodes
+else
+  fail_check input_event_nodes
+fi
+echo "input_event_nodes=$input_event_count"
+
+drm_card_count="$(
+  # The positional parameters expand on Android, not in this host shell.
+  # shellcheck disable=SC2016
+  adb_value sh -c \
+    'set -- /dev/dri/card*; if [ -e "$1" ]; then echo "$#"; else echo 0; fi'
+)"
+if [[ "$drm_card_count" =~ ^[0-9]+$ ]] &&
+  ((drm_card_count > 0)); then
+  pass_check drm_card_nodes
+else
+  fail_check drm_card_nodes
+fi
+echo "drm_card_nodes=$drm_card_count"
+
+adb_value dumpsys battery >"$temporary_directory/battery.txt"
+battery_value() {
+  local key="$1"
+
+  sed -nE "s/^[[:space:]]*${key}: (.*)$/\\1/p" \
+    "$temporary_directory/battery.txt" |
+    head -n 1
+}
+
+echo "battery_status=$(battery_value status)"
+echo "battery_level=$(battery_value level)"
+echo "battery_usb_powered=$(battery_value 'USB powered')"
+echo "battery_ac_powered=$(battery_value 'AC powered')"
+
+for manual_check in \
+  display_and_brightness \
+  touch_and_gestures \
+  lock_and_file_decryption \
+  voice_calls_sms_and_emergency_calls \
+  mobile_data_and_ims \
+  wifi_connectivity_and_throughput \
+  bluetooth_pairing_and_audio \
+  front_and_rear_cameras \
+  speaker_microphones_and_headsets \
+  fingerprint_and_nfc \
+  sensors_and_auto_rotation \
+  gnss_fix \
+  usb_mtp_and_tethering \
+  suspend_resume \
+  charging_and_thermal_behavior; do
+  echo "manual_check=$manual_check"
+done
+
+echo "runtime_passes=$pass_count"
+echo "runtime_failures=$fail_count"
+
+((fail_count == 0)) ||
+  fail "$fail_count passive checks did not pass"
+
+echo "Karen passive Lineage runtime audit passed."
