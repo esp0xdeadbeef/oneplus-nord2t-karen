@@ -1,0 +1,341 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage:
+  nord2t-lineage-userspace install LINEAGE_DIR STOCK_RESTORE_DIR [--yes]
+  nord2t-lineage-userspace restore STOCK_RESTORE_DIR [--yes]
+
+Install writes only system, system_ext, product, boot_a and the three slot-A
+AVB metadata partitions after the complete stock/live preflight passes.
+Vendor, odm, dtbo and all OPlus logical partitions remain untouched.
+
+Restore writes the five exact stock logical images and the exact stock boot_a
+and AVB metadata. It can start from authorized ADB, fastbootd or
+bootloader-fastboot. --yes skips only the interactive destructive-write
+confirmation.
+EOF
+}
+
+fail() {
+  echo "Lineage userspace operation failed: $*" >&2
+  if [[ "${write_started:-false}" == true ]]; then
+    echo "A partition write was interrupted." >&2
+    echo "Keep the phone in its current USB mode and run the restore action." >&2
+  fi
+  exit 1
+}
+
+if [[ $# -eq 1 && ("$1" == -h || "$1" == --help) ]]; then
+  usage
+  exit 0
+fi
+
+[[ $# -ge 2 ]] || {
+  usage
+  exit 2
+}
+
+action="$1"
+shift
+assume_yes=false
+
+case "$action" in
+  install)
+    [[ $# -ge 2 ]] || {
+      usage
+      exit 2
+    }
+    lineage_directory="$(realpath "$1")"
+    restore_directory="$(realpath "$2")"
+    shift 2
+    ;;
+  restore)
+    restore_directory="$(realpath "$1")"
+    shift
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --yes)
+      assume_yes=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+partition_manifest="${PARTITION_MANIFEST:-@PARTITION_MANIFEST@}"
+[[ -r "$partition_manifest" ]] ||
+  fail "partition manifest is not readable"
+[[ -d "$restore_directory" ]] ||
+  fail "stock restore directory is not readable"
+
+restore_images=(
+  boot
+  dtbo
+  system
+  system_ext
+  product
+  vendor
+  odm
+  vbmeta
+  vbmeta_system
+  vbmeta_vendor
+)
+
+verify_restore_bundle() {
+  local partition image expected_size expected_hash
+
+  for partition in "${restore_images[@]}"; do
+    image="$restore_directory/images/$partition.img"
+    [[ -f "$image" && -r "$image" && -s "$image" ]] ||
+      fail "stock restore image is missing: $partition.img"
+    expected_size="$(
+      jq -er --arg name "$partition" \
+        '.partitions[] | select(.name == $name) | .size' \
+        "$partition_manifest"
+    )"
+    expected_hash="$(
+      jq -er --arg name "$partition" \
+        '.partitions[] | select(.name == $name) | .sha256' \
+        "$partition_manifest"
+    )"
+    [[ "$(stat -c %s "$image")" == "$expected_size" ]] ||
+      fail "stock restore size is wrong: $partition.img"
+    [[ "$(sha256sum "$image" | cut -d ' ' -f 1)" == "$expected_hash" ]] ||
+      fail "stock restore hash is wrong: $partition.img"
+  done
+}
+
+verify_restore_bundle
+
+if [[ "$action" == install ]]; then
+  [[ -d "$lineage_directory" ]] ||
+    fail "Lineage image directory is not readable"
+  nord2t-preflight-lineage-userspace \
+    "$lineage_directory" \
+    "$restore_directory"
+fi
+
+if [[ "$assume_yes" != true ]]; then
+  if [[ "$action" == install ]]; then
+    printf 'Write the audited Lineage userspace to slot A? Type CPH2399: ' >&2
+  else
+    printf 'Restore exact .3001 userspace and boot to slot A? Type CPH2399: ' >&2
+  fi
+  read -r confirmation
+  [[ "$confirmation" == CPH2399 ]] || fail "confirmation declined"
+fi
+
+temporary_directory="$(mktemp -d -t nord2t-lineage-write.XXXXXXXX)"
+cleanup() {
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+
+redact_fastboot_output() {
+  sed "s/${fastboot_serial//\//\\/}/<device>/g" "$1"
+}
+
+run_fastboot() {
+  local output="$temporary_directory/fastboot-output.txt"
+
+  if fastboot -s "$fastboot_serial" "$@" >"$output" 2>&1; then
+    redact_fastboot_output "$output"
+    return 0
+  fi
+  redact_fastboot_output "$output" >&2
+  return 1
+}
+
+fastboot_variable() {
+  local variable="$1"
+  local output="$temporary_directory/getvar-output.txt"
+
+  fastboot -s "$fastboot_serial" getvar "$variable" >"$output" 2>&1 ||
+    return 1
+  sed -nE "s/.*${variable}: ([^[:space:]]+).*/\\1/p" "$output" |
+    head -n 1
+}
+
+select_adb_device() {
+  mapfile -t adb_devices < <(
+    adb devices |
+      awk 'NR > 1 && $2 == "device" { print $1 }'
+  )
+  [[ "${#adb_devices[@]}" -eq 1 ]] || return 1
+  adb_serial="${adb_devices[0]}"
+}
+
+select_fastboot_mode() {
+  local expected_mode="$1"
+
+  mapfile -t fastboot_devices < <(
+    fastboot devices |
+      awk -v mode="$expected_mode" '$2 == mode { print $1 }'
+  )
+  [[ "${#fastboot_devices[@]}" -eq 1 ]] || return 1
+  fastboot_serial="${fastboot_devices[0]}"
+}
+
+wait_for_fastboot_mode() {
+  local expected_mode="$1"
+
+  for _ in $(seq 1 60); do
+    if select_fastboot_mode "$expected_mode"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+verify_bootloader_identity() {
+  [[ "$(fastboot_variable is-userspace)" == no ]] ||
+    fail "device is not in bootloader-fastboot"
+  [[ "$(fastboot_variable unlocked)" == yes ]] ||
+    fail "bootloader is not unlocked"
+  [[ "$(fastboot_variable product)" == k6893v1_64_k419 ]] ||
+    fail "bootloader product is not the tested Karen platform"
+  [[ "$(fastboot_variable hw-revision)" == ca00 ]] ||
+    fail "bootloader hardware revision is not the tested CPH2399 revision"
+}
+
+ensure_bootloader_slot_a() {
+  local current_slot
+
+  current_slot="$(fastboot_variable current-slot)"
+  [[ "$current_slot" == a || "$current_slot" == b ]] ||
+    fail "bootloader reported an unexpected active slot"
+  if [[ "$current_slot" == b ]]; then
+    run_fastboot set_active a
+  fi
+  [[ "$(fastboot_variable current-slot)" == a ]] ||
+    fail "could not make slot A active"
+}
+
+verify_fastbootd() {
+  [[ "$(fastboot_variable is-userspace)" == yes ]] ||
+    fail "device is not in fastbootd"
+  [[ "$(fastboot_variable current-slot)" == a ]] ||
+    fail "slot A is not active in fastbootd"
+}
+
+reboot_bootloader_to_fastbootd() {
+  local output="$temporary_directory/reboot-fastboot-output.txt"
+
+  timeout 20 fastboot -s "$fastboot_serial" reboot fastboot \
+    >"$output" 2>&1 || true
+  redact_fastboot_output "$output"
+  wait_for_fastboot_mode fastbootd ||
+    fail "fastbootd did not enumerate after the mode transition"
+  verify_fastbootd
+}
+
+reboot_fastbootd_to_bootloader() {
+  run_fastboot reboot bootloader
+  wait_for_fastboot_mode fastboot ||
+    fail "bootloader-fastboot did not enumerate after the mode transition"
+  verify_bootloader_identity
+  ensure_bootloader_slot_a
+}
+
+enter_bootloader_from_adb() {
+  select_adb_device || return 1
+  adb -s "$adb_serial" reboot bootloader >/dev/null 2>&1 ||
+    fail "ADB could not request bootloader-fastboot"
+  wait_for_fastboot_mode fastboot ||
+    fail "bootloader-fastboot did not enumerate"
+  verify_bootloader_identity
+  ensure_bootloader_slot_a
+}
+
+ensure_fastbootd() {
+  if select_fastboot_mode fastbootd; then
+    if [[ "$(fastboot_variable current-slot)" != a ]]; then
+      reboot_fastbootd_to_bootloader
+      reboot_bootloader_to_fastbootd
+    else
+      verify_fastbootd
+    fi
+    return
+  fi
+  if select_fastboot_mode fastboot; then
+    verify_bootloader_identity
+    ensure_bootloader_slot_a
+    reboot_bootloader_to_fastbootd
+    return
+  fi
+  if enter_bootloader_from_adb; then
+    reboot_bootloader_to_fastbootd
+    return
+  fi
+  fail "expected one authorized ADB, fastbootd or bootloader-fastboot device"
+}
+
+write_started=false
+report_interrupted_write() {
+  local status="$?"
+
+  if [[ "$write_started" == true ]]; then
+    echo "A partition write was interrupted." >&2
+    echo "Keep the phone in its current USB mode and run the restore action." >&2
+  fi
+  exit "$status"
+}
+trap report_interrupted_write ERR
+
+ensure_fastbootd
+write_started=true
+
+if [[ "$action" == install ]]; then
+  for partition in system system_ext product; do
+    run_fastboot flash "$partition" "$lineage_directory/$partition.img"
+  done
+
+  reboot_fastbootd_to_bootloader
+  for partition in vbmeta_system vbmeta_vendor vbmeta; do
+    run_fastboot \
+      flash "${partition}_a" \
+      "$lineage_directory/$partition.img"
+  done
+  run_fastboot flash boot_a "$lineage_directory/boot.img"
+  write_started=false
+  run_fastboot reboot
+
+  echo "Audited Lineage userspace written to slot A."
+  echo "No OPlus logical partition, vendor, odm or dtbo image was written."
+  echo "Runtime boot verification is still required."
+else
+  for partition in system system_ext product vendor odm; do
+    run_fastboot \
+      flash "$partition" \
+      "$restore_directory/images/$partition.img"
+  done
+
+  reboot_fastbootd_to_bootloader
+  for partition in vbmeta_system vbmeta_vendor vbmeta; do
+    run_fastboot \
+      flash "${partition}_a" \
+      "$restore_directory/images/$partition.img"
+  done
+  run_fastboot flash boot_a "$restore_directory/images/boot.img"
+  write_started=false
+  run_fastboot reboot
+
+  echo "Exact .3001 logical userspace, boot and AVB metadata restored to slot A."
+  echo "No OPlus logical partition or dtbo image was written."
+fi

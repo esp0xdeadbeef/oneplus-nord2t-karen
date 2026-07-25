@@ -308,6 +308,21 @@
           );
         };
 
+        lineageUserspace = pkgs.writeShellApplication {
+          name = "nord2t-lineage-userspace";
+          runtimeInputs = with pkgs; [
+            android-tools
+            coreutils
+            gawk
+            gnused
+            jq
+            preflightLineageUserspace
+          ];
+          text = builtins.replaceStrings ["@PARTITION_MANIFEST@"] ["${./firmware/partitions-3001.json}"] (
+            builtins.readFile ./scripts/lineage-userspace
+          );
+        };
+
         snapshotDevice = pkgs.writeShellApplication {
           name = "nord2t-snapshot";
           runtimeInputs = with pkgs; [
@@ -600,6 +615,7 @@
           extract-stock = extractStock;
           firmware-3001 = stockFirmware3001;
           hma-apk = hmaApk;
+          lineage-userspace = lineageUserspace;
           magisk-apk = magiskApk;
           oneplus-kernel-modules = oneplusKernelModules;
           oneplus-kernel-source = oneplusKernelSource;
@@ -636,6 +652,10 @@
         extract-stock = {
           type = "app";
           program = "${self.packages.${system}.extract-stock}/bin/nord2t-extract-stock";
+        };
+        lineage-userspace = {
+          type = "app";
+          program = "${self.packages.${system}.lineage-userspace}/bin/nord2t-lineage-userspace";
         };
         audit-boot = {
           type = "app";
@@ -694,6 +714,7 @@
           audit-boot
           audit-lineage-images
           extract-stock
+          lineage-userspace
           privacy
           preflight-lineage-userspace
           probe-preloader

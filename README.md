@@ -165,6 +165,20 @@ This preflight is read-only. It verifies the complete image/AVB bundle, every
 rollback hash, the active slot and the preserved OPlus allocation; it does not
 reboot, flash, erase or wipe the phone.
 
+Only after that command passes and a rollback test is ready, the bounded
+hardware helper can install or restore the same directories:
+
+```bash
+nix run .#lineage-userspace -- install ./result ./result-stock-restore
+nix run .#lineage-userspace -- restore ./result-stock-restore
+```
+
+The install action leaves exact live `vendor`, `odm` and `dtbo` in place and
+writes only `system`, `system_ext`, `product`, `boot_a` and the three slot-A
+AVB metadata images. The restore action verifies every stock hash again before
+writing the five standard logical images plus stock slot-A boot/AVB metadata.
+Neither action can name or write an OPlus logical partition.
+
 The pinned build completed successfully on `s-tau` and its resulting
 recovery-as-boot image passed the repository's structural audit. Its kernel
 and DTB are byte-identical to `.3001` stock, while the ramdisk contains the
