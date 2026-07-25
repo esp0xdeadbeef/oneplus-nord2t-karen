@@ -2,8 +2,8 @@
 
 # Mobile NixOS feature plan
 
-Checked against the current UBports and Mobile NixOS documentation on
-2026-07-25.
+Checked against the current UBports, Mobile NixOS, upstream Linux,
+postmarketOS and published OnePlus kernel sources on 2026-07-26.
 
 ## Decision
 
@@ -111,13 +111,20 @@ Add the NixOS work without moving or refactoring the working LineageOS path:
 ```text
 nixos/
   default.nix
-  device.nix
   configuration.nix
-  stage-1.nix
   rootfs.nix
   kexec-bundle.nix
-  boot-image.nix
-  lineage-container.nix
+  families/
+    mt6893/
+      default.nix
+      kernel.nix
+      firmware.nix
+      stage-1.nix
+  devices/
+    oneplus-karen/
+      default.nix
+      boot-image.nix
+      lineage-container.nix
   README.md
 
 docs/
@@ -134,6 +141,14 @@ scripts/
 `lineage-container.nix` records the intended boundary from the start, but the
 container must not be activated until the native host reaches systemd and
 authenticated USB access without it.
+
+The family/device split follows the proven Mobile NixOS SDM845 pattern. The
+MT6893 family owns the kernel package, early firmware closure, USB setup and
+boot-family defaults. The Karen device module owns only verified
+`CPH2399`-specific facts such as identity, screen geometry, the resolved DTB,
+boot-image layout and hardware quirks. This remains useful with only one
+MT6893 device because it prevents product facts from leaking into generic
+kernel and stage-1 code.
 
 Keep the existing firmware manifests and extraction paths shared. Extract a
 new `device/` or `common/` Nix module only after LineageOS and NixOS actually
@@ -325,6 +340,209 @@ implementation exists. Preserve the old Android userspace UAPI only where the
 LineageOS compatibility container needs it; do not build a kernel-wide
 emulation of Linux 4.19 internals.
 
+### OnePlus kernel generations
+
+The published OnePlus 5 through 13 kernels form a useful history of how OPlus
+moved its common hooks and drivers across Linux API generations:
+
+| Product used for inspection | SoC family | Published branch | Kernel |
+| --- | --- | --- | --- |
+| [OnePlus 5 / 5T](https://github.com/OnePlusOSS/android_kernel_oneplus_msm8998/tree/oneplus/QC8998_Q_10.0) | Qualcomm MSM8998 | `QC8998_Q_10.0` | 4.4.205 |
+| [OnePlus 6 / 6T](https://github.com/OnePlusOSS/android_kernel_oneplus_sdm845/tree/oneplus/SDM845_R_11.0) | Qualcomm SDM845 | `SDM845_R_11.0` | 4.9.227 |
+| [OnePlus 7](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8150/tree/oneplus/sm8150_s_12.1_op7pro) | Qualcomm SM8150 | `sm8150_s_12.1_op7pro` | 4.14.180 |
+| [OnePlus 8T](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8250/tree/846e71f228ad605c75b53064c4c165a1361a0bfe) | Qualcomm SM8250 | `sm8250_u_14.0.0_op8t` | 4.19.157 |
+| [OnePlus 9](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8350/tree/9e38a9fabb4de096bf386b7be988b7f7c5e4c58e) | Qualcomm SM8350 | `sm8350_u_14.0.0_oneplus9` | 5.4.254 |
+| [OnePlus 10 Pro](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8450/tree/449760504b3a75728eb60479f5b34dc51cb263ce) | Qualcomm SM8450 | `sm8450_v_15.0.0_oneplus_10_pro` | 5.10.226 |
+| [OnePlus 11](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/tree/c462ef8ffab7a58e035ee04705b16cdfced494b1) | Qualcomm SM8550 | `sm8550_v_15.0.0_oneplus11` | 5.15.167 |
+| [OnePlus 12](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650/tree/e39bf7032e38c547d588372a11a5dd55eb714860) | Qualcomm SM8650 | `sm8650_v_15.0.0_oneplus12` | 6.1.118 |
+| [OnePlus 13](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8750/tree/d09a875fd283664a4ad3a8722fb608356985dab1) | Qualcomm SM8750 | `sm8750_v_15.0.0_oneplus_13` | 6.6.66 |
+
+These are not a sequence of patches that can be replayed to turn Karen into a
+6.x device. Most of the SoC integration is Qualcomm-specific. They are useful
+for finding the same OPlus feature before and after a kernel API change, for
+seeing when a private hook was removed, and for finding generic replacements
+for OPlus charging, touch, fingerprint, network, security and performance
+code.
+
+The OnePlus 8T snapshot is especially valuable for the first 4.19 source-build
+experiment. The published Karen kernel contains 60 symlink entries into 53
+unique `vendor/oplus` targets that are absent from its repository. A tree-only
+audit found the following exact or directory-prefix coverage:
+
+| Pinned OPlus module source | Kernel generation | Karen link entries present |
+| --- | --- | ---: |
+| [OnePlus 8T Android 14](https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8250/tree/0a301570ef70f6f9bfe1840451c9d41f5ddce6b8/vendor/oplus) | 4.19 | 58 / 60 |
+| [OnePlus 9 Android 14](https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8350/tree/d95833d6520887112ffed6537bfbef5e28650ca1/vendor/oplus) | 5.4 | 57 / 60 |
+| OnePlus 10 Pro through 13 Android 15 snapshots | 5.10 through 6.6 | 17 / 60 each |
+
+The two OnePlus 8T misses are both the `oplus_performance/klockopt` category.
+That makes the 8T publication a strong source-level donor for reconstructing
+the missing 4.19 OPlus layer, not proof that it is the unpublished Karen
+release source. Path presence says nothing about Kconfig selections, board
+data, symbol versions, generated headers, downstream changes or the hardware
+behind a driver.
+
+A bounded reconstruction experiment may:
+
+1. pin both OnePlus 8T commits shown above;
+2. materialize only the exact directories requested by Karen's symlinks in
+   the expected `vendor/oplus` position;
+3. make no code edits for the first compile attempt;
+4. record every missing symbol, header and configuration dependency;
+5. resolve `klockopt` separately and disable it only if the effective stock
+   configuration and runtime requirements prove it optional;
+6. compare failures with later OPlus revisions instead of merging whole
+   device trees.
+
+Any result remains a reconstructed source tree. It must not be labelled an
+exact OnePlus Nord 2T publication, and a successful compile does not authorize
+booting or flashing it.
+
+### MediaTek forward-port bridges
+
+The newer OnePlus MediaTek publications are more relevant to native 6.x work
+than the Qualcomm OnePlus 9 through 13 kernels:
+
+| Product used for inspection | SoC | Pinned or named branch | Kernel | Porting role |
+| --- | --- | --- | --- | --- |
+| [Nord CE 2](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6877/tree/3c1e3d432d0c35afa7fded974b50fa6617219e0f) | MT6877 | `mt6877_t_13.0.0_nord_ce2` | 4.19.191 | Adjacent 4.19 MediaTek/OPlus baseline |
+| [Nord 2T](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6893/tree/a5cdca1a88dc328a44dee724193830254fc551da) | MT6893 | `mt6893_14_14.0.0_nord_2t_5g` | 4.19.191 | Exact device source baseline |
+| [OnePlus 10R](https://github.com/OnePlusOSS/android_kernel_5.10_oneplus_mt6895/tree/f3e95e79e03d984d1e16ad31bdf66d62ce80f7be) | MT6895 | `mt6895_v_15.0.0_oneplus_10r` | 5.10.209 | Closest intermediate SoC/API bridge |
+| [Nord 3](https://github.com/OnePlusOSS/android_kernel_5.10_oneplus_mt6983/tree/f5b6dd4fc9c3eedb2db321b60c906af6aeea0c0f) | MT6983 | `mt6983_b_16.0.0_nord_3` | 5.10.236 | Newer 5.10 MediaTek implementation |
+| [Nord CE 5](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6897/tree/e17c1ca9ddf6122d8c6ec62c958a257365d6260e) | MT6897 | `mt6897_b_16.0.0_nord_ce5` | 6.1.134 | Modern 6.1 MediaTek/OPlus reference |
+| [Nord N30 SE](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6833/tree/867955635f4ed678c985a4b3b5fac29feece9cae) | MT6833 | `mt6833_v_15.0.0_nord_n30_se_5g` | 6.6.30 | Modern 6.6 MediaTek/OPlus reference |
+
+Their separate module repositories retain substantial structural overlap with
+the published Karen module tree. A filename-level inventory found about 3,400
+to 3,600 shared basenames between Karen's 9,812 module files and each selected
+5.10, 6.1 or 6.6 tree. This is only a discovery metric, but it exposes later
+implementations of MediaTek DRM/DDP, CMDQ, UFS, DVFS, camera CCU, connectivity,
+power and OPlus integration code:
+
+- [MT6895 Android 15 modules](https://github.com/OnePlusOSS/android_vendor_mediatek_kernel_modules_mt6895/tree/189765887074ef7d1135e900d34932251fc3af58);
+- [MT6983 Android 16 modules](https://github.com/OnePlusOSS/android_kernel_modules_oneplus_mt6983/tree/f7ec362eedc982b45828857448521bfd451d4f52);
+- [MT6897 Linux 6.1 modules and device trees](https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_mt6897/tree/3e843a44bcf2738d421e6a08ce753ee71893be47);
+- [MT6833 Linux 6.6 modules](https://github.com/OnePlusOSS/android_kernel_modules_oneplus_mt6833/tree/9018c48d2e0ea07b6cbdac909a3225f2a5070ec0).
+
+The same path-only audit found 21 of Karen's 60 missing OPlus link entries in
+the MT6895 tree, 20 in MT6833 and 58 in MT6897. The MT6897 misses are the
+legacy `vendor/oplus/kernel/system` directory and its include directory; the
+union of MT6897 and MT6895 contains all 60 path categories. This demonstrates
+that later public implementations exist for every missing category. It does
+not establish that their ABIs or behavior match Karen.
+
+Use these sources as a per-subsystem migration ladder:
+
+```text
+Karen stock behavior and resolved DTB
+  -> Karen / OnePlus 8T 4.19 implementation
+  -> MT6895 or MT6983 5.10 implementation
+  -> MT6897 6.1 and MT6833 6.6 implementation
+  -> current upstream Linux subsystem
+```
+
+For each subsystem, identify the hardware contract in the old source, compare
+the later MediaTek conversions, and then implement the smallest upstream-style
+MT6893 driver or data addition. Do not merge an entire later SoC BSP. In
+particular, newer SMMU, clock, power-domain and GKI module layouts are useful
+API examples but are not substitutes for MT6893's old M4U relationships,
+register maps or firmware contracts.
+
+### OnePlus 6 as a full-Linux and NixOS reference
+
+The OnePlus 6 is the strongest available OnePlus architecture donor, but not a
+Karen driver donor. At inspected Mobile NixOS commit
+[`2c132754323fc1915e8d21dcfc0ef68ab084c6fb`](https://github.com/mobile-nixos/mobile-nixos/tree/2c132754323fc1915e8d21dcfc0ef68ab084c6fb):
+
+- the
+  [`oneplus-enchilada` device module](https://github.com/mobile-nixos/mobile-nixos/blob/2c132754323fc1915e8d21dcfc0ef68ab084c6fb/devices/oneplus-enchilada/default.nix)
+  is only 25 lines and imports a shared `sdm845-mainline` family;
+- the
+  [family module](https://github.com/mobile-nixos/mobile-nixos/blob/2c132754323fc1915e8d21dcfc0ef68ab084c6fb/devices/families/sdm845-mainline/default.nix)
+  owns the kernel, stage-1 firmware closure, Android boot layout, appended DTB,
+  USB gadget functions and SoC-level quirks;
+- device firmware is a separate, pinned, explicitly unfree derivation;
+- large modem firmware is deliberately omitted from stage 1.
+
+The exact Mobile NixOS kernel pin is not the current state of the OnePlus 6
+port. Its family module still selects the SDM845 project's 6.4 release, while
+postmarketOS commit
+[`88e3ba5b6f9456761b078d9baa0081cb640ec5ba`](https://gitlab.postmarketos.org/postmarketOS/pmaports/-/tree/88e3ba5b6f9456761b078d9baa0081cb640ec5ba/device/community)
+packages `sdm845-7.1-rc1-r0` and current userspace integration for firmware,
+audio, remote processors, the modem, A/B boot control and voice calls. Reuse
+the Mobile NixOS module shape, but check the active mainline and postmarketOS
+ports rather than copying its old kernel pin.
+
+The current upstream device description is also instructive:
+
+- the
+  [large SDM845 OnePlus common DTS](https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/qcom/sdm845-oneplus-common.dtsi)
+  describes shared hardware;
+- the
+  [Enchilada DTS](https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/qcom/sdm845-oneplus-enchilada.dts)
+  is a small model delta;
+- generic upstream drivers handle buttons, the alert slider, touchscreen,
+  fuel gauge, NFC, PMIC charging, LEDs, haptics, audio and the panel.
+
+The initial
+[OnePlus 6 mainline device-tree commit](https://github.com/torvalds/linux/commit/288ef8a42612)
+landed in 2021. Display, Wi-Fi, audio, battery, charger, sensors, NFC, alert
+slider and other functions were then added or corrected in separate changes.
+“Full Linux” was therefore achieved through generic subsystem drivers,
+accurate device-tree data, firmware packaging and small userspace services,
+not by translating all 4.9 kernel APIs behind one compatibility shim.
+
+The reusable OnePlus 6 constructs are:
+
+- a small device module on top of a SoC-family module;
+- separate, pinned firmware packaging and a minimal stage-1 firmware closure;
+- one common SoC kernel with a model-specific DTB;
+- declarative USB gadget networking for early access;
+- ramoops/pstore and, if the bootloader exposes one, a simple framebuffer for
+  early diagnostics;
+- gradual replacement of vendor functions by standard kernel subsystems;
+- userspace daemons for remaining firmware or modem protocols.
+
+Do not copy its Qualcomm boot offsets, 4 KiB page size, DTB name, firmware
+paths, remoteproc/QRTR/QMI/q6voice stack or DTBO-erasure instructions. Karen
+must continue to use its audited 2 KiB, header-v2 image and MediaTek-specific
+hardware contract. A bootloader-provided framebuffer, ramoops region or
+generic input binding is useful only after it is confirmed in Karen's resolved
+live device tree.
+
+The OnePlus 6 port does not run LineageOS as a hardware container; it has
+native mainline support. That is still directly relevant to the intended
+Karen architecture: keep NixOS in control and shrink the LineageOS
+compatibility island subsystem by subsystem whenever a native driver and
+userspace service become viable. The container is a pragmatic bridge for the
+remaining vendor HALs, not a permanent requirement for hardware that native
+Linux can already own.
+
+At the inspected upstream Linux revision, OnePlus device trees exist for the
+OnePlus 3/3T, 5/5T, 6/6T and the Nord N100. There is no complete upstream
+MT6893 device tree. The older mainline OnePlus ports demonstrate the method,
+while the newer official Android kernels primarily supply vendor API history.
+
+### Ranked donor use
+
+Use sources in this order and preserve the distinction in commit messages:
+
+1. `.3001` runtime observations, stock images and the resolved live DTB are
+   Karen behavior ground truth.
+2. The pinned OnePlus MT6893 4.19 kernel and module trees define the closest
+   published source baseline.
+3. The pinned OnePlus 8T 4.19 OPlus tree is the first donor for reconstructing
+   missing `vendor/oplus` dependencies.
+4. The MT6895 and MT6983 5.10 trees explain the intermediate MediaTek API
+   conversion.
+5. The MT6897 6.1 and MT6833 6.6 trees show modern MediaTek and OPlus module
+   structure.
+6. Upstream Linux defines the native driver target.
+7. The OnePlus 6 Mobile NixOS and postmarketOS ports define integration
+   structure and bring-up practice, not MediaTek implementation.
+8. Other OnePlus 5 through 13 Qualcomm trees are OPlus history references
+   only.
+
 ### Fork decision
 
 Create a fork of
@@ -346,6 +564,12 @@ read-only Git remote or pinned source input and import only reviewed,
 attributed pieces. An archival fork is reasonable to preserve availability,
 but development should not inherit its unrelated device history and RKSU
 changes.
+
+Do not create development forks of every OnePlus donor now. Keep the OnePlus
+8T and later MediaTek commits above as pinned, read-only remotes or Nix inputs.
+Fork one only after there is a reviewed change that genuinely belongs against
+that upstream. The actionable first fork remains the exact OnePlus MT6893
+repository; the integration repository remains this repository.
 
 Do not evolve the OnePlus 4.19 fork into 6.x through a giant version merge.
 When the first 6.x kexec experiments begin, create a separate fork or patch
