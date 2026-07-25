@@ -7,13 +7,15 @@ usage() {
   cat >&2 <<'EOF'
 usage:
   nord2t-lineage-keybound-adb install KEYBOUND_DIR BASE_DIR
-    [--allow-permissive-selinux] [--yes]
+    [--allow-permissive-selinux] [--stay-bootloader] [--yes]
   nord2t-lineage-keybound-adb restore BASE_DIR [--yes]
 
 Install a private, authenticated-ADB boot/vbmeta pair over the already
 installed audited BASE_DIR userspace. Restore writes the original BASE_DIR
 boot/vbmeta pair. The phone must already be in bootloader-fastboot on slot A.
 No logical partition, vendor, odm, dtbo or userdata image is written.
+--stay-bootloader is install-only and avoids a normal system boot before
+recovery add-ons have been sideloaded.
 EOF
 }
 
@@ -40,6 +42,7 @@ action="$1"
 shift
 assume_yes=false
 allow_permissive_selinux=false
+stay_bootloader=false
 
 case "$action" in
   install)
@@ -71,6 +74,10 @@ while [[ $# -gt 0 ]]; do
       allow_permissive_selinux=true
       shift
       ;;
+    --stay-bootloader)
+      stay_bootloader=true
+      shift
+      ;;
     *)
       echo "Unknown option: $1" >&2
       usage
@@ -81,6 +88,9 @@ done
 
 if [[ "$action" != install && "$allow_permissive_selinux" == true ]]; then
   fail "--allow-permissive-selinux is valid only for a private install"
+fi
+if [[ "$action" != install && "$stay_bootloader" == true ]]; then
+  fail "--stay-bootloader is valid only for a private install"
 fi
 
 [[ -d "$base_directory" ]] ||
@@ -288,7 +298,11 @@ write_started=true
 flash_partition vbmeta_a "$write_directory/vbmeta.img"
 flash_partition boot_a "$write_directory/boot.img"
 write_started=false
-run_fastboot reboot
+if [[ "$stay_bootloader" == true ]]; then
+  verify_bootloader_identity
+else
+  run_fastboot reboot
+fi
 
 if [[ "$action" == install ]]; then
   echo "Private key-bound Lineage boot pair written to slot A."
@@ -296,4 +310,7 @@ if [[ "$action" == install ]]; then
 else
   echo "Base Lineage boot pair restored to slot A."
   echo "Only vbmeta_a and boot_a were written; runtime verification is required."
+fi
+if [[ "$stay_bootloader" == true ]]; then
+  echo "Phone remains in bootloader-fastboot for the recovery add-on step."
 fi

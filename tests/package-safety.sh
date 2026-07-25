@@ -100,6 +100,10 @@ grep -Fq 'flash_partition boot_a' "$keybound_helper"
 grep -Fq 'embedded ADB key does not match this normal-user host key' "$keybound_helper"
 grep -Fq 'embedded-adb-key.token' "$keybound_helper"
 grep -Fq 'host-adb-key.token' "$keybound_helper"
+grep -Fq -- '--stay-bootloader is valid only for a private install' \
+  "$keybound_helper"
+grep -Fq 'Phone remains in bootloader-fastboot for the recovery add-on step.' \
+  "$keybound_helper"
 grep -Fq 'expected exactly one device already in bootloader-fastboot' "$keybound_helper"
 grep -Fq 'slot A is not active' "$keybound_helper"
 grep -Fq -- '--allow-permissive-selinux is valid only for a private install' \

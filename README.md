@@ -248,7 +248,7 @@ restore only its audited `boot_a`/`vbmeta_a` pair:
 
 ```bash
 nix run .#lineage-keybound-adb -- \
-  install ./private-keybound-result ./base-result
+  install ./private-keybound-result ./base-result --stay-bootloader
 nix run .#lineage-keybound-adb -- restore ./base-result
 ```
 
@@ -257,6 +257,8 @@ user's local `~/.android/adbkey` private key and requires every non-boot-pair
 image to be byte-identical to the base bundle. It compares the cryptographic
 ADB key token, not the disposable `user@host` comment. This is a bring-up
 fallback, not a release configuration.
+The install-only `--stay-bootloader` option permits the next boot to go
+directly to Lineage Recovery for GApps or another supported add-on.
 
 If an enforcing boot returns to recovery before Android ADB starts, a private
 diagnostic rebuild may additionally set `KAREN_DEBUG_PERMISSIVE=true`. Both
