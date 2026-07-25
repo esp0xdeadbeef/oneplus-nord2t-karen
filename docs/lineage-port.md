@@ -366,6 +366,25 @@ GNSS and the remainder of the manual parity matrix are still pending. No
 device identifier, authorization key, radio data or calibration data is
 recorded in this repository.
 
+### Recovery add-on compatibility
+
+The first optional MindTheGapps sideload failed before copying any file:
+recovery could not mount the Lineage-built EROFS `system` image read-write.
+Karen now builds only the Lineage-owned `system`, `system_ext` and `product`
+images as sparse ext4 with explicit free space. The public-OTA-derived
+`vendor` and `odm` images remain byte-exact EROFS prebuilts.
+
+The ext4 candidate passed VINTF and the complete image audit on `s-tau`.
+The auditor converts each sparse image to its expanded form, verifies the ext4
+superblock and required free blocks, and applies the live standard-image
+ceiling to expanded sizes rather than misleading sparse-file sizes. The five
+expanded standard images need 4,935,397,376 bytes, safely below the
+8,816,586,752-byte limit that preserves every OPlus logical partition.
+
+This keeps the vanilla ROM independent of Google apps. The intended optional
+flow remains Lineage Recovery sideload before the first system boot, rather
+than modifying the build graph to include GApps.
+
 As a headless fallback, the product now accepts an opt-in
 `KAREN_DEBUG_ADB_KEYS` path for one local Android public key while retaining
 `ro.adb.secure=1`. The normal audit rejects such a boot image; an explicit

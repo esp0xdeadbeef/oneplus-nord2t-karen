@@ -76,9 +76,19 @@ but aborted before copying files because the three Lineage-owned images were
 EROFS and `/mnt/system` could not be mounted read-write. No wipe followed that
 failed add-on attempt and Lineage rebooted normally. The device tree now
 builds `system`, `system_ext` and `product` as ext4 with explicit add-on
-headroom, while exact stock `vendor`/`odm` stay EROFS. Rebuild and audit this
-candidate on `s-tau`, then repeat the official recovery sideload before the
-factory reset.
+headroom, while exact stock `vendor`/`odm` stay EROFS.
+
+The resulting vanilla bundle was built on `s-tau` and passed VINTF, boot, AVB,
+filesystem and preserved-layout audits. Its sparse ext4 images expand to
+977,920,000 bytes for `system`, 500,445,184 bytes for `system_ext` and
+1,850,867,712 bytes for `product`; they retain at least 32 MiB, 64 MiB and
+1.25 GiB of free space respectively. Together with exact stock `vendor` and
+`odm`, the five standard images consume 4,935,397,376 bytes of the preserved
+8,816,586,752-byte ceiling. A stale private ADB public key from an earlier
+incremental recovery build was rejected by the audit; rebuilding the
+uncompressed recovery ramdisk produced the clean vanilla candidate. Repeat
+the normal Lineage Recovery add-on sideload before the first boot of this
+candidate, followed by the required factory reset.
 
 The corrected nine-image bundle completed 117,156 actions on `s-tau` in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
