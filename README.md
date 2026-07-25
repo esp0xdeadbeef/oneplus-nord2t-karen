@@ -163,6 +163,8 @@ hardware helper can install or restore the same directories:
 
 ```bash
 nix run .#lineage-userspace -- install ./result ./result-stock-restore
+nix run .#lineage-userspace -- \
+  install ./result ./result-stock-restore --stay-bootloader
 nix run .#lineage-userspace -- restore ./result-stock-restore
 ```
 
@@ -170,7 +172,9 @@ The install action leaves exact live `vendor`, `odm` and `dtbo` in place and
 writes only `system`, `system_ext`, `product`, `boot_a` and the three slot-A
 AVB metadata images. The restore action verifies every stock hash again before
 writing the five standard logical images plus stock slot-A boot/AVB metadata.
-Neither action can name or write an OPlus logical partition.
+Neither action can name or write an OPlus logical partition. The optional
+install-only `--stay-bootloader` mode avoids a first system boot so an audited
+private boot pair can be installed before entering recovery for add-ons.
 
 For a private headless bring-up build, `KAREN_DEBUG_ADB_KEYS` may point to
 exactly one local Android public key while building on `s-tau`. This keeps

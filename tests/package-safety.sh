@@ -27,6 +27,10 @@ grep -Fq -- '--allow-permissive-selinux' "$image_audit"
 grep -Fq 'simg2img "$image_directory/$partition.img"' "$image_audit"
 grep -Fq 'minimum_free_bytes' "$image_audit"
 grep -Fq 'expanded_image_bytes' "$image_audit"
+grep -Fq -- '--stay-bootloader is valid only for install' \
+  "$script_directory/scripts/lineage-userspace"
+grep -Fq 'Phone remains in bootloader-fastboot for the next audited step.' \
+  "$script_directory/scripts/lineage-userspace"
 grep -Fq 'flash_partition vbmeta_a' "$keybound_helper"
 grep -Fq 'flash_partition boot_a' "$keybound_helper"
 grep -Fq 'embedded ADB key does not match this normal-user host key' "$keybound_helper"

@@ -6,7 +6,8 @@ set -euo pipefail
 usage() {
   cat >&2 <<'EOF'
 usage:
-  nord2t-lineage-userspace install LINEAGE_DIR STOCK_RESTORE_DIR [--yes]
+  nord2t-lineage-userspace install LINEAGE_DIR STOCK_RESTORE_DIR
+                                    [--stay-bootloader] [--yes]
   nord2t-lineage-userspace restore STOCK_RESTORE_DIR [--yes]
 
 Install writes only system, system_ext, product, boot_a and the three slot-A
@@ -16,7 +17,9 @@ Vendor, odm, dtbo and all OPlus logical partitions remain untouched.
 Restore writes the five exact stock logical images and the exact stock boot_a
 and AVB metadata. It can start from authorized ADB, fastbootd or
 bootloader-fastboot. --yes skips only the interactive destructive-write
-confirmation.
+confirmation. --stay-bootloader is install-only and leaves the audited
+Lineage bootloader-fastboot endpoint ready for a separately audited private
+boot pair or an explicit recovery boot.
 EOF
 }
 
@@ -42,6 +45,7 @@ fi
 action="$1"
 shift
 assume_yes=false
+stay_bootloader=false
 
 case "$action" in
   install)
@@ -69,6 +73,10 @@ while [[ $# -gt 0 ]]; do
       assume_yes=true
       shift
       ;;
+    --stay-bootloader)
+      stay_bootloader=true
+      shift
+      ;;
     *)
       echo "Unknown option: $1" >&2
       usage
@@ -76,6 +84,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$action" != install && "$stay_bootloader" == true ]]; then
+  fail "--stay-bootloader is valid only for install"
+fi
 
 partition_manifest="${PARTITION_MANIFEST:-@PARTITION_MANIFEST@}"
 [[ -r "$partition_manifest" ]] ||
@@ -349,11 +361,20 @@ if [[ "$action" == install ]]; then
   done
   flash_partition fastboot boot_a "$lineage_directory/boot.img"
   write_started=false
-  run_fastboot reboot
+  if [[ "$stay_bootloader" == true ]]; then
+    verify_bootloader_identity
+    ensure_bootloader_slot_a
+  else
+    run_fastboot reboot
+  fi
 
   echo "Audited Lineage userspace written to slot A."
   echo "No OPlus logical partition, vendor, odm or dtbo image was written."
-  echo "Runtime boot verification is still required."
+  if [[ "$stay_bootloader" == true ]]; then
+    echo "Phone remains in bootloader-fastboot for the next audited step."
+  else
+    echo "Runtime boot verification is still required."
+  fi
 else
   for partition in system system_ext product vendor odm; do
     flash_partition \
