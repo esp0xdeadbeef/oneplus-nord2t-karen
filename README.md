@@ -5,6 +5,13 @@
 Reproducible stock recovery and unofficial LineageOS bring-up tooling for the
 European OnePlus Nord 2T 5G.
 
+A full Mobile NixOS host with a containerized LineageOS hardware-compatibility
+layer is planned in this same device-integration repository. Bring-up starts
+with headless kexec tests from rooted LineageOS through Magisk before any
+persistent NixOS install. Its scope, repository boundary, staged bring-up and
+hardware safety gates are documented in the
+[Mobile NixOS feature plan](docs/feature-nixos.md).
+
 This repository does not commit flashable images. As of 2026-07-25, `CPH2399`
 is not officially supported by GrapheneOS or LineageOS. The local port now
 boots LineageOS 21 on the test phone, but remains a private bring-up build
@@ -455,6 +462,7 @@ by Git.
 - [Hardbrick recovery](docs/hardbrick-recovery.md)
 - [TWRP image audit](docs/twrp-audit.md)
 - [LineageOS port assessment](docs/lineage-port.md)
+- [Mobile NixOS feature plan](docs/feature-nixos.md)
 
 Run all repository checks with:
 
