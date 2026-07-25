@@ -2,8 +2,8 @@
 
 # OnePlus Nord 2T (`CPH2399` / `karen`)
 
-Reproducible privacy, inventory, stock recovery and unofficial LineageOS
-bring-up tooling for the European OnePlus Nord 2T 5G.
+Reproducible stock recovery and unofficial LineageOS bring-up tooling for the
+European OnePlus Nord 2T 5G.
 
 This repository does not commit flashable images. As of 2026-07-25, `CPH2399`
 is not officially supported by GrapheneOS or LineageOS. The local port now
@@ -39,25 +39,7 @@ push notifications and banking-app behavior still need explicit real-world
 checks.
 
 The official full EU `.3001` OTA was independently verified and installed
-through OxygenOS Local install on 2026-07-24 before Lineage bring-up. Before
-the later bootloader-unlock wipe, the package changes of a reversible privacy
-profile were tested:
-
-- Aurora Store 4.8.3 from F-Droid was installed;
-- Play Store, Play services and Google Services Framework are disabled for the
-  owner profile;
-- 21 conservative telemetry targets and 24 Google-facing targets are disabled;
-- the bootloader was later unlocked, so Verified Boot now reports orange.
-
-The owner subsequently confirmed that Aurora Store was not usable in that
-configuration. The exact failure cause has not been isolated, so the profile
-is not a validated daily setup even though its package-state changes and
-restore actions worked.
-
-The unlock wipe reset that user-0 package profile. It is a historical stock
-result, not the current Lineage package state. Do not treat the profile as a
-validated daily configuration unless the Aurora failure or another
-app-distribution route is tested separately.
+through OxygenOS Local install on 2026-07-24 before Lineage bring-up.
 
 The bootloader was unlocked and userdata was wiped on 2026-07-24 for recovery
 bring-up. Exact stock rollback images remain available, but Lineage now
@@ -78,11 +60,6 @@ On the former stock baseline, an exact stock `boot_a` unroot/root round trip
 was verified with pinned Magisk 30.7. The separate Lineage helpers below keep
 minimal root equally plain: Zygisk and concealment modules remain disabled
 unless the full profile is explicitly selected.
-
-Disabling Play services breaks or degrades Firebase push, Google login, Wallet,
-Android Auto, RCS, Play Integrity and apps that require Google APIs. The helper
-therefore provides restore actions. It deliberately keeps critical telephony,
-emergency, network, permission, OTA, camera, WebView and input components.
 
 ## Reproducible LineageOS bring-up
 
@@ -108,6 +85,11 @@ The optional full rooted stack adds four more locked upstream artifacts:
 Vector 2.0, Shamiko 1.2.5, Hide My Applist 3.8 and AdAway 6.1.4. The helper
 checks their exact byte sizes and SHA-256 values in addition to Nix's lock
 hashes; it never resolves a “latest” URL at runtime.
+
+The optional Google-app profile pins the official Android 14 arm64
+MindTheGapps release separately. It is not part of the vanilla image and is
+never selected implicitly. Aurora Store is likewise a separate pinned user
+app, so installing it does not toggle or remove Android packages.
 
 The repository then adds the local `karen` tree without committing proprietary
 or stock-derived binaries. There are three useful build paths:
@@ -266,28 +248,31 @@ Enter the development shell:
 nix develop
 ```
 
-Inspect the connected phone without modifying it:
+Audit the running Lineage system without collecting device identifiers:
 
 ```bash
-nix run .#privacy -- audit
-nix run .#privacy -- inventory
+nix run .#audit-lineage-runtime
 ```
 
-Apply the experimental de-Googled profile only after accounting for the
-observed unusable Aurora configuration:
+Install the separately pinned Aurora Store directly, without first installing
+F-Droid and without disabling any Android package:
 
 ```bash
-nix run .#privacy -- degoogle
+nix run .#install-aurora
 ```
 
-Restore Google components or all conservative hardening targets:
+Realize the optional Android 14 arm64 Google-app add-on without installing it:
 
 ```bash
-nix run .#privacy -- restore-google
-nix run .#privacy -- restore-hardening
+nix build .#mindthegapps-14-arm64
 ```
 
-Create a privacy-filtered, rootless device snapshot:
+LineageOS requires a factory reset when adding GApps to a system that has
+already booted without them. The vanilla, GApps, minimal-root, full-root and
+owner-opinionated flows therefore remain explicit layers rather than one
+implicit ROM definition.
+
+Create an identifier-filtered, rootless device snapshot:
 
 ```bash
 nix run .#snapshot
@@ -422,7 +407,6 @@ by Git.
 ## Documentation
 
 - [Device inventory](docs/device.md)
-- [Privacy profile](docs/privacy.md)
 - [OS choice](docs/os-options.md)
 - [Update and recovery](docs/recovery.md)
 - [Stock root and unroot](docs/stock-root.md)

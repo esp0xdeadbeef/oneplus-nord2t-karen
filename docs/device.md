@@ -46,17 +46,16 @@ current tested state is:
 
 - active slot `a`;
 - unlocked bootloader and orange Verified Boot;
-- exact `.3001` stock kernel/DTB with a reproducibly Magisk-patched ramdisk;
-- Magisk `30.7` additional setup completed;
-- explicitly approved ADB shell root;
-- SELinux still enforcing and userdata still encrypted.
+- LineageOS 21 / Android 14 userspace;
+- exact `.3001` stock kernel/DTB with an enforcing Lineage ramdisk;
+- file-based encryption and SELinux enforcing;
+- authenticated ADB with the normal shell UID at the unrooted checkpoint.
 
-After the full Vector/Shamiko stack was enabled, ordinary Android properties
+On the earlier rooted stock test, the full Vector/Shamiko stack made ordinary Android properties
 reported `ro.boot.flash.locked=1` and `ro.boot.verifiedbootstate=green`. Those
 values are compatibility masking, not a relock: the raw kernel command line
 still reports `androidboot.vbmeta.device_state=unlocked` and
-`androidboot.verifiedbootstate=orange`. Use `nix run .#privacy -- audit` to
-compare the authoritative kernel view with any masked property view.
+`androidboot.verifiedbootstate=orange`.
 
 That full stack was later removed to provide an unmasked debugging baseline.
 The phone completed an exact stock-boot unroot round-trip and was then rooted
@@ -64,11 +63,11 @@ again with only Magisk 30.7. Zygisk is disabled, all three added Magisk modules
 are absent, and the two full-stack apps are uninstalled. The ordinary Android
 properties and raw kernel command line now both report `unlocked/orange`.
 
-These are observations, not build-time constants. Re-run the inventory after
-each OTA:
+These are observations, not build-time constants. Re-run the passive Lineage
+audit after each image change:
 
 ```bash
-nix run .#privacy -- inventory
+nix run .#audit-lineage-runtime
 ```
 
 ## Rootless snapshot

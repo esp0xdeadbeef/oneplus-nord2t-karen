@@ -66,9 +66,8 @@ state until exact stock firmware has been restored and the bootloader safely
 relocked.
 
 For this hardware, current signed OxygenOS with a locked bootloader is the
-stronger security baseline than an abandoned or hand-built ROM. Reversible
-package hardening can improve privacy, with the compatibility and Mainline
-update trade-offs documented in [privacy.md](privacy.md).
+stronger security baseline than an abandoned or hand-built ROM. The current
+Lineage port remains an explicitly unlocked, unofficial build.
 
 If the primary requirement is a security-centred custom OS with routine
 updates and a relocked bootloader, migrating to a currently supported

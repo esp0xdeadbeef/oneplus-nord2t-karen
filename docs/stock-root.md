@@ -117,8 +117,7 @@ Git and must not be published as a device-independent stock image.
 
 ## Full root stack
 
-Root enables two capabilities that are not available from the conservative
-rootless privacy profile:
+Full root enables two optional capabilities beyond plain Magisk root:
 
 - an Xposed-compatible hooking framework can change system and app behavior
   without rebuilding the ROM;

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 {
-  description = "OnePlus Nord 2T (CPH2399/karen) privacy and recovery tooling";
+  description = "OnePlus Nord 2T (CPH2399/karen) recovery and LineageOS tooling";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.stock-firmware-3001 = {
@@ -9,6 +9,10 @@
   };
   inputs.magisk-apk = {
     url = "file+https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk";
+    flake = false;
+  };
+  inputs.mindthegapps-14-arm64 = {
+    url = "file+https://github.com/MindTheGapps/14.0.0-arm64/releases/download/MindTheGapps-14.0.0-arm64-20250203_200051/MindTheGapps-14.0.0-arm64-20250203_200051.zip";
     flake = false;
   };
   inputs.vector-module = {
@@ -45,6 +49,7 @@
     hma-apk,
     self,
     magisk-apk,
+    mindthegapps-14-arm64,
     nixpkgs,
     oneplus-kernel-modules,
     oneplus-kernel-source,
@@ -80,6 +85,17 @@
           hash = "sha256-xM4N8Luw6Cvk5L19ij4ADwjgRFcYfVYP4so65SlBv0k=";
         };
 
+        mindTheGapps14Arm64 =
+          pkgs.runCommand "MindTheGapps-14.0.0-arm64-20250203_200051.zip" {
+            nativeBuildInputs = [pkgs.coreutils];
+          } ''
+            test "$(stat -Lc %s ${mindthegapps-14-arm64})" = 431524182
+            test \
+              "$(sha256sum ${mindthegapps-14-arm64} | cut -d' ' -f1)" = \
+              6e1c3616862ce5b33e2b96074f86ae846eb1351a26a980e1ed140f8a7e7a4fd6
+            ln -s ${mindthegapps-14-arm64} "$out"
+          '';
+
         stockFirmware3001 = pkgs.runCommand "CPH2399_14.0.0.3001_OTA.zip" {} ''
           ln -s ${stock-firmware-3001} "$out"
         '';
@@ -112,8 +128,8 @@
           ln -s ${oneplus-kernel-modules}/vendor/mediatek/kernel_modules "$out"
         '';
 
-        nord2tPrivacy = pkgs.writeShellApplication {
-          name = "nord2t-privacy";
+        installAurora = pkgs.writeShellApplication {
+          name = "nord2t-install-aurora";
           runtimeInputs = with pkgs; [
             android-tools
             coreutils
@@ -121,7 +137,7 @@
             gnused
           ];
           text = builtins.replaceStrings ["@AURORA_APK@"] ["${auroraStore}"] (
-            builtins.readFile ./scripts/nord2t-privacy
+            builtins.readFile ./scripts/install-aurora
           );
         };
 
@@ -726,19 +742,21 @@
           audit-boot = auditBoot;
           audit-lineage-images = auditLineageImages;
           audit-lineage-runtime = auditLineageRuntime;
-          default = nord2tPrivacy;
+          aurora-store-apk = auroraStore;
+          default = auditLineageRuntime;
           extract-stock = extractStock;
           firmware-3001 = stockFirmware3001;
           hma-apk = hmaApk;
+          install-aurora = installAurora;
           lineage-keybound-adb = lineageKeyboundAdb;
           lineage-root = lineageRoot;
           lineage-root-full = lineageRootFull;
           lineage-unroot = lineageUnroot;
           lineage-userspace = lineageUserspace;
           magisk-apk = magiskApk;
+          mindthegapps-14-arm64 = mindTheGapps14Arm64;
           oneplus-kernel-modules = oneplusKernelModules;
           oneplus-kernel-source = oneplusKernelSource;
-          privacy = nord2tPrivacy;
           preflight-lineage-userspace = preflightLineageUserspace;
           probe-preloader = probePreloader;
           read-gpt = readGpt;
@@ -764,7 +782,7 @@
 
     apps = eachSystem (
       {system, ...}: {
-        default = self.apps.${system}.privacy;
+        default = self.apps.${system}.audit-lineage-runtime;
         android-fhs = {
           type = "app";
           program = "${self.packages.${system}.android-fhs}/bin/nord2t-android-fhs";
@@ -772,6 +790,10 @@
         extract-stock = {
           type = "app";
           program = "${self.packages.${system}.extract-stock}/bin/nord2t-extract-stock";
+        };
+        install-aurora = {
+          type = "app";
+          program = "${self.packages.${system}.install-aurora}/bin/nord2t-install-aurora";
         };
         lineage-userspace = {
           type = "app";
@@ -804,10 +826,6 @@
         audit-lineage-runtime = {
           type = "app";
           program = "${self.packages.${system}.audit-lineage-runtime}/bin/nord2t-audit-lineage-runtime";
-        };
-        privacy = {
-          type = "app";
-          program = "${self.packages.${system}.privacy}/bin/nord2t-privacy";
         };
         preflight-lineage-userspace = {
           type = "app";
@@ -855,12 +873,12 @@
           audit-lineage-images
           audit-lineage-runtime
           extract-stock
+          install-aurora
           lineage-keybound-adb
           lineage-root
           lineage-root-full
           lineage-unroot
           lineage-userspace
-          privacy
           preflight-lineage-userspace
           probe-preloader
           read-gpt

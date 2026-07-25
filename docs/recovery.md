@@ -12,9 +12,7 @@ certificate were independently checked against this phone before installation.
 
 The full `.3001` package was installed through OxygenOS Local install on
 2026-07-24. It booted successfully on slot `a`; the locked bootloader, green
-Verified Boot, enforcing SELinux and encrypted storage were retained. The
-post-update privacy audit remained at 21/21 hardening and 24/24 de-Google
-targets disabled.
+Verified Boot, enforcing SELinux and encrypted storage were retained.
 
 For a future official update:
 
@@ -23,8 +21,7 @@ For a future official update:
 3. Install it through the normal OxygenOS updater.
 4. Allow the phone to reboot fully.
 5. Re-enable USB debugging if the update reset it.
-6. Run `nix run .#privacy -- audit`.
-7. Reapply `nix run .#privacy -- degoogle` if the OTA restored package states.
+6. Verify the expected build and security patch before resuming port work.
 
 Do not downgrade to `.2901` merely because it is recorded here.
 

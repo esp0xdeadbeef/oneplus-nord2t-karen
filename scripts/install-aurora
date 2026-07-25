@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  echo "usage: nord2t-install-aurora" >&2
+}
+
+if [[ $# -eq 1 && ("$1" == -h || "$1" == --help) ]]; then
+  usage
+  exit 0
+fi
+[[ $# -eq 0 ]] || {
+  usage
+  exit 2
+}
+
+fail() {
+  echo "Aurora install failed: $*" >&2
+  exit 1
+}
+
+aurora_apk="@AURORA_APK@"
+expected_size=8954451
+expected_hash=c4ce0df0bbb0e82be4e4bd7d8a3e000f08e04457187d560fe2ca3ae52941bf49
+
+[[ -f "$aurora_apk" && -r "$aurora_apk" ]] ||
+  fail "pinned Aurora APK is unavailable"
+[[ "$(stat -Lc %s "$aurora_apk")" == "$expected_size" ]] ||
+  fail "Aurora APK size does not match its pin"
+[[ "$(sha256sum "$aurora_apk" | cut -d' ' -f1)" == "$expected_hash" ]] ||
+  fail "Aurora APK SHA-256 does not match its pin"
+
+mapfile -t adb_devices < <(
+  adb devices |
+    awk 'NR > 1 && $2 == "device" { print $1 }'
+)
+[[ "${#adb_devices[@]}" -eq 1 ]] ||
+  fail "expected exactly one authorized ADB device"
+adb_serial="${adb_devices[0]}"
+
+property() {
+  adb -s "$adb_serial" shell getprop "$1" 2>/dev/null |
+    tr -d '\r'
+}
+
+[[ "$(property sys.boot_completed)" == 1 ]] ||
+  fail "Android has not finished booting"
+[[ "$(property ro.product.model)" == CPH2399 ]] ||
+  fail "connected model is not CPH2399"
+[[ "$(property ro.product.device)" == OP557AL1 ]] ||
+  fail "connected device is not OP557AL1"
+[[ -n "$(property ro.lineage.version)" ]] ||
+  fail "running system is not LineageOS"
+
+adb -s "$adb_serial" install --user 0 -r "$aurora_apk" >/dev/null
+adb -s "$adb_serial" shell pm path com.aurora.store |
+  grep -Fq "package:" ||
+  fail "Aurora package is absent after installation"
+
+version="$(
+  adb -s "$adb_serial" shell dumpsys package com.aurora.store |
+    sed -n 's/^[[:space:]]*versionName=\([^[:space:]]*\).*/\1/p' |
+    head -n 1 |
+    tr -d '\r'
+)"
+[[ "$version" == 4.8.3 ]] ||
+  fail "installed Aurora version is not the pinned 4.8.3"
+
+echo "Pinned Aurora Store 4.8.3 installed for Android user 0."

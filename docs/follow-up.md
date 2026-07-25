@@ -65,6 +65,12 @@ modules disabled. Full root is a deliberate opt-in profile. Both are tied to
 an explicit audited Lineage bundle, and unroot restores its exact
 `vbmeta_a`/`boot_a` pair.
 
+The old OxygenOS de-Google/package-disable profile was removed after the
+working Lineage boot. Aurora Store is now a separate pinned installer and was
+successfully installed on Lineage without F-Droid. Android 14 arm64
+MindTheGapps is pinned as an explicit optional input for the planned
+opinionated profile; vanilla and root-only variants remain separate.
+
 The corrected nine-image bundle completed 117,156 actions on `s-tau` in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
 first VINTF check was rejected before any phone write: Lineage's empty

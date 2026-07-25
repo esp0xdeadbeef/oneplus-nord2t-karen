@@ -112,6 +112,18 @@
         "url": "https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk"
       }
     },
+    "mindthegapps-14-arm64": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-K6G23vBbFm9nmNyI6+yPmZZNR4imuslS0Lc1zpq7n8o=",
+        "type": "file",
+        "url": "https://github.com/MindTheGapps/14.0.0-arm64/releases/download/MindTheGapps-14.0.0-arm64-20250203_200051/MindTheGapps-14.0.0-arm64-20250203_200051.zip"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/MindTheGapps/14.0.0-arm64/releases/download/MindTheGapps-14.0.0-arm64-20250203_200051/MindTheGapps-14.0.0-arm64-20250203_200051.zip"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1784796856,
@@ -223,6 +235,7 @@
         "adaway-apk": "adaway-apk",
         "hma-apk": "hma-apk",
         "magisk-apk": "magisk-apk",
+        "mindthegapps-14-arm64": "mindthegapps-14-arm64",
         "nixpkgs": "nixpkgs",
         "oneplus-kernel-modules": "oneplus-kernel-modules",
         "oneplus-kernel-source": "oneplus-kernel-source",
