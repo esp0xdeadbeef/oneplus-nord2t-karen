@@ -66,7 +66,31 @@ grep -Fq \
   "$userspace_preflight"
 grep -Fq 'endswith("-cow")' "$userspace_preflight"
 grep -Fq 'preflight_source=lineage-recovery' "$userspace_preflight"
-if grep -Fq 'snapshot-update cancel' \
+grep -Fq -- '--allow-stale-cow' "$userspace_preflight"
+grep -Fq -- '--cleanup-stale-cow' \
+  "$script_directory/scripts/lineage-userspace"
+grep -Fq 'cleanup_audited_stale_cow_partitions' \
+  "$script_directory/scripts/lineage-userspace"
+grep -Fq 'fastboot_variable snapshot-update-status' \
+  "$script_directory/scripts/lineage-userspace"
+# shellcheck disable=SC2016
+grep -Fq 'run_fastboot delete-logical-partition "$partition"' \
+  "$script_directory/scripts/lineage-userspace"
+for stale_cow in \
+  my_engineering_a-cow \
+  my_heytap_a-cow \
+  my_product_a-cow \
+  my_stock_a-cow \
+  odm_a-cow \
+  product_a-cow \
+  system_a-cow \
+  system_ext_a-cow \
+  vendor_a-cow; do
+  grep -Fq "$stale_cow" "$userspace_preflight"
+  grep -Fq "$stale_cow" "$script_directory/scripts/lineage-userspace"
+done
+if grep -Eq \
+  '^[[:space:]]*(run_fastboot|fastboot([[:space:]]+-s[[:space:]]+"[^"]+")?)[[:space:]]+snapshot-update[[:space:]]+cancel' \
   "$userspace_preflight" "$script_directory/scripts/lineage-userspace"; then
   echo "Lineage userspace helpers must not cancel snapshots implicitly." >&2
   exit 1
@@ -74,6 +98,8 @@ fi
 grep -Fq 'flash_partition vbmeta_a' "$keybound_helper"
 grep -Fq 'flash_partition boot_a' "$keybound_helper"
 grep -Fq 'embedded ADB key does not match this normal-user host key' "$keybound_helper"
+grep -Fq 'embedded-adb-key.token' "$keybound_helper"
+grep -Fq 'host-adb-key.token' "$keybound_helper"
 grep -Fq 'expected exactly one device already in bootloader-fastboot' "$keybound_helper"
 grep -Fq 'slot A is not active' "$keybound_helper"
 grep -Fq -- '--allow-permissive-selinux is valid only for a private install' \

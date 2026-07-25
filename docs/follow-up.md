@@ -33,9 +33,10 @@ rsync flow and artifact-return checks.
   on slot A, while a normal boot still enters exact rootless stock userspace.
 - A bounded read-only copy of the first 4 MiB of `super` found the expected 15
   active slot-A partitions plus nine COW snapshot partitions. A complete
-  stock boot did not remove them, and bootloader-fastboot returned no usable
-  `snapshot-update-status`. The next logical write remains blocked until
-  stock fastbootd reports an unambiguous state.
+  stock boot did not remove them. Bootloader-fastboot returned no usable
+  status, but exact stock fastbootd reported `snapshot-update-status=none`
+  while retaining the same nine names and sizes. The default logical write
+  remains blocked; the explicit cleanup path below is now fully gated.
 
 ### Exact stock restore and relock
 
@@ -260,6 +261,11 @@ image is in Git. The enforcing variant is now the active bootpair.
 `lineage-keybound-adb` verifies the matching local private key and can write
 or restore only `vbmeta_a` and `boot_a`.
 
+The host public-key comment later changed while the encrypted/private RSA key
+remained identical. The helper now compares the cryptographic ADB key token
+instead of falsely rejecting an image over its disposable `user@host`
+comment.
+
 The scoped ten-image stock rollback set is protected by an explicit GC root
 on `s-tau`:
 
@@ -319,12 +325,17 @@ the absolute depfiles.
    confirm slot A, the exact 15-partition `main` layout, 3,527,249,920
    preserved OPlus bytes, the 8,816,586,752-byte standard image ceiling and
    the absence of COW snapshot partitions.
+   For the one already audited stale set, install may instead pass
+   `--cleanup-stale-cow`; the default remains fail-closed.
 6. Only when every previous gate is green, use the bounded
    `lineage-userspace install` action. It first stages exact stock boot/AVB
    metadata to obtain the tested stock fastbootd mappings, then writes
    `system`, `system_ext`, `product`, `boot_a`, `vbmeta_a`,
    `vbmeta_system_a` and `vbmeta_vendor_a`; it leaves live exact `vendor`,
    `odm`, `dtbo` and every OPlus logical partition untouched.
+   The cleanup option first requires stock fastbootd status `none`, verifies
+   all nine COW names and sizes again, then deletes only those temporary
+   logical partitions. It never issues snapshot cancel or merge.
 7. Verify boot, display, touch, encryption, ADB authorization, SELinux,
    telephony, Wi-Fi, Bluetooth, cameras, audio, sensors, GNSS, USB,
    suspend/resume and charging. Preserve only general logs; do not collect
@@ -340,8 +351,9 @@ the absolute depfiles.
   logical partitions.
 - Do not write slot-B logical placeholders as if they were an independent
   inactive system.
-- Do not hide, delete or implicitly cancel COW snapshot partitions. Establish
-  their Android merge status through stock fastbootd before continuing.
+- Do not hide or manually delete COW snapshot partitions. Use only the
+  exact-set cleanup gate after stock fastbootd reports status `none`; never
+  infer that state from bootloader-fastboot.
 - Do not flash `oscaro`, `avicii` or `denniz` artifacts.
 - Do not read or publish `nvram`, `nvdata`, calibration, persistent, radio or
   other device-unique partitions.

@@ -6,6 +6,7 @@ set -euo pipefail
 usage() {
   cat >&2 <<'EOF'
 usage: nord2t-preflight-lineage-userspace LINEAGE_DIR STOCK_RESTORE_DIR
+                                           [--allow-stale-cow]
 
 Validate a complete Lineage image bundle, the scoped .3001 rollback bundle,
 and the connected CPH2399 dynamic-partition layout. The phone may be running
@@ -19,13 +20,21 @@ fail() {
   exit 1
 }
 
-if [[ $# -ne 2 ]]; then
+if [[ $# -lt 2 || $# -gt 3 ]]; then
   usage
   exit 2
 fi
 
 lineage_directory="$(realpath "$1")"
 restore_directory="$(realpath "$2")"
+allow_stale_cow=false
+if [[ $# -eq 3 ]]; then
+  [[ "$3" == --allow-stale-cow ]] || {
+    usage
+    exit 2
+  }
+  allow_stale_cow=true
+fi
 partition_manifest="${PARTITION_MANIFEST:-@PARTITION_MANIFEST@}"
 
 [[ -d "$lineage_directory" ]] ||
@@ -107,6 +116,7 @@ adb_property() {
 
 lpdump_json="$temporary_directory/lpdump.json"
 preflight_source=
+stale_cow_cleanup_required=false
 
 if [[ "$adb_state" == device ]]; then
   [[ "$(adb_property sys.boot_completed)" == 1 ]] ||
@@ -177,12 +187,41 @@ else
     ([.groups[] | select(
       .name == "main_a" and
       (.maximum_size | tonumber) == 12343836672
-    )] | length) == 1 and
-    ([.partitions[] | select(
-      (.name | endswith("-cow")) or .group_name == "cow"
-    )] | length) == 0
+    )] | length) == 1
   ' "$raw_lpdump_json" >/dev/null ||
-    fail "raw super metadata contains an active or stale COW snapshot layout"
+    fail "raw super metadata does not contain the audited slot-A group"
+
+  cow_partitions_json="$(
+    jq -c '
+      [
+        .partitions[] |
+        select((.name | endswith("-cow")) or .group_name == "cow") |
+        {name, size: (.size | tonumber), group_name, is_dynamic}
+      ] |
+      sort_by(.name)
+    ' "$raw_lpdump_json"
+  )"
+  if [[ "$cow_partitions_json" != '[]' ]]; then
+    [[ "$allow_stale_cow" == true ]] ||
+      fail "raw super metadata contains an active or stale COW snapshot layout"
+    expected_cow_partitions_json='[
+      {"name":"my_engineering_a-cow","size":344064,"group_name":"cow","is_dynamic":true},
+      {"name":"my_heytap_a-cow","size":15728640,"group_name":"cow","is_dynamic":true},
+      {"name":"my_product_a-cow","size":415473664,"group_name":"cow","is_dynamic":true},
+      {"name":"my_stock_a-cow","size":1269821440,"group_name":"cow","is_dynamic":true},
+      {"name":"odm_a-cow","size":1123184640,"group_name":"cow","is_dynamic":true},
+      {"name":"product_a-cow","size":2146304,"group_name":"cow","is_dynamic":true},
+      {"name":"system_a-cow","size":819269632,"group_name":"cow","is_dynamic":true},
+      {"name":"system_ext_a-cow","size":1129414656,"group_name":"cow","is_dynamic":true},
+      {"name":"vendor_a-cow","size":489263104,"group_name":"cow","is_dynamic":true}
+    ]'
+    jq -en \
+      --argjson actual "$cow_partitions_json" \
+      --argjson expected "$expected_cow_partitions_json" \
+      '$actual == $expected' >/dev/null ||
+      fail "COW snapshot layout is not the single audited stale set"
+    stale_cow_cleanup_required=true
+  fi
 
   jq '
     {
@@ -277,4 +316,5 @@ echo "lineage_standard_bytes=$lineage_standard_bytes"
 echo "standard_image_ceiling=$standard_image_ceiling"
 echo "restore_images=exact"
 echo "preflight_source=$preflight_source"
+echo "stale_cow_cleanup_required=$stale_cow_cleanup_required"
 echo "flash_gate=explicit-destructive-test-still-required"

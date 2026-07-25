@@ -7,6 +7,7 @@ usage() {
   cat >&2 <<'EOF'
 usage:
   nord2t-lineage-userspace install LINEAGE_DIR STOCK_RESTORE_DIR
+                                    [--cleanup-stale-cow]
                                     [--stay-bootloader] [--yes]
   nord2t-lineage-userspace restore STOCK_RESTORE_DIR [--yes]
 
@@ -22,6 +23,11 @@ bootloader-fastboot. --yes skips only the interactive destructive-write
 confirmation. --stay-bootloader is install-only and leaves the audited
 Lineage bootloader-fastboot endpoint ready for a separately audited private
 boot pair or an explicit recovery boot.
+
+--cleanup-stale-cow is install-only. It accepts only the single audited set of
+nine stock OTA COW partitions, requires stock fastbootd to report snapshot
+status "none", and deletes those temporary logical partitions before writing
+Lineage. It never issues snapshot-update cancel.
 EOF
 }
 
@@ -48,6 +54,7 @@ action="$1"
 shift
 assume_yes=false
 stay_bootloader=false
+cleanup_stale_cow=false
 
 case "$action" in
   install)
@@ -79,6 +86,10 @@ while [[ $# -gt 0 ]]; do
       stay_bootloader=true
       shift
       ;;
+    --cleanup-stale-cow)
+      cleanup_stale_cow=true
+      shift
+      ;;
     *)
       echo "Unknown option: $1" >&2
       usage
@@ -89,6 +100,9 @@ done
 
 if [[ "$action" != install && "$stay_bootloader" == true ]]; then
   fail "--stay-bootloader is valid only for install"
+fi
+if [[ "$action" != install && "$cleanup_stale_cow" == true ]]; then
+  fail "--cleanup-stale-cow is valid only for install"
 fi
 
 partition_manifest="${PARTITION_MANIFEST:-@PARTITION_MANIFEST@}"
@@ -137,16 +151,25 @@ verify_restore_bundle() {
 if [[ "$action" == install ]]; then
   [[ -d "$lineage_directory" ]] ||
     fail "Lineage image directory is not readable"
-  nord2t-preflight-lineage-userspace \
-    "$lineage_directory" \
+  preflight_arguments=(
+    "$lineage_directory"
     "$restore_directory"
+  )
+  if [[ "$cleanup_stale_cow" == true ]]; then
+    preflight_arguments+=(--allow-stale-cow)
+  fi
+  nord2t-preflight-lineage-userspace "${preflight_arguments[@]}"
 else
   verify_restore_bundle
 fi
 
 if [[ "$assume_yes" != true ]]; then
   if [[ "$action" == install ]]; then
-    printf 'Write the audited Lineage userspace to slot A? Type CPH2399: ' >&2
+    if [[ "$cleanup_stale_cow" == true ]]; then
+      printf 'Delete the audited stale COW set and write Lineage to slot A? Type CPH2399: ' >&2
+    else
+      printf 'Write the audited Lineage userspace to slot A? Type CPH2399: ' >&2
+    fi
   else
     printf 'Restore exact .3001 userspace and boot to slot A? Type CPH2399: ' >&2
   fi
@@ -369,6 +392,47 @@ stage_stock_fastbootd_boot_chain() {
   flash_partition fastboot boot_a "$restore_directory/images/boot.img"
 }
 
+cleanup_audited_stale_cow_partitions() {
+  local partition specification expected_size reported_size
+  local specifications=(
+    my_engineering_a-cow:344064
+    my_heytap_a-cow:15728640
+    my_product_a-cow:415473664
+    my_stock_a-cow:1269821440
+    odm_a-cow:1123184640
+    product_a-cow:2146304
+    system_a-cow:819269632
+    system_ext_a-cow:1129414656
+    vendor_a-cow:489263104
+  )
+
+  [[ "$(fastboot_variable snapshot-update-status)" == none ]] ||
+    fail "stock fastbootd does not report snapshot-update-status none"
+
+  for specification in "${specifications[@]}"; do
+    partition="${specification%%:*}"
+    expected_size="${specification#*:}"
+    [[ "$(fastboot_variable "is-logical:$partition")" == yes ]] ||
+      fail "audited stale COW partition is missing: $partition"
+    reported_size="$(fastboot_variable "partition-size:$partition")"
+    [[ "$reported_size" =~ ^(0[xX][0-9a-fA-F]+|[0-9]+)$ ]] ||
+      fail "stock fastbootd returned an invalid COW size: $partition"
+    ((reported_size == expected_size)) ||
+      fail "stale COW partition size changed: $partition"
+  done
+
+  for specification in "${specifications[@]}"; do
+    partition="${specification%%:*}"
+    run_fastboot delete-logical-partition "$partition"
+  done
+
+  for specification in "${specifications[@]}"; do
+    partition="${specification%%:*}"
+    [[ "$(fastboot_variable "is-logical:$partition" || true)" != yes ]] ||
+      fail "stale COW partition still exists after deletion: $partition"
+  done
+}
+
 write_started=false
 report_interrupted_write() {
   local status="$?"
@@ -390,6 +454,9 @@ reboot_bootloader_to_fastbootd
 # its first data chunk; an immediate stock restore worked after settling.
 sleep 5
 verify_fastbootd
+if [[ "$cleanup_stale_cow" == true ]]; then
+  cleanup_audited_stale_cow_partitions
+fi
 
 if [[ "$action" == install ]]; then
   for partition in system system_ext product; do
@@ -417,6 +484,9 @@ if [[ "$action" == install ]]; then
 
   echo "Audited Lineage userspace written to slot A."
   echo "No OPlus logical partition, vendor, odm or dtbo image was written."
+  if [[ "$cleanup_stale_cow" == true ]]; then
+    echo "The single audited stale stock COW set was removed after status none."
+  fi
   if [[ "$stay_bootloader" == true ]]; then
     echo "Phone remains in bootloader-fastboot for the next audited step."
   else

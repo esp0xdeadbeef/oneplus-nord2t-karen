@@ -159,7 +159,18 @@ if [[ "$action" == install ]]; then
   bsdtar -xOf "$ramdisk" adb_keys \
     >"$temporary_directory/embedded-adb-key.pub" 2>/dev/null ||
     fail "key-bound boot image has no embedded ADB key"
-  cmp -s "$temporary_directory/embedded-adb-key.pub" "$host_public_key" ||
+  awk 'NF { print $1; exit }' \
+    "$temporary_directory/embedded-adb-key.pub" \
+    >"$temporary_directory/embedded-adb-key.token"
+  awk 'NF { print $1; exit }' \
+    "$host_public_key" \
+    >"$temporary_directory/host-adb-key.token"
+  [[ -s "$temporary_directory/embedded-adb-key.token" &&
+    -s "$temporary_directory/host-adb-key.token" ]] ||
+    fail "ADB public-key token is unavailable"
+  cmp -s \
+    "$temporary_directory/embedded-adb-key.token" \
+    "$temporary_directory/host-adb-key.token" ||
     fail "embedded ADB key does not match this normal-user host key"
 fi
 

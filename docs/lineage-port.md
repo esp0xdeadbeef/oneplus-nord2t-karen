@@ -167,13 +167,18 @@ an OPlus partition or device-unique storage.
 
 That recovery check currently also sees nine `-cow` partitions consuming the
 otherwise free super extents. A complete rootless stock boot did not remove
-them, while bootloader-fastboot returned no usable
-`snapshot-update-status`. The preflight therefore rejects the current layout.
-It does not silently omit the COW entries and neither helper issues
-`snapshot-update cancel`. Android's documented full-flash flow permits a
-cancel only after the target reports `merging` or `snapshotted`; stock
-fastbootd must provide that unambiguous status before this port adopts the
-same action. See the
+them. Bootloader-fastboot returned no usable status, but exact stock fastbootd
+reported `snapshot-update-status=none` and exposed all nine COW entries with
+the sizes from the raw metadata. The default preflight therefore still
+rejects the current layout.
+
+The install-only `--cleanup-stale-cow` path accepts only that exact set. After
+staging the stock boot chain it requires fastbootd to report `none`, verifies
+all nine logical names and sizes again, and deletes only those temporary
+partitions. It does not silently omit them and neither helper issues
+`snapshot-update cancel` or merge. Android's documented full-flash flow uses
+cancel only when the target reports `merging` or `snapshotted`; that is not
+the state observed here. See the
 [AOSP Virtual A/B fastboot guidance](https://source.android.com/docs/core/ota/virtual_ab/implement#fastboot-tooling-changes).
 
 Android's unmodified dynamic-partition build configuration accepts the

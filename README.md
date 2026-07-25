@@ -45,8 +45,9 @@ corrected private Lineage Recovery on slot A, while a normal boot still enters
 exact rootless stock userspace. Recovery has authenticated root ADB and the
 OLED init fix; no full Lineage userspace or root package is currently
 installed. A read-only recovery metadata check found nine virtual-A/B COW
-partitions left by stock. The install gate refuses them until their merge
-state is established and cleaned up through a documented Android path.
+partitions left by stock. Stock fastbootd reports snapshot status `none`; the
+default install gate still refuses them. An explicit cleanup mode accepts
+only their already audited names and sizes before removing them.
 
 The earlier Lineage boot exercised display, touch, camera, audio and internet
 successfully. Its passive runtime audit reported the expected framework,
@@ -202,7 +203,10 @@ This preflight is read-only. It verifies the complete image/AVB bundle, every
 rollback hash, the active slot and the preserved OPlus allocation; it does not
 reboot, flash, erase or wipe the phone. In recovery it copies only the first
 4 MiB of the generic `super` block device for host-side metadata parsing. It
-rejects any COW snapshot partition instead of cancelling or deleting one.
+rejects any COW snapshot partition by default. `--cleanup-stale-cow` makes the
+install helper accept only the exact nine-partition stale set recorded for
+this stock baseline, then requires stock fastbootd status `none` before
+deleting it. The helper never requests a snapshot cancel or merge.
 
 Only after that command passes and a rollback test is ready, the bounded
 hardware helper can install or restore the same directories:
@@ -211,6 +215,9 @@ hardware helper can install or restore the same directories:
 nix run .#lineage-userspace -- install ./result ./result-stock-restore
 nix run .#lineage-userspace -- \
   install ./result ./result-stock-restore --stay-bootloader
+nix run .#lineage-userspace -- \
+  install ./result ./result-stock-restore \
+  --cleanup-stale-cow --stay-bootloader
 nix run .#lineage-userspace -- restore ./result-stock-restore
 ```
 
@@ -247,8 +254,9 @@ nix run .#lineage-keybound-adb -- restore ./base-result
 
 The install path also requires the embedded public key to match the normal
 user's local `~/.android/adbkey` private key and requires every non-boot-pair
-image to be byte-identical to the base bundle. This is a bring-up fallback,
-not a release configuration.
+image to be byte-identical to the base bundle. It compares the cryptographic
+ADB key token, not the disposable `user@host` comment. This is a bring-up
+fallback, not a release configuration.
 
 If an enforcing boot returns to recovery before Android ADB starts, a private
 diagnostic rebuild may additionally set `KAREN_DEBUG_PERMISSIVE=true`. Both
