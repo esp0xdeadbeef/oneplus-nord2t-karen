@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-preflight-lineage-userspace LINEAGE_DIR STOCK_RESTORE_DIR
+
+Validate a complete Lineage image bundle, the scoped .3001 rollback bundle,
+and the connected stock CPH2399 dynamic-partition layout. This command is
+read-only: it never reboots, flashes, erases, formats or wipes the phone.
+EOF
+}
+
+fail() {
+  echo "Lineage userspace preflight failed: $*" >&2
+  exit 1
+}
+
+if [[ $# -ne 2 ]]; then
+  usage
+  exit 2
+fi
+
+lineage_directory="$(realpath "$1")"
+restore_directory="$(realpath "$2")"
+partition_manifest="${PARTITION_MANIFEST:-@PARTITION_MANIFEST@}"
+
+[[ -d "$lineage_directory" ]] ||
+  fail "Lineage image directory is not readable"
+[[ -d "$restore_directory" ]] ||
+  fail "stock restore directory is not readable"
+[[ -r "$partition_manifest" ]] ||
+  fail "partition manifest is not readable"
+
+temporary_directory="$(mktemp -d -t nord2t-lineage-preflight.XXXXXXXX)"
+cleanup() {
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+
+lineage_audit="$temporary_directory/lineage-audit.txt"
+nord2t-audit-lineage-images "$lineage_directory" >"$lineage_audit" ||
+  fail "Lineage image bundle did not pass its structural audit"
+
+restore_images=(
+  boot
+  dtbo
+  system
+  system_ext
+  product
+  vendor
+  odm
+  vbmeta
+  vbmeta_system
+  vbmeta_vendor
+)
+
+mapfile -t manifest_restore_images < <(
+  jq -er '.profiles.restore[]' "$partition_manifest"
+)
+[[ "${restore_images[*]}" == "${manifest_restore_images[*]}" ]] ||
+  fail "restore profile does not contain the expected scoped partition set"
+
+for partition in "${restore_images[@]}"; do
+  image="$restore_directory/images/$partition.img"
+  [[ -f "$image" && -r "$image" && -s "$image" ]] ||
+    fail "stock restore image is missing: $partition.img"
+
+  expected_size="$(
+    jq -er --arg name "$partition" \
+      '.partitions[] | select(.name == $name) | .size' \
+      "$partition_manifest"
+  )"
+  expected_hash="$(
+    jq -er --arg name "$partition" \
+      '.partitions[] | select(.name == $name) | .sha256' \
+      "$partition_manifest"
+  )"
+  [[ "$(stat -c %s "$image")" == "$expected_size" ]] ||
+    fail "stock restore size is wrong: $partition.img"
+  [[ "$(sha256sum "$image" | cut -d ' ' -f 1)" == "$expected_hash" ]] ||
+    fail "stock restore hash is wrong: $partition.img"
+done
+
+if [[ -r "$restore_directory/SOURCE.json" ]]; then
+  jq -e \
+    --argjson expected "$(printf '%s\n' "${restore_images[@]}" | jq -R . | jq -s .)" \
+    '.profile == "restore" and .partitions == $expected' \
+    "$restore_directory/SOURCE.json" >/dev/null ||
+    fail "stock restore provenance is not the expected profile"
+fi
+
+mapfile -t adb_devices < <(
+  adb devices |
+    awk 'NR > 1 && $2 == "device" { print $1 }'
+)
+[[ "${#adb_devices[@]}" -eq 1 ]] ||
+  fail "expected exactly one authorized ADB device"
+serial="${adb_devices[0]}"
+
+adb_property() {
+  adb -s "$serial" shell getprop "$1" 2>/dev/null | tr -d '\r'
+}
+
+[[ "$(adb_property sys.boot_completed)" == 1 ]] ||
+  fail "Android has not finished booting"
+[[ "$(adb_property ro.product.model)" == CPH2399 ]] ||
+  fail "connected model is not CPH2399"
+[[ "$(adb_property ro.product.device)" == OP557AL1 ]] ||
+  fail "connected device is not OP557AL1"
+[[ "$(adb_property ro.build.display.id)" == "CPH2399_14.0.0.3001(EX01)" ]] ||
+  fail "installed system is not the pinned .3001 stock baseline"
+[[ "$(adb_property ro.boot.slot_suffix)" == _a ]] ||
+  fail "the populated and audited slot A is not active"
+[[ "$(adb_property ro.boot.dynamic_partitions)" == true ]] ||
+  fail "dynamic partitions are not enabled"
+[[ "$(adb_property ro.virtual_ab.enabled)" == true ]] ||
+  fail "virtual A/B is not enabled"
+[[ "$(adb_property ro.boot.flash.locked)" == 0 ]] ||
+  fail "bootloader is not unlocked"
+[[ "$(adb_property ro.boot.vbmeta.device_state)" != locked ]] ||
+  fail "verified boot still reports a locked device"
+[[ "$(adb -s "$serial" exec-out su -c id -u 2>/dev/null | tr -d '\r')" == 0 ]] ||
+  fail "approved read-only root is unavailable"
+
+lpdump_json="$temporary_directory/lpdump.json"
+adb -s "$serial" exec-out su -c 'lpdump --slot 0 --json' \
+  >"$lpdump_json" 2>/dev/null ||
+  fail "could not read slot-0 logical metadata"
+jq empty "$lpdump_json" ||
+  fail "lpdump did not return valid JSON"
+
+standard_names_json='["odm","product","system","system_ext","vendor"]'
+oplus_names_json='["my_bigball","my_carrier","my_company","my_engineering","my_heytap","my_manifest","my_preload","my_product","my_region","my_stock"]'
+all_names_json="$(
+  jq -cn \
+    --argjson standard "$standard_names_json" \
+    --argjson oplus "$oplus_names_json" \
+    '$standard + $oplus | sort'
+)"
+
+jq -e \
+  --argjson names "$all_names_json" \
+  '
+    .enabled == true and
+    (.block_devices | length) == 1 and
+    .block_devices[0].name == "super" and
+    (.block_devices[0].size | tonumber) == 12348030976 and
+    (.groups | length) == 1 and
+    .groups[0].name == "main" and
+    (.groups[0].maximum_size | tonumber) == 12343836672 and
+    (.partitions | length) == 15 and
+    ([.partitions[].name] | sort) == $names and
+    all(.partitions[]; .is_dynamic == true and .group_name == "main")
+  ' "$lpdump_json" >/dev/null ||
+  fail "live super metadata no longer matches the audited Karen layout"
+
+standard_live_bytes="$(
+  jq -er \
+    --argjson names "$standard_names_json" \
+    '[.partitions[] | select(.name as $name | $names | index($name)) | .size | tonumber] | add' \
+    "$lpdump_json"
+)"
+oplus_live_bytes="$(
+  jq -er \
+    --argjson names "$oplus_names_json" \
+    '[.partitions[] | select(.name as $name | $names | index($name)) | .size | tonumber] | add' \
+    "$lpdump_json"
+)"
+group_live_bytes="$(
+  jq -er '[.partitions[].size | tonumber] | add' "$lpdump_json"
+)"
+
+[[ "$standard_live_bytes" == 3549384704 ]] ||
+  fail "live standard allocation changed from the audited stock baseline"
+[[ "$oplus_live_bytes" == 3527249920 ]] ||
+  fail "live OPlus allocation changed from the audited stock baseline"
+[[ "$group_live_bytes" == 7076634624 ]] ||
+  fail "live main-group allocation changed from the audited stock baseline"
+
+standard_image_ceiling=$((12343836672 - oplus_live_bytes))
+[[ "$standard_image_ceiling" == 8816586752 ]] ||
+  fail "preserved standard-image budget is not the audited value"
+
+lineage_standard_bytes="$(
+  sed -n 's/^standard_image_bytes=//p' "$lineage_audit" | tail -n 1
+)"
+[[ "$lineage_standard_bytes" =~ ^[0-9]+$ ]] ||
+  fail "Lineage audit did not report its standard-image allocation"
+((lineage_standard_bytes <= standard_image_ceiling)) ||
+  fail "Lineage images do not fit while preserving every OPlus partition"
+
+echo "Karen full-userspace preflight passed."
+echo "active_slot=a"
+echo "super_bytes=12348030976"
+echo "main_group_bytes=12343836672"
+echo "live_standard_bytes=$standard_live_bytes"
+echo "live_oplus_bytes=$oplus_live_bytes"
+echo "lineage_standard_bytes=$lineage_standard_bytes"
+echo "standard_image_ceiling=$standard_image_ceiling"
+echo "restore_images=exact"
+echo "flash_gate=explicit-destructive-test-still-required"

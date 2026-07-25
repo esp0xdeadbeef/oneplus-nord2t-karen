@@ -293,6 +293,21 @@
           );
         };
 
+        preflightLineageUserspace = pkgs.writeShellApplication {
+          name = "nord2t-preflight-lineage-userspace";
+          runtimeInputs = with pkgs; [
+            android-tools
+            auditLineageImages
+            coreutils
+            gawk
+            gnused
+            jq
+          ];
+          text = builtins.replaceStrings ["@PARTITION_MANIFEST@"] ["${./firmware/partitions-3001.json}"] (
+            builtins.readFile ./scripts/preflight-lineage-userspace
+          );
+        };
+
         snapshotDevice = pkgs.writeShellApplication {
           name = "nord2t-snapshot";
           runtimeInputs = with pkgs; [
@@ -589,6 +604,7 @@
           oneplus-kernel-modules = oneplusKernelModules;
           oneplus-kernel-source = oneplusKernelSource;
           privacy = nord2tPrivacy;
+          preflight-lineage-userspace = preflightLineageUserspace;
           probe-preloader = probePreloader;
           read-gpt = readGpt;
           shamiko-module = shamikoModule;
@@ -633,6 +649,10 @@
           type = "app";
           program = "${self.packages.${system}.privacy}/bin/nord2t-privacy";
         };
+        preflight-lineage-userspace = {
+          type = "app";
+          program = "${self.packages.${system}.preflight-lineage-userspace}/bin/nord2t-preflight-lineage-userspace";
+        };
         probe-preloader = {
           type = "app";
           program = "${self.packages.${system}.probe-preloader}/bin/nord2t-probe-preloader";
@@ -675,6 +695,7 @@
           audit-lineage-images
           extract-stock
           privacy
+          preflight-lineage-userspace
           probe-preloader
           read-gpt
           snapshot

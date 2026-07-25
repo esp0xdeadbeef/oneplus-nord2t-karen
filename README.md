@@ -154,6 +154,17 @@ The audit verifies the boot structure, authenticated ADB, complete AVB chain,
 byte-exact stock `vendor` and `odm`, and the preserved live standard-image
 budget. Passing it is necessary but does not by itself authorize flashing.
 
+With the phone still running the exact rooted `.3001` baseline, combine that
+audit with the live slot-0 layout and the scoped rollback set:
+
+```bash
+nix run .#preflight-lineage-userspace -- ./result ./result-stock-restore
+```
+
+This preflight is read-only. It verifies the complete image/AVB bundle, every
+rollback hash, the active slot and the preserved OPlus allocation; it does not
+reboot, flash, erase or wipe the phone.
+
 The pinned build completed successfully on `s-tau` and its resulting
 recovery-as-boot image passed the repository's structural audit. Its kernel
 and DTB are byte-identical to `.3001` stock, while the ramdisk contains the
