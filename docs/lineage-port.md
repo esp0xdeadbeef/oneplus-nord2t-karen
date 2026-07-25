@@ -9,6 +9,11 @@ verified stock kernel and device trees so ramdisk, display and USB assumptions
 can be tested independently. Set `KAREN_BUILD_SOURCE_KERNEL=true` only after
 that baseline boots.
 
+References to `s-tau` in this assessment record historical build provenance
+and the repository owner's current RAM offload. The host is not a dependency;
+the same commands may run locally or on another suitable machine. See the
+[optional remote-build-host guide](remote-builder.md).
+
 ## Stock-derived build inputs
 
 The bring-up currently needs three binaries from the matching OxygenOS build:

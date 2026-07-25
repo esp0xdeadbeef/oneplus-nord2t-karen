@@ -6,11 +6,18 @@ This is the resumable handoff for the current Karen LineageOS bring-up. It is
 deliberately operational rather than a second porting guide; durable findings
 and rationale remain in [lineage-port.md](lineage-port.md).
 
+All `s-tau` names and paths below describe the repository owner's current
+offloaded build session. They are not prerequisites for this port: builds may
+run locally or on another sufficiently capable host. See the
+[optional remote-build-host guide](remote-builder.md) for the host boundary,
+rsync flow and artifact-return checks.
+
 ## Current checkpoint
 
 - Git `main` and `origin/main` contained code checkpoint `e3feb5b` before this
   boot-success documentation checkpoint.
-- Android compilation runs only on `s-tau`.
+- For this owner session, Android compilation is offloaded to `s-tau` because
+  full builds exhausted the memory available on `l-esp`.
 - The persistent checkout is
   `/home/deadbeef/build/lineage-21-karen-incremental`, bind-mounted at
   `/build` while an incremental build is active.

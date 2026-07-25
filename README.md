@@ -11,8 +11,10 @@ boots LineageOS 21 on the test phone, but remains a private bring-up build
 rather than a supported release. The exact official OxygenOS
 `CPH2399_14.0.0.3001(EX01)` inputs and bounded rollback paths remain pinned.
 
-For the current resumable checkpoint, active s-tau paths, mandatory next gates
-and rollback order, see [`docs/follow-up.md`](docs/follow-up.md).
+For the current resumable checkpoint, active owner paths, mandatory next gates
+and rollback order, see [`docs/follow-up.md`](docs/follow-up.md). The named
+`s-tau` host is only the owner's optional compilation offload; see the
+[remote-build-host guide](docs/remote-builder.md).
 
 The scripts refuse to operate on a device unless ADB reports both:
 
@@ -108,10 +110,11 @@ mode-0600 age identity under `~/.config/sops/age/`; that bootstrap identity
 must be backed up separately. The committed `l-esp` secret is decryptable only
 with that host user's age identity.
 
-The private ADB key remains on the host. Only its public half may be copied to
-`s-tau` as `KAREN_DEBUG_ADB_KEYS`; vanilla builds require neither file. Other
-owners get their own isolated `secrets/HOST-USER-adb-host-key.age` by running
-the same command on their build host.
+The private ADB key remains on the phone host. When using the optional remote
+workflow, only its public half may be copied to the build host as
+`KAREN_DEBUG_ADB_KEYS`; vanilla builds require neither file. Other owners get
+their own isolated `secrets/HOST-USER-adb-host-key.age` by running the same
+command on their phone/build host.
 
 The repository then adds the local `karen` tree without committing proprietary
 or stock-derived binaries. There are three useful build paths:
@@ -138,9 +141,11 @@ nix run .#android-fhs
 
 The first clean build of `karen-bootimage` must fetch and realize the complete
 LineageOS/AOSP source graph. Those repositories become ordinary immutable Nix
-store paths and are reused by later builds. A large Nix-capable machine such as
-`s-tau` can run the same flake over SSH; no declarative host exception or
-machine-specific build configuration is part of this repository.
+store paths and are reused by later builds. A sufficiently large local machine
+can run every target directly. The owner optionally uses `s-tau` over SSH
+because `l-esp` ran out of memory during full Android builds; no host exception
+or machine-specific builder configuration is part of this repository. See the
+[optional remote-build-host workflow](docs/remote-builder.md).
 
 The source-kernel target pins OnePlus's corresponding MT6893 kernel and
 MediaTek module repositories exactly. It currently fails closed because the
@@ -199,9 +204,10 @@ install-only `--stay-bootloader` mode avoids a first system boot so an audited
 private boot pair can be installed before entering recovery for add-ons.
 
 For a private headless bring-up build, `KAREN_DEBUG_ADB_KEYS` may point to
-exactly one local Android public key while building on `s-tau`. This keeps
-`ro.adb.secure=1`; it does not enable open or root ADB. Images containing that
-key are rejected by the normal audit and must remain outside Git:
+exactly one Android public key on the selected build host, including the
+optional `s-tau` workflow. This keeps `ro.adb.secure=1`; it does not enable
+open or root ADB. Images containing that key are rejected by the normal audit
+and must remain outside Git:
 
 ```bash
 nix run .#audit-lineage-images -- \
