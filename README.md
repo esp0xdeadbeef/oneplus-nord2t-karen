@@ -217,6 +217,14 @@ the image audit and the boot-pair helper reject that command line unless
 failures, collect general denials and return immediately to an enforcing
 build; it is never a release or daily-use configuration.
 
+The first full-system hardware boot initially returned to recovery because
+stock userdata carried an incompatible encryption policy on `/data/app`.
+Lineage Recovery identified that exact policy failure and its built-in factory
+reset resolved it. The same candidate now completes an encrypted, SELinux
+enforcing Lineage 21 boot on slot A. Display/touch, camera, audio, internet and
+the passive framework/core-service checks have passed; the remaining manual
+hardware matrix is tracked in [the follow-up](docs/follow-up.md).
+
 The pinned build completed successfully on `s-tau` and its resulting
 recovery-as-boot image passed the repository's structural audit. Its kernel
 and DTB are byte-identical to `.3001` stock, while the ramdisk contains the

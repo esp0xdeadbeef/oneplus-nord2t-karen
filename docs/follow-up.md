@@ -8,8 +8,8 @@ and rationale remain in [lineage-port.md](lineage-port.md).
 
 ## Current checkpoint
 
-- Git `main` and `origin/main` both contain code checkpoint `c963066`.
-- The repository worktree was clean after that push.
+- Git `main` and `origin/main` contained code checkpoint `e3feb5b` before this
+  boot-success documentation checkpoint.
 - Android compilation runs only on `s-tau`.
 - The persistent checkout is
   `/home/deadbeef/build/lineage-21-karen-incremental`, bind-mounted at
@@ -21,8 +21,42 @@ and rationale remain in [lineage-port.md](lineage-port.md).
 - The compiler cache is
   `/home/deadbeef/.cache/nord2t-ccache` on `s-tau`, with a 400 GB limit.
 - The phone is on slot A with the second audited Lineage candidate written.
-  Its USB interface exposes `adbd`, but runtime boot completion is not yet
-  verified because the new persistent host key still awaits screen approval.
+  It now completes an encrypted Lineage 21 boot with SELinux enforcing.
+
+### First successful full-system boot
+
+The original system write was valid. The early reboot was an intentional
+Android data-migration guard, not a kernel panic, display failure or AVB
+failure. Private pstore logs showed normal first- and second-stage init,
+successful F2FS `/data` mounting and an orderly shutdown. Lineage Recovery
+then recorded the non-identifying command reason
+`set_policy_failed:/data/app`: the retained stock userdata encryption policy
+could not be reused by the new framework.
+
+A private key-bound permissive bootpair produced the same recovery result,
+excluding SELinux enforcement as the cause. The built-in Lineage factory
+reset was then run because userdata was backed up and wipes were explicitly
+authorized. No firmware, radio, calibration, persistent or OPlus logical
+partition was read or written. The next boot reached Lineage setup and
+completed successfully.
+
+The temporary permissive bootpair was immediately replaced with the already
+audited key-bound enforcing bootpair. The helper wrote only `vbmeta_a` and
+`boot_a`. The enforcing reboot completed with:
+
+- Lineage 21 / Android 14 on slot A;
+- `sys.boot_completed=1`;
+- file-based encryption active on F2FS `/data`;
+- authenticated shell ADB and SELinux enforcing;
+- unlocked bootloader signals `ro.boot.flash.locked=0` and Verified Boot
+  `orange`;
+- all tested framework binder services and core processes running.
+
+The owner confirmed working display/touch, front and rear camera, audio and
+internet. GNSS, calls/SMS/IMS, Bluetooth, fingerprint/NFC, sensors, MTP,
+suspend/resume and broader charging behavior still need explicit manual
+parity checks. The current boot image remains a private authenticated-ADB
+bring-up image; it is not a release image.
 
 The corrected nine-image bundle completed 117,156 actions on `s-tau` in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
@@ -92,12 +126,11 @@ private bring-up flag is explicit. The incremental `s-tau` build completed in
 Both the complete private bundle and a smaller hybrid consisting of its new
 `boot`/`vbmeta` pair plus the original candidate's other seven images passed
 the complete explicit audit, including the AVB chain and exact stock
-vendor/odm checks. Independent copies are stored in mode-0700 directories
-under `/home/deadbeef/build` on `s-tau` and the phone host; no key or
-key-derived image is in Git. Prefer approving the ordinary RSA dialog. If
-that remains impossible, put the phone manually in ordinary
-bootloader-fastboot and use `lineage-keybound-adb`; it verifies the matching
-local private key and can write or restore only `vbmeta_a` and `boot_a`.
+vendor/odm checks. Independent copies are stored in private directories under
+`/home/deadbeef/build` on `s-tau` and the phone host; no key or key-derived
+image is in Git. The enforcing variant is now the active bootpair.
+`lineage-keybound-adb` verifies the matching local private key and can write
+or restore only `vbmeta_a` and `boot_a`.
 
 The scoped ten-image stock rollback set is protected by an explicit GC root
 on `s-tau`:

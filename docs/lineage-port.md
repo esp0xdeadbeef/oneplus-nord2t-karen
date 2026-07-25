@@ -345,14 +345,26 @@ The second install successfully resized and wrote `system_a`,
 `vendor`, `odm`, `dtbo` and all ten OPlus logical partitions remained in
 place.
 
-On the first reboot, Android USB exposed an unauthorized ADB endpoint
-continuously and did not fall back to fastboot. Boot completion is not yet
-proven: the persistent host key awaits approval on the phone, and this
-Lineage userspace rejected an Android Open Accessory HID registration that
-could otherwise operate the dialog remotely. Do not classify this as a
-successful boot or a bootloop until authenticated ADB can read the general
-boot state. No device identifier, authorization key, radio data or
-calibration data is recorded in this repository.
+The first observable system attempt initialized the Lineage framework,
+mounted encrypted F2FS userdata and then performed an orderly reboot into
+recovery. The recovery command reason was
+`set_policy_failed:/data/app`: the retained stock userdata encryption policy
+was incompatible with the new framework. A private permissive test followed
+exactly the same path, excluding SELinux enforcement as the trigger.
+
+Because userdata was backed up and a wipe was explicitly authorized, Lineage
+Recovery performed its built-in factory reset. The next system boot completed.
+The temporary permissive pair was then replaced by the already audited
+key-bound enforcing pair; only `vbmeta_a` and `boot_a` were rewritten.
+Lineage subsequently reached `sys.boot_completed=1` with file-based
+encryption, SELinux enforcing, authenticated shell ADB, slot A active and the
+expected unlocked/orange boot state. All passive framework service and core
+process checks passed.
+
+The owner confirmed display/touch, camera, audio and internet operation.
+GNSS and the remainder of the manual parity matrix are still pending. No
+device identifier, authorization key, radio data or calibration data is
+recorded in this repository.
 
 As a headless fallback, the product now accepts an opt-in
 `KAREN_DEBUG_ADB_KEYS` path for one local Android public key while retaining
@@ -367,8 +379,9 @@ The matching fastboot-only helper requires ordinary bootloader-fastboot,
 unlocked slot A, exact Karen bootloader identity, a byte-identical base for
 every non-boot-pair image, and a local private key matching the embedded
 public key. Its allowlist contains only `vbmeta_a` and `boot_a`, with a
-corresponding base-pair restore action. This is a diagnostic access path, not
-a release feature or evidence of runtime success.
+corresponding base-pair restore action. The enforcing variant supplied the
+first verified full Lineage boot, but remains a private diagnostic access
+path rather than a release configuration.
 
 ### Interactive checkout
 

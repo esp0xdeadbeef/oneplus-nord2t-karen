@@ -92,15 +92,31 @@ check_one_of() {
   fail_check "$label"
 }
 
+flash_locked="$(property ro.boot.flash.locked)"
+vbmeta_device_state="$(property ro.boot.vbmeta.device_state)"
+verified_boot_state="$(property ro.boot.verifiedbootstate)"
+
 check_equal boot_completed "$(property sys.boot_completed)" 1
 check_equal model "$(property ro.product.model)" CPH2399
 check_one_of device "$(property ro.product.device)" OP557AL1 karen
 check_equal platform_api "$(property ro.build.version.sdk)" 34
 check_nonempty lineage_version "$(property ro.lineage.version)"
 check_equal active_slot "$(property ro.boot.slot_suffix)" _a
-check_equal bootloader_flash_state "$(property ro.boot.flash.locked)" 0
-check_equal vbmeta_device_state "$(property ro.boot.vbmeta.device_state)" unlocked
-check_equal verified_boot_state "$(property ro.boot.verifiedbootstate)" orange
+check_equal bootloader_flash_state "$flash_locked" 0
+if [[ "$vbmeta_device_state" == unlocked ]]; then
+  pass_check vbmeta_device_state
+  echo "vbmeta_device_state_source=property"
+elif [[ -z "$vbmeta_device_state" &&
+  "$flash_locked" == 0 &&
+  "$verified_boot_state" == orange ]]; then
+  # The tested OPlus bootloader omits this redundant property on Lineage.
+  # Require both independent unlocked-boot signals before accepting absence.
+  pass_check vbmeta_device_state
+  echo "vbmeta_device_state_source=flash_locked_and_verified_boot"
+else
+  fail_check vbmeta_device_state
+fi
+check_equal verified_boot_state "$verified_boot_state" orange
 check_equal adb_authentication "$(property ro.adb.secure)" 1
 check_equal adb_shell_uid "$(adb_value id -u)" 2000
 check_equal selinux "$(adb_value getenforce)" Enforcing
