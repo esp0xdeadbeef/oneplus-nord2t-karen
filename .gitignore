@@ -39,3 +39,7 @@
 .env
 .env.*
 !.env.example
+
+# SOPS is the only accepted tracked secret representation.
+/secrets/*
+!/secrets/*.age

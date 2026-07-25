@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+umask 077
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-adb-key-generator [--secret-file FILE]
+                                [--key-file FILE]
+                                [--age-key-file FILE]
+
+Import, generate or restore one Android ADB host key without printing its
+contents. The default encrypted file is:
+
+  secrets/HOST-USER-adb-host-key.age
+
+If the SOPS file is absent, an existing local ADB private key is imported.
+A new ADB key is generated only when neither encrypted nor local key exists.
+If SOPS and the local key disagree, the command stops without overwriting
+either. The public ADB key is always derived from the selected private key.
+EOF
+}
+
+fail() {
+  echo "ADB host-key setup failed: $*" >&2
+  exit 1
+}
+
+user_home="${HOME:?HOME is not set}"
+key_file="$user_home/.android/adbkey"
+age_key_file="${SOPS_AGE_KEY_FILE:-$user_home/.config/sops/age/keys.txt}"
+secret_file=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --secret-file)
+      [[ $# -ge 2 ]] || fail "--secret-file requires a path"
+      secret_file="$2"
+      shift 2
+      ;;
+    --key-file)
+      [[ $# -ge 2 ]] || fail "--key-file requires a path"
+      key_file="$2"
+      shift 2
+      ;;
+    --age-key-file)
+      [[ $# -ge 2 ]] || fail "--age-key-file requires a path"
+      age_key_file="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      fail "unknown argument: $1"
+      ;;
+  esac
+done
+
+if [[ -z "$secret_file" ]]; then
+  repository_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+    fail "run from a Git checkout or pass --secret-file"
+  host_name="$(
+    hostname -s |
+      tr '[:upper:]' '[:lower:]' |
+      sed 's/[^a-z0-9._-]/-/g'
+  )"
+  user_name="$(
+    id -un |
+      tr '[:upper:]' '[:lower:]' |
+      sed 's/[^a-z0-9._-]/-/g'
+  )"
+  [[ -n "$host_name" && -n "$user_name" ]] ||
+    fail "could not derive a safe host/user secret name"
+  secret_file="$repository_root/secrets/$host_name-$user_name-adb-host-key.age"
+fi
+
+secret_file="$(realpath -m "$secret_file")"
+key_file="$(realpath -m "$key_file")"
+age_key_file="$(realpath -m "$age_key_file")"
+public_key_file="$key_file.pub"
+
+temporary_directory="$(mktemp -d -t nord2t-adb-key.XXXXXXXX)"
+cleanup() {
+  rm -r -- "$temporary_directory"
+}
+trap cleanup EXIT HUP INT TERM
+chmod 700 "$temporary_directory"
+
+if [[ -e "$age_key_file" ]]; then
+  [[ -f "$age_key_file" && -s "$age_key_file" ]] ||
+    fail "SOPS age identity is not a non-empty regular file"
+  age_identity_action="verified-existing"
+else
+  [[ ! -e "$secret_file" ]] ||
+    fail "encrypted ADB key exists but its SOPS age identity is unavailable"
+  generated_identity="$temporary_directory/age-identity.txt"
+  age-keygen -o "$generated_identity" >/dev/null 2>&1 ||
+    fail "could not generate a SOPS age identity"
+  install -d -m 0700 "$(dirname "$age_key_file")"
+  install -m 0600 "$generated_identity" "$age_key_file"
+  age_identity_action="generated-local"
+fi
+
+age_key_mode="$(stat -c %a "$age_key_file")"
+(((8#$age_key_mode & 077) == 0)) ||
+  fail "SOPS age identity must not be group/world accessible"
+
+validate_private_key() {
+  local private_key="$1"
+  local derived_public_key="$2"
+
+  [[ -f "$private_key" && -s "$private_key" ]] ||
+    fail "ADB private key is missing or empty"
+  adb pubkey "$private_key" >"$derived_public_key" 2>/dev/null ||
+    fail "ADB private key is not valid"
+  [[ -s "$derived_public_key" ]] ||
+    fail "ADB public-key derivation returned an empty result"
+}
+
+decrypted_key="$temporary_directory/decrypted-adbkey"
+derived_public_key="$temporary_directory/adbkey.pub"
+encrypted_candidate="$temporary_directory/adb-host-key.age"
+
+if [[ -e "$secret_file" ]]; then
+  [[ -f "$secret_file" && -s "$secret_file" ]] ||
+    fail "encrypted ADB key is not a non-empty regular file"
+  SOPS_AGE_KEY_FILE="$age_key_file" \
+    sops decrypt \
+      --input-type binary \
+      --output-type binary \
+      "$secret_file" >"$decrypted_key" ||
+    fail "could not decrypt the SOPS ADB key"
+  chmod 600 "$decrypted_key"
+  validate_private_key "$decrypted_key" "$derived_public_key"
+
+  if [[ -e "$key_file" ]]; then
+    [[ -f "$key_file" && -s "$key_file" ]] ||
+      fail "local ADB key is not a non-empty regular file"
+    [[ "$(stat -c %a "$key_file")" == 600 ]] ||
+      fail "local ADB private key permissions are not 0600"
+    cmp -s "$decrypted_key" "$key_file" ||
+      fail "SOPS and local ADB private keys differ; refusing to overwrite"
+    action="verified-existing"
+  else
+    install -d -m 0700 "$(dirname "$key_file")"
+    install -m 0600 "$decrypted_key" "$key_file"
+    action="restored-from-sops"
+  fi
+else
+  install -d -m 0755 "$(dirname "$secret_file")"
+
+  if [[ -e "$key_file" ]]; then
+    [[ -f "$key_file" && -s "$key_file" ]] ||
+      fail "local ADB key is not a non-empty regular file"
+    [[ "$(stat -c %a "$key_file")" == 600 ]] ||
+      fail "local ADB private key permissions are not 0600"
+    validate_private_key "$key_file" "$derived_public_key"
+    source_key="$key_file"
+    action="imported-existing"
+  else
+    generated_key="$temporary_directory/generated-adbkey"
+    adb keygen "$generated_key" >/dev/null 2>&1 ||
+      fail "ADB key generation failed"
+    chmod 600 "$generated_key"
+    validate_private_key "$generated_key" "$derived_public_key"
+    source_key="$generated_key"
+    action="generated-new"
+  fi
+
+  recipient="$(age-keygen -y "$age_key_file" 2>/dev/null)" ||
+    fail "could not derive the SOPS age recipient"
+  [[ "$recipient" == age1* ]] ||
+    fail "SOPS age identity did not produce a native age recipient"
+
+  sops --config /dev/null encrypt \
+    --age "$recipient" \
+    --input-type binary \
+    --output-type binary \
+    "$source_key" >"$encrypted_candidate" ||
+    fail "could not encrypt the ADB private key"
+  [[ -s "$encrypted_candidate" ]] ||
+    fail "SOPS produced an empty encrypted file"
+
+  SOPS_AGE_KEY_FILE="$age_key_file" \
+    sops decrypt \
+      --input-type binary \
+      --output-type binary \
+      "$encrypted_candidate" >"$decrypted_key" ||
+    fail "could not verify the new SOPS file"
+  chmod 600 "$decrypted_key"
+  cmp -s "$source_key" "$decrypted_key" ||
+    fail "new SOPS file did not round-trip exactly"
+
+  install -m 0644 "$encrypted_candidate" "$secret_file"
+  if [[ ! -e "$key_file" ]]; then
+    install -d -m 0700 "$(dirname "$key_file")"
+    install -m 0600 "$source_key" "$key_file"
+  fi
+fi
+
+validate_private_key "$key_file" "$derived_public_key"
+if [[ ! -e "$public_key_file" ]] ||
+  ! cmp -s "$derived_public_key" "$public_key_file"; then
+  install -m 0644 "$derived_public_key" "$public_key_file"
+fi
+
+echo "ADB host-key setup passed."
+echo "action=$action"
+echo "private_key_mode=$(stat -c %a "$key_file")"
+echo "public_key_mode=$(stat -c %a "$public_key_file")"
+echo "secret_encryption=sops-age"
+echo "age_identity=$age_identity_action"

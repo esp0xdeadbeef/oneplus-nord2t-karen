@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MIT
+
+keys:
+  - &l-esp-deadbeef age1vfresmphe0ahyn9vdtsqzzz72kt2lyd8nya376yk7yxjpc5p298qya76kz
+
+creation_rules:
+  - path_regex: '^secrets/l-esp-deadbeef-adb-host-key\.age$'
+    input_type: binary
+    output_type: binary
+    key_groups:
+      - age:
+          - *l-esp-deadbeef

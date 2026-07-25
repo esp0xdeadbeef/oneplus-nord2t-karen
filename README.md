@@ -91,6 +91,28 @@ MindTheGapps release separately. It is not part of the vanilla image and is
 never selected implicitly. Aurora Store is likewise a separate pinned user
 app, so installing it does not toggle or remove Android packages.
 
+## Host-local ADB key
+
+Private headless builds can bind recovery ADB to one host key without putting
+plaintext key material in Git. Run this as the normal desktop user:
+
+```bash
+nix run .#adb-key-generator
+```
+
+The command is deliberately idempotent. If the host-specific SOPS file is
+absent, it imports an existing `~/.android/adbkey`; it generates a new ADB key
+only if neither copy exists. If the encrypted and local keys differ, it stops
+without overwriting either. If needed for a new user, it also creates a
+mode-0600 age identity under `~/.config/sops/age/`; that bootstrap identity
+must be backed up separately. The committed `l-esp` secret is decryptable only
+with that host user's age identity.
+
+The private ADB key remains on the host. Only its public half may be copied to
+`s-tau` as `KAREN_DEBUG_ADB_KEYS`; vanilla builds require neither file. Other
+owners get their own isolated `secrets/HOST-USER-adb-host-key.age` by running
+the same command on their build host.
+
 The repository then adds the local `karen` tree without committing proprietary
 or stock-derived binaries. There are three useful build paths:
 

@@ -128,6 +128,19 @@
           ln -s ${oneplus-kernel-modules}/vendor/mediatek/kernel_modules "$out"
         '';
 
+        adbKeyGenerator = pkgs.writeShellApplication {
+          name = "nord2t-adb-key-generator";
+          runtimeInputs = with pkgs; [
+            age
+            android-tools
+            coreutils
+            gitMinimal
+            gnused
+            sops
+          ];
+          text = builtins.readFile ./scripts/adb-key-generator;
+        };
+
         installAurora = pkgs.writeShellApplication {
           name = "nord2t-install-aurora";
           runtimeInputs = with pkgs; [
@@ -739,6 +752,7 @@
           else null;
       in
         {
+          adb-key-generator = adbKeyGenerator;
           android-fhs = androidFhs;
           adaway-apk = adawayApk;
           audit-boot = auditBoot;
@@ -785,6 +799,10 @@
     apps = eachSystem (
       {system, ...}: {
         default = self.apps.${system}.audit-lineage-runtime;
+        adb-key-generator = {
+          type = "app";
+          program = "${self.packages.${system}.adb-key-generator}/bin/nord2t-adb-key-generator";
+        };
         android-fhs = {
           type = "app";
           program = "${self.packages.${system}.android-fhs}/bin/nord2t-android-fhs";
@@ -871,6 +889,7 @@
       }: {
         inherit
           (self.packages.${system})
+          adb-key-generator
           audit-boot
           audit-lineage-images
           audit-lineage-runtime
@@ -887,6 +906,23 @@
           snapshot
           verify-firmware
           ;
+
+        adb-key-generator-test =
+          pkgs.runCommand "nord2t-adb-key-generator-test" {
+            nativeBuildInputs = with pkgs; [
+              age
+              android-tools
+              bash
+              coreutils
+              gnugrep
+              gnused
+              sops
+            ];
+            src = ./.;
+          } ''
+            bash "$src"/tests/adb-key-generator.sh
+            touch "$out"
+          '';
 
         shellcheck =
           pkgs.runCommand "nord2t-shellcheck" {
@@ -958,6 +994,7 @@
       {pkgs, ...}: {
         default = pkgs.mkShell {
           packages = with pkgs; [
+            age
             alejandra
             android-tools
             coreutils
@@ -974,6 +1011,7 @@
             p7zip
             payload-dumper-go
             shellcheck
+            sops
           ];
         };
       }

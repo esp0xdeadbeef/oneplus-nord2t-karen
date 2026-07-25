@@ -107,4 +107,19 @@ if find "$script_directory/lineage" \
   exit 1
 fi
 
+if find "$script_directory/secrets" \
+  -type f ! -name '*.age' \
+  -print -quit 2>/dev/null |
+  grep -q .; then
+  echo "A non-SOPS file is present in the secrets directory." >&2
+  exit 1
+fi
+for encrypted_secret in "$script_directory"/secrets/*.age; do
+  [[ -e "$encrypted_secret" ]] || continue
+  grep -Fq '"sops":' "$encrypted_secret" || {
+    echo "A tracked .age file is not SOPS-encrypted." >&2
+    exit 1
+  }
+done
+
 echo "Package safety checks passed."
