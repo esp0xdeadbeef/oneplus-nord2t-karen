@@ -551,6 +551,16 @@ synced for an older 2024 OxygenOS 14 release. They match the 4.19 kernel family,
 but not the exact 2026 `.3001` binary baseline, so source availability does not
 remove the kernel-maintenance work.
 
+Both hashes are still the tips of OnePlus's only Android 14 Nord 2T branches
+as checked on 2026-07-25; there is no newer official Karen kernel source to
+select. The published tree itself identifies as 4.19.191. A practical update
+track is therefore: first reconstruct the missing OPlus source layer and boot
+that exact source baseline, then forward-port applicable maintained 4.19
+security fixes with hardware regression tests. Rebasing Karen directly to a
+current 5.10, 6.x or mainline kernel would require porting the MediaTek/OPlus
+display, camera, modem/IMS, audio, charging, touch, sensors and power stack and
+must be treated as a separate platform port.
+
 ### Reproducible source-kernel gate
 
 The flake locks both official repositories and exposes a diagnostic build:

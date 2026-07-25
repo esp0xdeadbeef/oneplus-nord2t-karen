@@ -208,6 +208,21 @@ fastboot_variable() {
     head -n 1
 }
 
+fastbootd_variable_with_retry() {
+  local variable="$1"
+  local value
+
+  for _ in $(seq 1 5); do
+    value="$(fastboot_variable "$variable" || true)"
+    if [[ -n "$value" ]]; then
+      echo "$value"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 select_adb_device() {
   mapfile -t adb_devices < <(
     adb devices |
@@ -393,7 +408,8 @@ stage_stock_fastbootd_boot_chain() {
 }
 
 cleanup_audited_stale_cow_partitions() {
-  local partition specification expected_size reported_size
+  local partition specification expected_size logical reported_size
+  local reported_size_decimal status
   local specifications=(
     my_engineering_a-cow:344064
     my_heytap_a-cow:15728640
@@ -406,18 +422,26 @@ cleanup_audited_stale_cow_partitions() {
     vendor_a-cow:489263104
   )
 
-  [[ "$(fastboot_variable snapshot-update-status)" == none ]] ||
+  status="$(fastbootd_variable_with_retry snapshot-update-status || true)"
+  [[ "$status" == none ]] ||
     fail "stock fastbootd does not report snapshot-update-status none"
 
   for specification in "${specifications[@]}"; do
     partition="${specification%%:*}"
     expected_size="${specification#*:}"
-    [[ "$(fastboot_variable "is-logical:$partition")" == yes ]] ||
+    logical="$(
+      fastbootd_variable_with_retry "is-logical:$partition" || true
+    )"
+    [[ "$logical" == yes ]] ||
       fail "audited stale COW partition is missing: $partition"
-    reported_size="$(fastboot_variable "partition-size:$partition")"
-    [[ "$reported_size" =~ ^(0[xX][0-9a-fA-F]+|[0-9]+)$ ]] ||
+    reported_size="$(
+      fastbootd_variable_with_retry "partition-size:$partition" || true
+    )"
+    reported_size_decimal="$(
+      printf '%d' "$reported_size" 2>/dev/null
+    )" ||
       fail "stock fastbootd returned an invalid COW size: $partition"
-    ((reported_size == expected_size)) ||
+    [[ "$reported_size_decimal" == "$expected_size" ]] ||
       fail "stale COW partition size changed: $partition"
   done
 
