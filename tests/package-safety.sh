@@ -13,6 +13,7 @@ lineage_root="$script_directory/scripts/lineage-root"
 lineage_root_full="$script_directory/scripts/lineage-root-full"
 lineage_unroot="$script_directory/scripts/lineage-unroot"
 runtime_audit="$script_directory/scripts/audit-lineage-runtime"
+userspace_preflight="$script_directory/scripts/preflight-lineage-userspace"
 
 # shellcheck disable=SC2016
 grep -Fq 'PRODUCT_ADB_KEYS := $(strip $(KAREN_DEBUG_ADB_KEYS))' "$device_makefile"
@@ -55,6 +56,21 @@ grep -Fq '"$(fastbootd_partition_name "$partition")"' \
   "$script_directory/scripts/lineage-userspace"
 grep -Fq 'for partition in product system system_ext vendor odm' \
   "$script_directory/scripts/lineage-userspace"
+grep -Fq 'stage_stock_fastbootd_boot_chain' \
+  "$script_directory/scripts/lineage-userspace"
+# shellcheck disable=SC2016
+grep -Fq '"$restore_directory/images/boot.img"' \
+  "$script_directory/scripts/lineage-userspace"
+grep -Fq \
+  "'dd if=/dev/block/by-name/super bs=1048576 count=4 2>/dev/null'" \
+  "$userspace_preflight"
+grep -Fq 'endswith("-cow")' "$userspace_preflight"
+grep -Fq 'preflight_source=lineage-recovery' "$userspace_preflight"
+if grep -Fq 'snapshot-update cancel' \
+  "$userspace_preflight" "$script_directory/scripts/lineage-userspace"; then
+  echo "Lineage userspace helpers must not cancel snapshots implicitly." >&2
+  exit 1
+fi
 grep -Fq 'flash_partition vbmeta_a' "$keybound_helper"
 grep -Fq 'flash_partition boot_a' "$keybound_helper"
 grep -Fq 'embedded ADB key does not match this normal-user host key' "$keybound_helper"

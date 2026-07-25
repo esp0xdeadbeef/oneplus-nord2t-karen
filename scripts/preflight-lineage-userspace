@@ -8,8 +8,9 @@ usage() {
 usage: nord2t-preflight-lineage-userspace LINEAGE_DIR STOCK_RESTORE_DIR
 
 Validate a complete Lineage image bundle, the scoped .3001 rollback bundle,
-and the connected stock CPH2399 dynamic-partition layout. This command is
-read-only: it never reboots, flashes, erases, formats or wipes the phone.
+and the connected CPH2399 dynamic-partition layout. The phone may be running
+the exact rooted .3001 baseline or the audited Lineage Recovery. This command
+is read-only: it never reboots, flashes, erases, formats or wipes the phone.
 EOF
 }
 
@@ -92,43 +93,117 @@ if [[ -r "$restore_directory/SOURCE.json" ]]; then
     fail "stock restore provenance is not the expected profile"
 fi
 
-mapfile -t adb_devices < <(
+mapfile -t adb_device_rows < <(
   adb devices |
-    awk 'NR > 1 && $2 == "device" { print $1 }'
+    awk 'NR > 1 && ($2 == "device" || $2 == "recovery") { print $1 " " $2 }'
 )
-[[ "${#adb_devices[@]}" -eq 1 ]] ||
-  fail "expected exactly one authorized ADB device"
-serial="${adb_devices[0]}"
+[[ "${#adb_device_rows[@]}" -eq 1 ]] ||
+  fail "expected exactly one authorized stock Android or recovery ADB device"
+read -r serial adb_state <<<"${adb_device_rows[0]}"
 
 adb_property() {
   adb -s "$serial" shell getprop "$1" 2>/dev/null | tr -d '\r'
 }
 
-[[ "$(adb_property sys.boot_completed)" == 1 ]] ||
-  fail "Android has not finished booting"
-[[ "$(adb_property ro.product.model)" == CPH2399 ]] ||
-  fail "connected model is not CPH2399"
-[[ "$(adb_property ro.product.device)" == OP557AL1 ]] ||
-  fail "connected device is not OP557AL1"
-[[ "$(adb_property ro.build.display.id)" == "CPH2399_14.0.0.3001(EX01)" ]] ||
-  fail "installed system is not the pinned .3001 stock baseline"
-[[ "$(adb_property ro.boot.slot_suffix)" == _a ]] ||
-  fail "the populated and audited slot A is not active"
-[[ "$(adb_property ro.boot.dynamic_partitions)" == true ]] ||
-  fail "dynamic partitions are not enabled"
-[[ "$(adb_property ro.virtual_ab.enabled)" == true ]] ||
-  fail "virtual A/B is not enabled"
-[[ "$(adb_property ro.boot.flash.locked)" == 0 ]] ||
-  fail "bootloader is not unlocked"
-[[ "$(adb_property ro.boot.vbmeta.device_state)" != locked ]] ||
-  fail "verified boot still reports a locked device"
-[[ "$(adb -s "$serial" exec-out su -c id -u 2>/dev/null | tr -d '\r')" == 0 ]] ||
-  fail "approved read-only root is unavailable"
-
 lpdump_json="$temporary_directory/lpdump.json"
-adb -s "$serial" exec-out su -c 'lpdump --slot 0 --json' \
-  >"$lpdump_json" 2>/dev/null ||
-  fail "could not read slot-0 logical metadata"
+preflight_source=
+
+if [[ "$adb_state" == device ]]; then
+  [[ "$(adb_property sys.boot_completed)" == 1 ]] ||
+    fail "Android has not finished booting"
+  [[ "$(adb_property ro.product.model)" == CPH2399 ]] ||
+    fail "connected model is not CPH2399"
+  [[ "$(adb_property ro.product.device)" == OP557AL1 ]] ||
+    fail "connected device is not OP557AL1"
+  [[ "$(adb_property ro.build.display.id)" == "CPH2399_14.0.0.3001(EX01)" ]] ||
+    fail "installed system is not the pinned .3001 stock baseline"
+  [[ "$(adb_property ro.boot.slot_suffix)" == _a ]] ||
+    fail "the populated and audited slot A is not active"
+  [[ "$(adb_property ro.boot.dynamic_partitions)" == true ]] ||
+    fail "dynamic partitions are not enabled"
+  [[ "$(adb_property ro.virtual_ab.enabled)" == true ]] ||
+    fail "virtual A/B is not enabled"
+  [[ "$(adb_property ro.boot.flash.locked)" == 0 ]] ||
+    fail "bootloader is not unlocked"
+  [[ "$(adb_property ro.boot.vbmeta.device_state)" != locked ]] ||
+    fail "verified boot still reports a locked device"
+  [[ "$(adb -s "$serial" exec-out su -c id -u 2>/dev/null | tr -d '\r')" == 0 ]] ||
+    fail "approved read-only root is unavailable"
+
+  adb -s "$serial" exec-out su -c 'lpdump --slot 0 --json' \
+    >"$lpdump_json" 2>/dev/null ||
+    fail "could not read slot-0 logical metadata"
+  preflight_source=stock-android
+else
+  [[ "$(adb_property ro.bootmode)" == recovery ]] ||
+    fail "ADB recovery state does not report recovery boot mode"
+  [[ "$(adb_property ro.product.model)" == CPH2399 ]] ||
+    fail "connected recovery model is not CPH2399"
+  [[ "$(adb_property ro.product.device)" == karen ]] ||
+    fail "connected recovery device is not Karen"
+  [[ "$(adb_property ro.lineage.version)" == 21.0-*-UNOFFICIAL-karen ]] ||
+    fail "connected recovery is not the audited private Lineage 21 target"
+  [[ "$(adb_property ro.boot.slot_suffix)" == _a ]] ||
+    fail "the populated and audited slot A is not active"
+  [[ "$(adb_property ro.boot.verifiedbootstate)" == orange ]] ||
+    fail "recovery does not report the expected unlocked verified-boot state"
+  [[ "$(adb_property ro.boot.dynamic_partitions)" == true ]] ||
+    fail "dynamic partitions are not enabled"
+  [[ "$(adb_property ro.virtual_ab.enabled)" == true ]] ||
+    fail "virtual A/B is not enabled"
+  [[ "$(adb -s "$serial" exec-out id -u 2>/dev/null | tr -d '\r')" == 0 ]] ||
+    fail "recovery ADB is not root"
+  adb -s "$serial" shell \
+    'test -b /dev/block/by-name/super' >/dev/null 2>&1 ||
+    fail "recovery cannot access the generic super block device"
+
+  super_metadata="$temporary_directory/super-metadata.img"
+  raw_lpdump_json="$temporary_directory/lpdump-raw.json"
+  adb -s "$serial" exec-out \
+    'dd if=/dev/block/by-name/super bs=1048576 count=4 2>/dev/null' \
+    >"$super_metadata" ||
+    fail "could not read the bounded super metadata prefix"
+  [[ "$(stat -c %s "$super_metadata")" == 4194304 ]] ||
+    fail "recovery returned an incomplete super metadata prefix"
+  lpdump --slot=0 --json "$super_metadata" >"$raw_lpdump_json" 2>/dev/null ||
+    fail "host lpdump could not parse slot-0 super metadata"
+  jq empty "$raw_lpdump_json" ||
+    fail "host lpdump did not return valid JSON"
+
+  jq -e '
+    (.block_devices | length) == 1 and
+    .block_devices[0].name == "super" and
+    (.block_devices[0].size | tonumber) == 12348030976 and
+    ([.groups[] | select(
+      .name == "main_a" and
+      (.maximum_size | tonumber) == 12343836672
+    )] | length) == 1 and
+    ([.partitions[] | select(
+      (.name | endswith("-cow")) or .group_name == "cow"
+    )] | length) == 0
+  ' "$raw_lpdump_json" >/dev/null ||
+    fail "raw super metadata contains an active or stale COW snapshot layout"
+
+  jq '
+    {
+      enabled: true,
+      block_devices,
+      groups: [
+        .groups[] |
+        select(.name == "main_a") |
+        .name = "main"
+      ],
+      partitions: [
+        .partitions[] |
+        select(.group_name == "main_a") |
+        .name |= sub("_a$"; "") |
+        .group_name = "main"
+      ]
+    }
+  ' "$raw_lpdump_json" >"$lpdump_json"
+  preflight_source=lineage-recovery
+fi
+
 jq empty "$lpdump_json" ||
   fail "lpdump did not return valid JSON"
 
@@ -201,4 +276,5 @@ echo "live_oplus_bytes=$oplus_live_bytes"
 echo "lineage_standard_bytes=$lineage_standard_bytes"
 echo "standard_image_ceiling=$standard_image_ceiling"
 echo "restore_images=exact"
+echo "preflight_source=$preflight_source"
 echo "flash_gate=explicit-destructive-test-still-required"

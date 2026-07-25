@@ -40,10 +40,13 @@ no root after a successful bootloader relock and its mandatory wipe. This
 proves the complete stock/recovery/lock side of the roundtrip.
 
 The bootloader has since been deliberately unlocked again, performing the
-expected second wipe. The phone currently boots the corrected private Lineage
-Recovery on slot A while its logical userspace remains exact stock. Recovery
-has authenticated root ADB and the OLED init fix; no full Lineage userspace or
-root package is currently installed.
+expected second wipe. An explicit recovery request currently enters the
+corrected private Lineage Recovery on slot A, while a normal boot still enters
+exact rootless stock userspace. Recovery has authenticated root ADB and the
+OLED init fix; no full Lineage userspace or root package is currently
+installed. A read-only recovery metadata check found nine virtual-A/B COW
+partitions left by stock. The install gate refuses them until their merge
+state is established and cleaned up through a documented Android path.
 
 The earlier Lineage boot exercised display, touch, camera, audio and internet
 successfully. Its passive runtime audit reported the expected framework,
@@ -187,8 +190,9 @@ The full Nix target additionally builds AOSP's host `checkvintf` and verifies
 the generated framework metadata against the exact `.3001` vendor/odm VINTF
 files for the live `dsds` hardware SKU.
 
-With the phone still running the exact rooted `.3001` baseline, combine that
-audit with the live slot-0 layout and the scoped rollback set:
+With the phone running either the exact rooted `.3001` baseline or the audited
+private Lineage Recovery, combine that audit with the live slot-0 layout and
+the scoped rollback set:
 
 ```bash
 nix run .#preflight-lineage-userspace -- ./result ./result-stock-restore
@@ -196,7 +200,9 @@ nix run .#preflight-lineage-userspace -- ./result ./result-stock-restore
 
 This preflight is read-only. It verifies the complete image/AVB bundle, every
 rollback hash, the active slot and the preserved OPlus allocation; it does not
-reboot, flash, erase or wipe the phone.
+reboot, flash, erase or wipe the phone. In recovery it copies only the first
+4 MiB of the generic `super` block device for host-side metadata parsing. It
+rejects any COW snapshot partition instead of cancelling or deleting one.
 
 Only after that command passes and a rollback test is ready, the bounded
 hardware helper can install or restore the same directories:
@@ -208,13 +214,15 @@ nix run .#lineage-userspace -- \
 nix run .#lineage-userspace -- restore ./result-stock-restore
 ```
 
-The install action leaves exact live `vendor`, `odm` and `dtbo` in place and
-writes only `system`, `system_ext`, `product`, `boot_a` and the three slot-A
-AVB metadata images. The restore action verifies every stock hash again before
-writing the five standard logical images plus stock slot-A boot/AVB metadata.
-Neither action can name or write an OPlus logical partition. The optional
-install-only `--stay-bootloader` mode avoids a first system boot so an audited
-private boot pair can be installed before entering recovery for add-ons.
+The install action first stages the exact stock boot/AVB chain so the tested
+stock fastbootd exposes explicit slot-A mappings. It then leaves exact live
+`vendor`, `odm` and `dtbo` in place and writes only `system`, `system_ext`,
+`product`, `boot_a` and the three slot-A AVB metadata images. The restore
+action verifies every stock hash again before writing the five standard
+logical images plus stock slot-A boot/AVB metadata. Neither action can name or
+write an OPlus logical partition. The optional install-only
+`--stay-bootloader` mode avoids a first system boot so an audited private boot
+pair can be installed before entering recovery for add-ons.
 
 For a private headless bring-up build, `KAREN_DEBUG_ADB_KEYS` may point to
 exactly one Android public key on the selected build host, including the

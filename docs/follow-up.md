@@ -14,8 +14,8 @@ rsync flow and artifact-return checks.
 
 ## Current checkpoint
 
-- Git `main` and `origin/main` contain restore-order checkpoint `210cea5`
-  before this stock-roundtrip documentation checkpoint.
+- Git `main` and `origin/main` contain the stock roundtrip and OLED recovery
+  checkpoints; commit the snapshot gate below before the next phone write.
 - For this owner session, Android compilation is offloaded to `s-tau` because
   full builds exhausted the memory available on `l-esp`.
 - The persistent checkout is
@@ -29,8 +29,13 @@ rsync flow and artifact-return checks.
   `/home/deadbeef/.cache/nord2t-ccache` on `s-tau`, with a 400 GB limit.
 - The exact-stock relock and green/rootless boot completed successfully. The
   bootloader was then deliberately unlocked again, with the expected wipe.
-  The phone currently runs the corrected private Lineage Recovery boot pair
-  on slot A over still-exact stock logical userspace.
+  A recovery request currently enters the corrected private Lineage Recovery
+  on slot A, while a normal boot still enters exact rootless stock userspace.
+- A bounded read-only copy of the first 4 MiB of `super` found the expected 15
+  active slot-A partitions plus nine COW snapshot partitions. A complete
+  stock boot did not remove them, and bootloader-fastboot returned no usable
+  `snapshot-update-status`. The next logical write remains blocked until
+  stock fastbootd reports an unambiguous state.
 
 ### Exact stock restore and relock
 
@@ -309,15 +314,17 @@ the absolute depfiles.
    exact stock vendor/odm VINTF metadata for the live `dsds` SKU.
 4. Rsync the audited candidate directory from `s-tau` to the phone host and
    hash it again.
-5. Run the read-only `preflight-lineage-userspace` with stock Android still
-   booted. It must confirm slot A, the exact 15-partition `main` layout,
-   3,527,249,920 preserved OPlus bytes and the 8,816,586,752-byte standard
-   image ceiling.
+5. Run the read-only `preflight-lineage-userspace` from either the exact
+   rooted stock baseline or the audited private Lineage Recovery. It must
+   confirm slot A, the exact 15-partition `main` layout, 3,527,249,920
+   preserved OPlus bytes, the 8,816,586,752-byte standard image ceiling and
+   the absence of COW snapshot partitions.
 6. Only when every previous gate is green, use the bounded
-   `lineage-userspace install` action. It writes `system`, `system_ext`,
-   `product`, `boot_a`, `vbmeta_a`, `vbmeta_system_a` and
-   `vbmeta_vendor_a`; it leaves live exact `vendor`, `odm`, `dtbo` and every
-   OPlus logical partition untouched.
+   `lineage-userspace install` action. It first stages exact stock boot/AVB
+   metadata to obtain the tested stock fastbootd mappings, then writes
+   `system`, `system_ext`, `product`, `boot_a`, `vbmeta_a`,
+   `vbmeta_system_a` and `vbmeta_vendor_a`; it leaves live exact `vendor`,
+   `odm`, `dtbo` and every OPlus logical partition untouched.
 7. Verify boot, display, touch, encryption, ADB authorization, SELinux,
    telephony, Wi-Fi, Bluetooth, cameras, audio, sensors, GNSS, USB,
    suspend/resume and charging. Preserve only general logs; do not collect
@@ -333,6 +340,8 @@ the absolute depfiles.
   logical partitions.
 - Do not write slot-B logical placeholders as if they were an independent
   inactive system.
+- Do not hide, delete or implicitly cancel COW snapshot partitions. Establish
+  their Android merge status through stock fastbootd before continuing.
 - Do not flash `oscaro`, `avicii` or `denniz` artifacts.
 - Do not read or publish `nvram`, `nvdata`, calibration, persistent, radio or
   other device-unique partitions.

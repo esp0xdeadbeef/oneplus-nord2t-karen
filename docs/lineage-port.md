@@ -159,6 +159,23 @@ hardware-test helper must recompute those figures from a fresh read-only
 `lpdump` immediately before writing and refuse the test if the names, group or
 available standard-image budget have changed.
 
+The same layout can now be checked from the audited private Lineage Recovery
+without adding `lpdump` to its ramdisk. The host copies only the first 4 MiB of
+the generic `super` block device, parses its slot-0 metadata with the pinned
+host tool and normalizes the `_a` names. It never reads a logical filesystem,
+an OPlus partition or device-unique storage.
+
+That recovery check currently also sees nine `-cow` partitions consuming the
+otherwise free super extents. A complete rootless stock boot did not remove
+them, while bootloader-fastboot returned no usable
+`snapshot-update-status`. The preflight therefore rejects the current layout.
+It does not silently omit the COW entries and neither helper issues
+`snapshot-update cancel`. Android's documented full-flash flow permits a
+cancel only after the target reports `merging` or `snapshotted`; stock
+fastbootd must provide that unambiguous status before this port adopts the
+same action. See the
+[AOSP Virtual A/B fastboot guidance](https://source.android.com/docs/core/ota/virtual_ab/implement#fastboot-tooling-changes).
+
 Android's unmodified dynamic-partition build configuration accepts the
 standard partition set, not those OPlus names. The initial test plan must
 therefore leave every live OPlus logical partition in place. Do not build or
@@ -427,7 +444,9 @@ fallback: stock fastbootd reported slot A and created `system_a`. It exposed
 only the explicitly suffixed logical name, even though `current-slot` was
 valid. The bounded helper therefore detects unsuffixed and `_a` mappings
 independently of slot reporting instead of inferring one behavior from the
-other.
+other. Install and restore now stage that exact public-OTA boot/AVB chain
+before entering fastbootd, so a currently installed private recovery cannot
+silently select the mapping-deficient Lineage fastbootd.
 
 As a headless fallback, the product now accepts an opt-in
 `KAREN_DEBUG_ADB_KEYS` path for one local Android public key while retaining
@@ -667,10 +686,11 @@ not itself the eventual Lineage device tree.
 
 ## Minimum gate before flashing
 
-The phone is currently back on exact stock with its bootloader relocked. A
-future custom-system test must deliberately unlock and accept the resulting
-wipe again. Never relock a custom system. Before flashing, continue to require
-all of the following:
+The exact locked-stock roundtrip is complete. The phone was deliberately
+unlocked again with its expected wipe; normal boot is exact rootless stock and
+an explicit recovery request enters the corrected private Lineage Recovery.
+Never relock a custom system. Before flashing, continue to require all of the
+following:
 
 - a bootable image produced from reviewable source;
 - a current, exact `CPH2399` blob and firmware baseline;

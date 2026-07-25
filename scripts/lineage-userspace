@@ -10,9 +10,11 @@ usage:
                                     [--stay-bootloader] [--yes]
   nord2t-lineage-userspace restore STOCK_RESTORE_DIR [--yes]
 
-Install writes only system, system_ext, product, boot_a and the three slot-A
-AVB metadata partitions after the complete stock/live preflight passes.
-Vendor, odm, dtbo and all OPlus logical partitions remain untouched.
+Install first stages the exact stock boot/AVB chain so the tested stock
+fastbootd exposes slot-A logical mappings. It then writes only system,
+system_ext, product, boot_a and the three slot-A AVB metadata partitions
+after the complete stock/live preflight passes. Vendor, odm, dtbo and all
+OPlus logical partitions remain untouched.
 
 Restore writes the five exact stock logical images and the exact stock boot_a
 and AVB metadata. It can start from authorized ADB, fastbootd or
@@ -186,7 +188,7 @@ fastboot_variable() {
 select_adb_device() {
   mapfile -t adb_devices < <(
     adb devices |
-      awk 'NR > 1 && $2 == "device" { print $1 }'
+      awk 'NR > 1 && ($2 == "device" || $2 == "recovery") { print $1 }'
   )
   [[ "${#adb_devices[@]}" -eq 1 ]] || return 1
   adb_serial="${adb_devices[0]}"
@@ -313,24 +315,17 @@ enter_bootloader_from_adb() {
   ensure_bootloader_slot_a
 }
 
-ensure_fastbootd() {
+ensure_bootloader() {
   if select_fastboot_mode fastbootd; then
-    if [[ "$(fastboot_variable current-slot)" != a ]]; then
-      reboot_fastbootd_to_bootloader
-      reboot_bootloader_to_fastbootd
-    else
-      verify_fastbootd
-    fi
+    reboot_fastbootd_to_bootloader
     return
   fi
   if select_fastboot_mode fastboot; then
     verify_bootloader_identity
     ensure_bootloader_slot_a
-    reboot_bootloader_to_fastbootd
     return
   fi
   if enter_bootloader_from_adb; then
-    reboot_bootloader_to_fastbootd
     return
   fi
   fail "expected one authorized ADB, fastbootd or bootloader-fastboot device"
@@ -362,6 +357,18 @@ flash_partition() {
   done
 }
 
+stage_stock_fastbootd_boot_chain() {
+  local partition
+
+  for partition in vbmeta_system vbmeta_vendor vbmeta; do
+    flash_partition \
+      fastboot \
+      "${partition}_a" \
+      "$restore_directory/images/$partition.img"
+  done
+  flash_partition fastboot boot_a "$restore_directory/images/boot.img"
+}
+
 write_started=false
 report_interrupted_write() {
   local status="$?"
@@ -374,8 +381,10 @@ report_interrupted_write() {
 }
 trap report_interrupted_write ERR
 
-ensure_fastbootd
+ensure_bootloader
 write_started=true
+stage_stock_fastbootd_boot_chain
+reboot_bootloader_to_fastbootd
 # The MTK fastbootd endpoint can enumerate before its sparse-image reader is
 # ready. The first hardware attempt resized system successfully but rejected
 # its first data chunk; an immediate stock restore worked after settling.
