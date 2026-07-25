@@ -385,6 +385,14 @@ This keeps the vanilla ROM independent of Google apps. The intended optional
 flow remains Lineage Recovery sideload before the first system boot, rather
 than modifying the build graph to include GApps.
 
+The stock bootloader has one fastbootd-specific A/B defect: ordinary recovery
+receives slot suffix `_a`, but a `boot-fastboot` recovery does not. Without
+the suffix, Android's boot-control path cannot map any logical partition.
+Because this bring-up intentionally supports only the populated slot A, the
+boot command line supplies `androidboot.slot_suffix=_a`. Remove that
+workaround only after a future bootloader or boot-control implementation
+correctly reports the active slot in fastbootd.
+
 As a headless fallback, the product now accepts an opt-in
 `KAREN_DEBUG_ADB_KEYS` path for one local Android public key while retaining
 `ro.adb.secure=1`. The normal audit rejects such a boot image; an explicit

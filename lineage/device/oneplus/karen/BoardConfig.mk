@@ -69,6 +69,10 @@ BOARD_KERNEL_TAGS_OFFSET := 0x07c08000
 BOARD_DTB_OFFSET := 0x07c08000
 BOARD_KERNEL_CMDLINE := bootopt=64S3,32N2,64N2 buildvariant=user
 BOARD_KERNEL_CMDLINE += androidboot.init_fatal_reboot_target=recovery
+# The stock MTK bootloader omits its otherwise-correct slot argument only for
+# boot-fastboot. This port deliberately supports the populated slot A only;
+# keep fastbootd's boot-control and logical-partition mapping on that slot.
+BOARD_KERNEL_CMDLINE += androidboot.slot_suffix=_a
 ifeq ($(KAREN_DEBUG_PERMISSIVE),true)
 # Private bring-up only. Release/default builds remain SELinux enforcing.
 BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive

@@ -101,6 +101,12 @@ host client from expanding `system` to `system_a`; both bounded attempts were
 rejected as a nonexistent target. The helper now uses explicit slot-A logical
 names only after that same verified transition.
 
+Explicit `system_a` was rejected too, confirming that fastbootd had created no
+logical mappings at all. Ordinary recovery receives `_a` correctly, while
+the stock MTK bootloader omits the AOSP-required `androidboot.slot_suffix`
+only when it sets `boot-fastboot`. Karen has only one populated and supported
+slot, so the boot image now supplies `_a` as a bounded device workaround.
+
 The corrected nine-image bundle completed 117,156 actions on `s-tau` in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
 first VINTF check was rejected before any phone write: Lineage's empty
