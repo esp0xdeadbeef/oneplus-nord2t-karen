@@ -400,6 +400,14 @@ immediately. Karen therefore no longer sets
 `TARGET_RECOVERY_UI_BLANK_UNBLANK_ON_INIT`; the upstream default is the
 correct behavior for this panel.
 
+The boot-image audit now checks the final ramdisk for that property. It
+rejected a stale incremental image even though the source flag had already
+been removed, exposing an unchanged Kati recipe in the persistent checkout.
+After forcing product-config regeneration, the rebuilt boot/vbmeta pair
+passed the full image and VINTF audits. A hardware recovery boot then showed
+one brightness application and no following panel disable/unprepare cycle,
+without using the live brightness workaround.
+
 The stock bootloader has one fastbootd-specific A/B defect: ordinary recovery
 receives slot suffix `_a`, but a `boot-fastboot` recovery does not. Without
 the suffix, Android's boot-control path cannot map any logical partition.

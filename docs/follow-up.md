@@ -23,13 +23,14 @@ rsync flow and artifact-return checks.
   `/build` while an incremental build is active.
 - User lingering is enabled for `deadbeef` on `s-tau`; transient build units
   otherwise stop when the final SSH session closes.
-- The current OLED-fix rebuild unit is
-  `karen-lineage-oled-fix3.service`.
+- The successful forced OLED-fix rebuild unit was
+  `karen-lineage-oled-fix4.service`.
 - The compiler cache is
   `/home/deadbeef/.cache/nord2t-ccache` on `s-tau`, with a 400 GB limit.
-- The phone is on exact `.3001` stock slot A with the bootloader relocked.
-  OxygenOS completes an encrypted, SELinux-enforcing boot with green Verified
-  Boot and no root.
+- The exact-stock relock and green/rootless boot completed successfully. The
+  bootloader was then deliberately unlocked again, with the expected wipe.
+  The phone currently runs the corrected private Lineage Recovery boot pair
+  on slot A over still-exact stock logical userspace.
 
 ### Exact stock restore and relock
 
@@ -153,7 +154,24 @@ recovery's configured init-time blank/unblank power-cycle reset the OLED after
 its brightness had already been applied. A live `lcd-backlight` brightness
 reapply restored the UI immediately. Karen now leaves
 `TARGET_RECOVERY_UI_BLANK_UNBLANK_ON_INIT` disabled and tests that it stays
-disabled; the corrected recovery still needs a rebuild and hardware boot.
+disabled.
+
+The first two incremental rebuild attempts exposed a second reproducibility
+trap: the persistent Android checkout held an old regular BoardConfig copy,
+then preserved an older source mtime after rsync. Kati consequently retained
+the stale `true` property even when Ninja reported success. A new boot audit
+now rejects the property inside the final ramdisk, not just in source. That
+audit rejected the stale candidate. After explicitly synchronizing the device
+tree and forcing Kati regeneration, the new key-bound OLED candidate passed
+the full boot/filesystem/AVB audit and VINTF.
+
+The bootloader was unlocked again and the earlier audited recovery was used
+briefly as an ADB safety net. Only its `vbmeta_a` and `boot_a` were written.
+The new audited pair then replaced those same two partitions. Without any
+host brightness write, recovery came up on slot A with authenticated root
+ADB, the blank/unblank property absent, DSI connected/enabled/on and one
+non-zero brightness command. The prior init-time panel
+disable/unprepare sequence was absent.
 
 Staging only the exact `.3001` stock `boot_a` and three AVB images in
 bootloader-fastboot provided a working recovery alternative. Stock fastbootd

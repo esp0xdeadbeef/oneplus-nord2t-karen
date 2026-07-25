@@ -24,6 +24,8 @@ if grep -Fq 'TARGET_RECOVERY_UI_BLANK_UNBLANK_ON_INIT := true' "$board_config"; 
   echo "Karen recovery must not power-cycle its OLED during UI init." >&2
   exit 1
 fi
+grep -Fq 'ramdisk enables the OLED-breaking recovery init power-cycle' \
+  "$boot_audit"
 grep -Fq 'androidboot.slot_suffix=_a' "$boot_audit"
 grep -Fq -- '--allow-embedded-adb-key' "$boot_audit"
 grep -Fq -- '--allow-permissive-selinux' "$boot_audit"

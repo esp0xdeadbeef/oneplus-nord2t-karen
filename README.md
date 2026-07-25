@@ -26,13 +26,17 @@ phones.
 
 ## Current state
 
-The test phone currently boots exact OxygenOS
-`CPH2399_14.0.0.3001(EX01)` on slot A after a complete Lineage-to-stock
-rollback. The bootloader is relocked, Verified Boot reports green, encryption
-and SELinux enforcing are active, and the runtime contains no Magisk process,
-package or `su` command. Returning from Lineage userdata required a stock
-factory reset; the subsequent bootloader lock performed its own mandatory
-wipe.
+The test phone completed a full Lineage-to-stock rollback on slot A. Exact
+OxygenOS `CPH2399_14.0.0.3001(EX01)` booted encrypted and enforcing after a
+stock factory reset, then booted with green Verified Boot, locked vbmeta and
+no root after a successful bootloader relock and its mandatory wipe. This
+proves the complete stock/recovery/lock side of the roundtrip.
+
+The bootloader has since been deliberately unlocked again, performing the
+expected second wipe. The phone currently boots the corrected private Lineage
+Recovery on slot A while its logical userspace remains exact stock. Recovery
+has authenticated root ADB and the OLED init fix; no full Lineage userspace or
+root package is currently installed.
 
 The earlier Lineage boot exercised display, touch, camera, audio and internet
 successfully. Its passive runtime audit reported the expected framework,

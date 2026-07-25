@@ -192,6 +192,20 @@ framebuffer allocation or the recovery process. Karen now leaves that option
 at Lineage Recovery's default `false`, and a package-safety check rejects its
 reintroduction.
 
+The boot audit additionally rejects
+`ro.recovery.ui.blank_unblank_on_init=true` inside the final ramdisk. This
+caught a stale incremental candidate whose source tree was correct but whose
+Kati-generated Ninja recipe still contained the old property. After the
+device-tree copy and Kati metadata were explicitly regenerated, the rebuilt
+boot/vbmeta pair passed the full image and VINTF audits.
+
+That corrected pair was then written to unlocked slot A and booted in recovery
+without a host brightness toggle. Recovery reported authenticated root ADB,
+the expected slot, a connected/enabled DSI connector with DPMS on and the
+configured brightness. Its kernel trace contained one non-zero DSI brightness
+command and no subsequent init-time panel disable or unprepare event. This is
+hardware evidence that the fix is present in the flashed image.
+
 The recovery ignored `adb reboot fastboot`. The tested exit command was:
 
 ```sh

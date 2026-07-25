@@ -226,6 +226,9 @@ fstab="$candidate_ramdisk_directory/system/etc/recovery.fstab"
 
 grep -Fxq "ro.product.system.device=karen" "$properties" ||
   fail "ramdisk product device is not karen"
+if grep -Fxq "ro.recovery.ui.blank_unblank_on_init=true" "$properties"; then
+  fail "ramdisk enables the OLED-breaking recovery init power-cycle"
+fi
 grep -Fxq "ro.secure=1" "$properties" ||
   fail "ramdisk does not enable secure mode"
 
