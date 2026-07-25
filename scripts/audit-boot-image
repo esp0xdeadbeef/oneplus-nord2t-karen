@@ -165,7 +165,7 @@ done
   fail "unexpected tags offset"
 [[ "$(<"$candidate_prefix-dtb_offset")" == 0x07c08000 ]] ||
   fail "unexpected DTB offset"
-expected_cmdline="bootopt=64S3,32N2,64N2 buildvariant=user androidboot.init_fatal_reboot_target=recovery"
+expected_cmdline="bootopt=64S3,32N2,64N2 buildvariant=user androidboot.init_fatal_reboot_target=recovery androidboot.slot_suffix=_a"
 selinux_mode="enforcing-default"
 if [[ "$allow_permissive_selinux" == true ]]; then
   expected_cmdline+=" androidboot.selinux=permissive"

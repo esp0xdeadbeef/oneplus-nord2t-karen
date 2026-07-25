@@ -20,6 +20,7 @@ grep -Fq 'PRODUCT_ADB_KEYS := $(strip $(KAREN_DEBUG_ADB_KEYS))' "$device_makefil
 grep -Fq 'ifeq ($(KAREN_DEBUG_PERMISSIVE),true)' "$board_config"
 grep -Fq 'BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive' "$board_config"
 grep -Fq 'BOARD_KERNEL_CMDLINE += androidboot.slot_suffix=_a' "$board_config"
+grep -Fq 'androidboot.slot_suffix=_a' "$boot_audit"
 grep -Fq -- '--allow-embedded-adb-key' "$boot_audit"
 grep -Fq -- '--allow-permissive-selinux' "$boot_audit"
 grep -Fq -- '--allow-embedded-adb-key' "$image_audit"
