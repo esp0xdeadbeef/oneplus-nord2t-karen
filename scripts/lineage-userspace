@@ -120,14 +120,14 @@ verify_restore_bundle() {
   done
 }
 
-verify_restore_bundle
-
 if [[ "$action" == install ]]; then
   [[ -d "$lineage_directory" ]] ||
     fail "Lineage image directory is not readable"
   nord2t-preflight-lineage-userspace \
     "$lineage_directory" \
     "$restore_directory"
+else
+  verify_restore_bundle
 fi
 
 if [[ "$assume_yes" != true ]]; then
