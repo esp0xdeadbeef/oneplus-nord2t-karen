@@ -390,6 +390,16 @@ This keeps the vanilla ROM independent of Google apps. The intended optional
 flow remains Lineage Recovery sideload before the first system boot, rather
 than modifying the build graph to include GApps.
 
+The first slot-A ext4 recovery test also made the formerly intermittent black
+recovery screen reproducible. DRM reported a connected and enabled DSI panel,
+and the recovery log showed successful framebuffer allocation. The kernel
+trace showed Lineage Recovery applying OLED brightness before its opt-in
+init-time blank/unblank cycle, then power-cycling the panel without reapplying
+that brightness. Rewriting the existing `lcd-backlight` value restored the UI
+immediately. Karen therefore no longer sets
+`TARGET_RECOVERY_UI_BLANK_UNBLANK_ON_INIT`; the upstream default is the
+correct behavior for this panel.
+
 The stock bootloader has one fastbootd-specific A/B defect: ordinary recovery
 receives slot suffix `_a`, but a `boot-fastboot` recovery does not. Without
 the suffix, Android's boot-control path cannot map any logical partition.
@@ -397,6 +407,12 @@ Because this bring-up intentionally supports only the populated slot A, the
 boot command line supplies `androidboot.slot_suffix=_a`. Remove that
 workaround only after a future bootloader or boot-control implementation
 correctly reports the active slot in fastbootd.
+
+Hardware testing showed that the boot command line alone is not sufficient.
+The corrected value is present in ordinary recovery, but fastbootd still
+reports an empty `current-slot` and creates no `system` or `system_a` mapping.
+The bounded restore helper consequently remains fail-closed before any logical
+write while the fastbootd slot/mapping source is investigated.
 
 As a headless fallback, the product now accepts an opt-in
 `KAREN_DEBUG_ADB_KEYS` path for one local Android public key while retaining

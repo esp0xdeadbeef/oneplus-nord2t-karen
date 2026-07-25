@@ -174,6 +174,24 @@ virtual A/B `snapuserd`; display, framebuffer, DRM and input devices were
 present. This proves recovery execution, display and USB ADB, but does not yet
 prove touch, decryption, sideload, fastbootd or installation of a complete ROM.
 
+### Recovery OLED init
+
+A later slot-A recovery repeatedly came up with working recovery ADB but a
+black display. The panel had not failed to probe: DRM reported a connected,
+enabled DSI connector with DPMS on and the expected 1080x2400 mode. The kernel
+trace showed recovery first setting the OLED brightness, then immediately
+disabling and unpreparing the panel during its configured init-time
+blank/unblank cycle. The panel was prepared and enabled again, but no second
+DSI brightness command followed.
+
+Writing the existing brightness through the standard `lcd-backlight` LED
+class as a `0 -> previous value` transition restored the recovery UI
+immediately. This isolated the issue to
+`TARGET_RECOVERY_UI_BLANK_UNBLANK_ON_INIT`, not late panel probing, DRM,
+framebuffer allocation or the recovery process. Karen now leaves that option
+at Lineage Recovery's default `false`, and a package-safety check rejects its
+reintroduction.
+
 The recovery ignored `adb reboot fastboot`. The tested exit command was:
 
 ```sh

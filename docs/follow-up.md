@@ -114,6 +114,21 @@ the stock MTK bootloader omits the AOSP-required `androidboot.slot_suffix`
 only when it sets `boot-fastboot`. Karen has only one populated and supported
 slot, so the boot image now supplies `_a` as a bounded device workaround.
 
+The first hardware test of that boot-cmdline workaround confirmed `_a` in the
+new ordinary recovery kernel command line, but fastbootd still returned an
+empty `current-slot` and exposed neither `system` nor `system_a`. No logical
+partition or stock image was written. The boot command line alone is
+therefore insufficient; exact stock restore remains blocked until fastbootd's
+slot source or logical-partition mapping path is corrected.
+
+That same recovery exposed a separate reproducible black-screen issue. DRM,
+DSI, framebuffer allocation and the recovery process were healthy, but
+recovery's configured init-time blank/unblank power-cycle reset the OLED after
+its brightness had already been applied. A live `lcd-backlight` brightness
+reapply restored the UI immediately. Karen now leaves
+`TARGET_RECOVERY_UI_BLANK_UNBLANK_ON_INIT` disabled and tests that it stays
+disabled; the corrected recovery still needs a rebuild and hardware boot.
+
 The corrected nine-image bundle completed 117,156 actions on `s-tau` in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
 first VINTF check was rejected before any phone write: Lineage's empty
