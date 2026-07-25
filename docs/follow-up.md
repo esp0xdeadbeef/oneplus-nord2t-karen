@@ -8,13 +8,16 @@ and rationale remain in [lineage-port.md](lineage-port.md).
 
 ## Current checkpoint
 
-- Git `main` and `origin/main` both contain checkpoint `372d82a`.
+- Git `main` and `origin/main` both contain code checkpoint `301ff4a`.
 - The repository worktree was clean after that push.
 - Android compilation runs only on `s-tau`.
 - The persistent checkout is
   `/home/deadbeef/build/lineage-21-karen-incremental`, bind-mounted at
   `/build` while an incremental build is active.
-- The user service is `karen-lineage-full-incremental.service`.
+- User lingering is enabled for `deadbeef` on `s-tau`; transient build units
+  otherwise stop when the final SSH session closes.
+- The successful VINTF rebuild unit was
+  `karen-lineage-vintf-vndk-retry2.service`.
 - The compiler cache is
   `/home/deadbeef/.cache/nord2t-ccache` on `s-tau`, with a 400 GB limit.
 - The phone is on the exact `.3001` stock baseline, slot A, unlocked and using
@@ -27,9 +30,23 @@ first VINTF check was rejected before any phone write: Lineage's empty
 device-specific framework matrix did not declare the stock FCM-5
 MediaTek/OPlus HALs. Candidate directory
 `/home/deadbeef/build/lineage-21-karen-images-20260725-1` is therefore a
-diagnostic artifact, not a flash candidate. The next incremental change
-derives the exact optional framework matrix from the pinned stock `system`
-image and must repeat every gate.
+diagnostic artifact, not a flash candidate.
+
+The exact stock framework matrix exposed two remaining facts: Android 14
+needed the Android 12 VNDK snapshot for this stock vendor, and the OEM matrix
+listed the live `vendor.mediatek.hardware.camera.isphal` 1.0 instance only as
+1.1. Checkpoint `301ff4a` enables the real VNDK-31 APEX and adds a truthful
+optional 1.0 declaration without importing a proprietary service. The
+incremental rebuild installed `com.android.vndk.v31.apex`; `checkvintf`
+subsequently passed against exact stock vendor/odm metadata for the live
+`dsds` SKU.
+
+Fresh candidate directory
+`/home/deadbeef/build/lineage-21-karen-images-20260725-2` passed the complete
+boot, authenticated-ADB, AVB-chain, exact stock vendor/odm and size audit.
+Its five standard images total 2,802,786,304 bytes against the preserved
+8,816,586,752-byte ceiling. It is the first host-approved flash candidate,
+but it has not yet passed the live-phone preflight and has not been written.
 
 The scoped ten-image stock rollback set is protected by an explicit GC root
 on `s-tau`:
@@ -54,10 +71,10 @@ compile:
 
 ```bash
 ssh s-tau \
-  'systemctl --user show karen-lineage-full-incremental.service \
+  'systemctl --user show karen-lineage-vintf-vndk-retry2.service \
     -p ActiveState -p SubState -p Result -p ExecMainStatus'
 ssh s-tau \
-  'journalctl --user -u karen-lineage-full-incremental.service \
+  'journalctl --user -u karen-lineage-vintf-vndk-retry2.service \
     -n 80 --no-pager'
 ```
 

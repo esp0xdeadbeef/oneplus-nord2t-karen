@@ -86,6 +86,25 @@ mount table so vendor services can see the OPlus logical and hardware-data
 mounts, while Lineage Recovery continues to use the deliberately reduced
 `TARGET_RECOVERY_FSTAB` and cannot offer sensitive partitions as wipe targets.
 
+The corrected full build completed 117,156 actions on `s-tau` in 1:10:10.
+The first explicit VINTF audit rejected its framework metadata before any
+phone write. Importing the exact optional device framework matrix from the
+pinned stock `system` image resolved the MediaTek/OPlus declarations but
+exposed two further stock-compatibility requirements. The vendor compatibility
+matrix requires VNDK 31, so the full target now builds and installs the real
+`com.android.vndk.v31` snapshot APEX. The live vendor manifest also exposes
+`vendor.mediatek.hardware.camera.isphal@1.0::IISPModule/internal/0`, while
+the OEM framework matrix lists only version 1.1; a small open device matrix
+fragment truthfully declares the live 1.0 instance.
+
+After those changes, host `checkvintf` accepted the generated framework
+metadata with exact `.3001` vendor/odm metadata and the live `dsds` SKU.
+Candidate 2 then passed the complete image audit: exact stock kernel/DTB,
+authenticated ADB, all AVB chains, exact stock vendor/odm and a
+2,802,786,304-byte standard-image total below the preserved
+8,816,586,752-byte ceiling. This is host-side permission to run the live
+read-only preflight, not evidence of a hardware boot.
+
 An earlier full-userspace derivation completed all 164,803 Android build tasks
 on `s-tau` in 1 hour 19 minutes. Its `boot`, `system`, `system_ext`, `product`
 and top-level `vbmeta` images were structurally valid, and the boot audit
