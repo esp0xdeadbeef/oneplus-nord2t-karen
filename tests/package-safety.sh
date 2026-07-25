@@ -74,6 +74,11 @@ grep -Fq 'cleanup_audited_stale_cow_partitions' \
 grep -Fq 'fastbootd_variable_with_retry snapshot-update-status' \
   "$script_directory/scripts/lineage-userspace"
 # shellcheck disable=SC2016
+grep -Fq 'fastboot_arguments=(-S 64M flash "$partition" "$image")' \
+  "$script_directory/scripts/lineage-userspace"
+grep -Fq 'Fastbootd attested: userspace=yes, slot=a' \
+  "$script_directory/scripts/lineage-userspace"
+# shellcheck disable=SC2016
 grep -Fq 'run_fastboot delete-logical-partition "$partition"' \
   "$script_directory/scripts/lineage-userspace"
 for stale_cow in \

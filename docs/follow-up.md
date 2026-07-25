@@ -227,6 +227,23 @@ transfer failure. The stock restore succeeding with the same raw-image
 conversion is evidence for a transient endpoint/USB failure, not yet proof of
 its exact cause. Repeat the complete stock preflight before another install.
 
+The ext4/GApps-capable install later reproduced `Error reading sparse file`
+on the first `system_ext_a` chunk after all four `system_a` chunks had
+succeeded. The owner then used `Volume Down + Power` to return the phone to
+ordinary bootloader-fastboot; that transition was manual, not performed by
+the helper. At interruption time the audited nine stale COW partitions had
+been deleted, `system_a` contained Lineage, and no `system_ext_a` data chunk
+had reported success. No OPlus, unique, radio or calibration partition was
+named.
+
+The MTK endpoint was receiving the host's roughly 256 MiB sparse chunks.
+Logical writes now use an explicit 64 MiB sparse limit, re-attest
+`is-userspace=yes` immediately before every partition and print a generic
+fastbootd attestation. The existing exact-stock route remains a tested
+rollback fallback. The active continuation first fixes Lineage Recovery's
+boot-control service so its own fastbootd can safely expose and rewrite the
+known partial slot-A layout without another full stock cycle.
+
 Stock was authorized again and returned to the deliberately limited Magisk
 debug root with `stock-root --persist --yes`; no Zygisk or concealment modules
 were installed. The complete read-only preflight passed again. On the second

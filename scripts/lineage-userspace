@@ -308,6 +308,10 @@ verify_fastbootd() {
   fi
 }
 
+report_fastbootd_attestation() {
+  echo "Fastbootd attested: userspace=yes, slot=a, writable slot-A mapping."
+}
+
 fastbootd_partition_name() {
   local partition="$1"
 
@@ -333,6 +337,7 @@ reboot_bootloader_to_fastbootd() {
   wait_for_fastboot_mode fastbootd ||
     fail "fastbootd did not enumerate after the mode transition"
   verify_fastbootd
+  report_fastbootd_attestation
 }
 
 reboot_fastbootd_to_bootloader() {
@@ -374,9 +379,23 @@ flash_partition() {
   local partition="$2"
   local image="$3"
   local attempt
+  local fastboot_arguments=()
+
+  if [[ "$expected_mode" == fastbootd ]]; then
+    # The MTK fastbootd endpoint intermittently rejects the host default ~256 MiB
+    # sparse chunks with "Error reading sparse file". Bound each download to
+    # 64 MiB and re-attest userspace fastboot immediately before every logical
+    # write so ordinary bootloader-fastboot can never receive one.
+    fastboot_arguments=(-S 64M flash "$partition" "$image")
+  else
+    fastboot_arguments=(flash "$partition" "$image")
+  fi
 
   for attempt in 1 2; do
-    if run_fastboot flash "$partition" "$image"; then
+    if [[ "$expected_mode" == fastbootd ]]; then
+      verify_fastbootd
+    fi
+    if run_fastboot "${fastboot_arguments[@]}"; then
       return 0
     fi
 
@@ -388,6 +407,7 @@ flash_partition() {
 
     if [[ "$expected_mode" == fastbootd ]]; then
       verify_fastbootd
+      report_fastbootd_attestation
     else
       verify_bootloader_identity
       ensure_bootloader_slot_a

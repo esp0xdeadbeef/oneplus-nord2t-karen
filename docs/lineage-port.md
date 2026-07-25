@@ -372,6 +372,15 @@ The second install successfully resized and wrote `system_a`,
 `vendor`, `odm`, `dtbo` and all ten OPlus logical partitions remained in
 place.
 
+A later ext4 install exposed a second transport failure: the complete
+four-chunk `system_a` write succeeded, but stock fastbootd rejected the first
+default-size `system_ext_a` sparse chunk. The owner manually returned the
+phone to ordinary bootloader-fastboot with `Volume Down + Power`; the helper
+did not perform that transition. The default host chunks were roughly
+256 MiB. Logical flashes now use `fastboot -S 64M`, verify fastbootd again
+immediately before every write and emit a non-identifying mode attestation.
+Boot and AVB writes remain ordinary bootloader-fastboot operations.
+
 The first observable system attempt initialized the Lineage framework,
 mounted encrypted F2FS userdata and then performed an orderly reboot into
 recovery. The recovery command reason was
