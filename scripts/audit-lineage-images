@@ -106,9 +106,64 @@ verify_stock_partition() {
 verify_stock_partition vendor "$image_directory/vendor.img"
 verify_stock_partition odm "$image_directory/odm.img"
 
+temporary_directory="$(mktemp -d -t nord2t-lineage-audit.XXXXXXXX)"
+cleanup() {
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+
+declare -A expanded_image_bytes
+declare -A minimum_free_bytes=(
+  [system]=33554432
+  [system_ext]=67108864
+  [product]=1342177280
+)
+declare -A filesystem_free_bytes
+
+ext4_field() {
+  local image="$1"
+  local field="$2"
+
+  tune2fs -l "$image" 2>/dev/null |
+    awk -F: -v field="$field" '
+      $1 == field {
+        sub(/^[[:space:]]+/, "", $2)
+        print $2
+        exit
+      }
+    '
+}
+
+for partition in system system_ext product; do
+  raw_image="$temporary_directory/$partition.raw.img"
+  simg2img "$image_directory/$partition.img" "$raw_image" >/dev/null ||
+    fail "$partition is not a valid Android sparse image"
+
+  filesystem_magic="$(ext4_field "$raw_image" "Filesystem magic number")"
+  [[ "$filesystem_magic" == "0xEF53" ]] ||
+    fail "$partition is not ext4"
+
+  block_size="$(ext4_field "$raw_image" "Block size")"
+  free_blocks="$(ext4_field "$raw_image" "Free blocks")"
+  [[ "$block_size" =~ ^[0-9]+$ && "$free_blocks" =~ ^[0-9]+$ ]] ||
+    fail "could not determine $partition ext4 free space"
+
+  filesystem_free_bytes["$partition"]=$((block_size * free_blocks))
+  ((filesystem_free_bytes["$partition"] >= minimum_free_bytes["$partition"])) ||
+    fail "$partition has only ${filesystem_free_bytes[$partition]} free bytes; expected at least ${minimum_free_bytes[$partition]} for the pinned add-on profile"
+
+  expanded_image_bytes["$partition"]="$(stat -c %s "$raw_image")"
+  ((expanded_image_bytes["$partition"] % 4096 == 0)) ||
+    fail "$partition expanded image size is not 4096-byte aligned"
+done
+
 standard_image_bytes=0
 for partition in system system_ext product vendor odm; do
-  size="$(stat -c %s "$image_directory/$partition.img")"
+  if [[ -n "${expanded_image_bytes[$partition]:-}" ]]; then
+    size="${expanded_image_bytes[$partition]}"
+  else
+    size="$(stat -c %s "$image_directory/$partition.img")"
+  fi
   ((size % 4096 == 0)) ||
     fail "$partition image size is not 4096-byte aligned"
   ((standard_image_bytes += size))
@@ -116,12 +171,6 @@ done
 
 ((standard_image_bytes <= standard_image_ceiling)) ||
   fail "standard images need $standard_image_bytes bytes, exceeding the preserved live budget of $standard_image_ceiling"
-
-temporary_directory="$(mktemp -d -t nord2t-lineage-audit.XXXXXXXX)"
-cleanup() {
-  rm -rf -- "$temporary_directory"
-}
-trap cleanup EXIT
 
 stock_directory="$temporary_directory/stock"
 nord2t-extract-stock --profile boot --output "$stock_directory" >/dev/null
@@ -186,6 +235,11 @@ grep -E \
 for image in "${images[@]}"; do
   echo "$image.size=$(stat -c %s "$image_directory/$image.img")"
   echo "$image.sha256=$(sha256sum "$image_directory/$image.img" | cut -d ' ' -f 1)"
+done
+for partition in system system_ext product; do
+  echo "$partition.filesystem=ext4"
+  echo "$partition.expanded_size=${expanded_image_bytes[$partition]}"
+  echo "$partition.free_bytes=${filesystem_free_bytes[$partition]}"
 done
 echo "standard_image_bytes=$standard_image_bytes"
 echo "standard_image_ceiling=$standard_image_ceiling"

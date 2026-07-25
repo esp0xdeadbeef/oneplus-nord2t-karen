@@ -378,7 +378,9 @@
             android-tools
             auditBoot
             coreutils
+            e2fsprogs
             extractStock
+            gawk
             gnugrep
             jq
           ];
