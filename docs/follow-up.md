@@ -95,7 +95,11 @@ fastbootd returned an empty `current-slot` value even after bootloader-fastboot
 had confirmed and selected slot A. The helper stopped before its first write.
 It now records the verified bootloader slot across that exact transition and
 accepts a missing fastbootd value only within the same process; a fresh
-fastbootd invocation still has to round-trip through bootloader-fastboot.
+fastbootd invocation still has to round-trip through bootloader-fastboot. A
+subsequent restore reached fastbootd but its empty value also prevented the
+host client from expanding `system` to `system_a`; both bounded attempts were
+rejected as a nonexistent target. The helper now uses explicit slot-A logical
+names only after that same verified transition.
 
 The corrected nine-image bundle completed 117,156 actions on `s-tau` in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its

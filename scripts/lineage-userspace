@@ -240,6 +240,7 @@ ensure_bootloader_slot_a() {
 }
 
 fastbootd_slot_a_verified=false
+fastbootd_requires_explicit_slot=false
 
 verify_fastbootd() {
   local current_slot
@@ -250,6 +251,21 @@ verify_fastbootd() {
   [[ "$current_slot" == a ||
     (-z "$current_slot" && "$fastbootd_slot_a_verified" == true) ]] ||
     fail "slot A is not active in fastbootd"
+  if [[ -z "$current_slot" ]]; then
+    fastbootd_requires_explicit_slot=true
+  else
+    fastbootd_requires_explicit_slot=false
+  fi
+}
+
+fastbootd_partition_name() {
+  local partition="$1"
+
+  if [[ "$fastbootd_requires_explicit_slot" == true ]]; then
+    echo "${partition}_a"
+  else
+    echo "$partition"
+  fi
 }
 
 reboot_bootloader_to_fastbootd() {
@@ -360,7 +376,7 @@ if [[ "$action" == install ]]; then
   for partition in system system_ext product; do
     flash_partition \
       fastbootd \
-      "$partition" \
+      "$(fastbootd_partition_name "$partition")" \
       "$lineage_directory/$partition.img"
   done
 
@@ -391,7 +407,7 @@ else
   for partition in system system_ext product vendor odm; do
     flash_partition \
       fastbootd \
-      "$partition" \
+      "$(fastbootd_partition_name "$partition")" \
       "$restore_directory/images/$partition.img"
   done
 
