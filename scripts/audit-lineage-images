@@ -5,12 +5,16 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: nord2t-audit-lineage-images [--allow-embedded-adb-key] IMAGE_DIR
+usage: nord2t-audit-lineage-images [--allow-embedded-adb-key]
+                                   [--allow-permissive-selinux]
+                                   IMAGE_DIR
 
 Audit a complete Karen full-userspace image directory before any hardware
 write. The directory must contain boot, system, system_ext, product, vendor,
 odm, vbmeta, vbmeta_system and vbmeta_vendor images. An embedded public ADB
 host key is rejected unless explicitly allowed for a private bring-up bundle.
+A permissive SELinux command line is independently rejected unless explicitly
+allowed for a private diagnostic bundle.
 EOF
 }
 
@@ -20,10 +24,26 @@ fail() {
 }
 
 allow_embedded_adb_key=false
-if [[ "${1:-}" == --allow-embedded-adb-key ]]; then
-  allow_embedded_adb_key=true
-  shift
-fi
+allow_permissive_selinux=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --allow-embedded-adb-key)
+      allow_embedded_adb_key=true
+      shift
+      ;;
+    --allow-permissive-selinux)
+      allow_permissive_selinux=true
+      shift
+      ;;
+    -*)
+      usage
+      fail "unknown option: $1"
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 if [[ $# -ne 1 ]]; then
   usage
@@ -109,6 +129,9 @@ boot_audit_arguments=()
 if [[ "$allow_embedded_adb_key" == true ]]; then
   boot_audit_arguments+=(--allow-embedded-adb-key)
 fi
+if [[ "$allow_permissive_selinux" == true ]]; then
+  boot_audit_arguments+=(--allow-permissive-selinux)
+fi
 nord2t-audit-boot \
   "${boot_audit_arguments[@]}" \
   "$image_directory/boot.img" \
@@ -158,7 +181,7 @@ avbtool verify_image \
 
 echo "Karen full-userspace image audit passed."
 grep -E \
-  '^(image_sha256|kernel_sha256|dtb_sha256|adb_security|flash_gate)=' \
+  '^(image_sha256|kernel_sha256|dtb_sha256|adb_security|selinux_mode|flash_gate)=' \
   "$temporary_directory/boot-audit.txt"
 for image in "${images[@]}"; do
   echo "$image.size=$(stat -c %s "$image_directory/$image.img")"

@@ -210,6 +210,13 @@ user's local `~/.android/adbkey` private key and requires every non-boot-pair
 image to be byte-identical to the base bundle. This is a bring-up fallback,
 not a release configuration.
 
+If an enforcing boot returns to recovery before Android ADB starts, a private
+diagnostic rebuild may additionally set `KAREN_DEBUG_PERMISSIVE=true`. Both
+the image audit and the boot-pair helper reject that command line unless
+`--allow-permissive-selinux` is explicit. Use it only to isolate policy
+failures, collect general denials and return immediately to an enforcing
+build; it is never a release or daily-use configuration.
+
 The pinned build completed successfully on `s-tau` and its resulting
 recovery-as-boot image passed the repository's structural audit. Its kernel
 and DTB are byte-identical to `.3001` stock, while the ramdisk contains the

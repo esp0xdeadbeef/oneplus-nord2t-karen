@@ -7,6 +7,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: nord2t-audit-boot [--allow-insecure-adb]
                          [--allow-embedded-adb-key]
+                         [--allow-permissive-selinux]
                          CANDIDATE_BOOT_IMG [STOCK_BOOT_IMG]
 
 Audit a Karen recovery-as-boot image against the pinned CPH2399 .3001 stock
@@ -14,7 +15,8 @@ boot image. When STOCK_BOOT_IMG is omitted, the verified image is extracted
 from the flake's pinned official OTA. Insecure ADB is rejected unless the
 explicit flag is supplied for a temporary, unlocked bring-up image. An
 embedded public ADB host key is independently rejected unless its explicit
-bring-up flag is supplied.
+bring-up flag is supplied. A permissive SELinux kernel command line is
+independently rejected unless its private diagnostic flag is supplied.
 EOF
 }
 
@@ -25,6 +27,7 @@ fail() {
 
 allow_insecure_adb=false
 allow_embedded_adb_key=false
+allow_permissive_selinux=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --allow-insecure-adb)
@@ -33,6 +36,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --allow-embedded-adb-key)
       allow_embedded_adb_key=true
+      shift
+      ;;
+    --allow-permissive-selinux)
+      allow_permissive_selinux=true
       shift
       ;;
     -h | --help)
@@ -157,8 +164,13 @@ done
   fail "unexpected tags offset"
 [[ "$(<"$candidate_prefix-dtb_offset")" == 0x07c08000 ]] ||
   fail "unexpected DTB offset"
-[[ "$(<"$candidate_prefix-cmdline")" == \
-  "bootopt=64S3,32N2,64N2 buildvariant=user androidboot.init_fatal_reboot_target=recovery" ]] ||
+expected_cmdline="bootopt=64S3,32N2,64N2 buildvariant=user androidboot.init_fatal_reboot_target=recovery"
+selinux_mode="enforcing-default"
+if [[ "$allow_permissive_selinux" == true ]]; then
+  expected_cmdline+=" androidboot.selinux=permissive"
+  selinux_mode="permissive-bringup-only"
+fi
+[[ "$(<"$candidate_prefix-cmdline")" == "$expected_cmdline" ]] ||
   fail "unexpected kernel command line"
 
 cmp -s "$candidate_prefix-kernel" "$stock_prefix-kernel" ||
@@ -283,6 +295,7 @@ echo "os_patch_level=$(<"$candidate_prefix-os_patch_level")"
 echo "stock_os_patch_level=$(<"$stock_prefix-os_patch_level")"
 echo "avb_algorithm=$avb_algorithm"
 echo "adb_security=$adb_security"
+echo "selinux_mode=$selinux_mode"
 
 if [[ "$avb_algorithm" == NONE ]]; then
   echo "flash_gate=unsigned-test-image-requires-unlocked-bootloader"
