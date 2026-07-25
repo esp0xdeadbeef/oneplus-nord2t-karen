@@ -17,7 +17,8 @@ cache. Run this first when that directory does not exist:
 The script links the reviewable device tree into LINEAGE_ROOT and derives
 ignored kernel/DTB/DTBO inputs from the verified .3001 images. It never writes
 to the phone. With --full it also installs the verified stock vendor/odm
-images and full first-stage fstab from the `lineage` extraction profile.
+images, VINTF metadata and full first-stage fstab from the `lineage`
+extraction profile.
 EOF
 }
 
@@ -115,7 +116,10 @@ if [[ "$full" == true ]]; then
   for required_file in \
     "$lineage_stock_dir/images/vendor.img" \
     "$lineage_stock_dir/images/odm.img" \
-    "$lineage_stock_dir/trees/vendor/etc/fstab.mt6893"; do
+    "$lineage_stock_dir/trees/vendor/etc/fstab.mt6893" \
+    "$lineage_stock_dir/trees/vendor/etc/vintf/manifest.xml" \
+    "$lineage_stock_dir/trees/vendor/etc/vintf/compatibility_matrix.xml" \
+    "$lineage_stock_dir/trees/odm/etc/vintf/manifest_dsds.xml"; do
     if [[ ! -r "$required_file" ]]; then
       echo "Required file is not readable: $required_file" >&2
       exit 1
@@ -158,6 +162,19 @@ if [[ "$full" == true ]]; then
   install -m 0644 \
     "$lineage_stock_dir/trees/vendor/etc/fstab.mt6893" \
     "$device_tree/rootdir/etc/fstab.mt6893.full"
+  for partition in vendor odm; do
+    while IFS= read -r -d '' vintf_file; do
+      relative_file="${vintf_file#"$lineage_stock_dir/trees/$partition/etc/vintf/"}"
+      install -D -m 0644 \
+        "$vintf_file" \
+        "$device_tree/prebuilt/stock-vintf/$partition/$relative_file"
+    done < <(
+      find \
+        "$lineage_stock_dir/trees/$partition/etc/vintf" \
+        -type f \
+        -print0
+    )
+  done
 fi
 
 mkdir -p "$lineage_root/device/oneplus"

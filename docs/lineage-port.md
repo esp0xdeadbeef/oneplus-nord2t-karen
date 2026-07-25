@@ -314,7 +314,9 @@ nix run /path/to/oneplus-nord2t-karen#android-fhs -- -c '
   lunch lineage_karen-ap2a-userdebug
   m bootimage systemimage systemextimage productimage \
     vendorimage odmimage vbmetaimage vbmetasystemimage vbmetavendorimage
-'
+  m checkvintf
+  /path/to/oneplus-nord2t-karen/scripts/audit-lineage-vintf "$PWD"
+ '
 ```
 
 Omit `--full` and `KAREN_FULL_SYSTEM` when rebuilding only the recovery probe.

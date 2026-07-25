@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: audit-lineage-vintf LINEAGE_ROOT
+
+Check the built Karen framework VINTF metadata against the exact stock vendor
+and odm VINTF metadata prepared below device/oneplus/karen. The Lineage
+checkout must already have built the host checkvintf target.
+EOF
+}
+
+fail() {
+  echo "Lineage VINTF audit failed: $*" >&2
+  exit 1
+}
+
+if [[ $# -ne 1 ]]; then
+  usage
+  exit 2
+fi
+
+lineage_root="$(realpath "$1")"
+product_out="$lineage_root/out/target/product/karen"
+checkvintf="$lineage_root/out/host/linux-x86/bin/checkvintf"
+stock_vintf="$lineage_root/device/oneplus/karen/prebuilt/stock-vintf"
+
+[[ -x "$checkvintf" ]] ||
+  fail "host checkvintf has not been built"
+
+for directory in \
+  "$product_out/system" \
+  "$product_out/system_ext" \
+  "$product_out/product" \
+  "$stock_vintf/vendor" \
+  "$stock_vintf/odm"; do
+  [[ -d "$directory" ]] ||
+    fail "required VINTF input directory is missing"
+done
+
+for file in \
+  "$product_out/system/etc/vintf/manifest.xml" \
+  "$stock_vintf/vendor/manifest.xml" \
+  "$stock_vintf/vendor/compatibility_matrix.xml" \
+  "$stock_vintf/odm/manifest_dsds.xml"; do
+  [[ -r "$file" ]] ||
+    fail "required VINTF metadata is missing"
+done
+
+temporary_directory="$(mktemp -d -t nord2t-vintf-audit.XXXXXXXX)"
+cleanup() {
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+
+mkdir -p \
+  "$temporary_directory/apex" \
+  "$temporary_directory/vendor/etc" \
+  "$temporary_directory/odm/etc"
+ln -s "$stock_vintf/vendor" "$temporary_directory/vendor/etc/vintf"
+ln -s "$stock_vintf/odm" "$temporary_directory/odm/etc/vintf"
+
+output="$temporary_directory/checkvintf.txt"
+"$checkvintf" \
+  --check-compat \
+  --dirmap "/apex:$temporary_directory/apex" \
+  --dirmap "/odm:$temporary_directory/odm" \
+  --dirmap "/product:$product_out/product" \
+  --dirmap "/system:$product_out/system" \
+  --dirmap "/system_ext:$product_out/system_ext" \
+  --dirmap "/vendor:$temporary_directory/vendor" \
+  --property ro.product.first_api_level=31 \
+  --property ro.boot.product.hardware.sku=dsds \
+  --property ro.boot.product.vendor.sku= \
+  >"$output" 2>&1 || {
+  sed -n '1,240p' "$output" >&2
+  fail "stock vendor/odm is not compatible with the built framework metadata"
+}
+
+grep -Fxq COMPATIBLE "$output" ||
+  fail "checkvintf did not return its compatible marker"
+
+echo "Karen Lineage VINTF audit passed."
+echo "framework_api=31"
+echo "hardware_sku=dsds"
+echo "vendor_vintf=exact-stock-3001"
+echo "odm_vintf=exact-stock-3001"
+echo "kernel_gate=exact-stock-kernel"
+echo "vintf=compatible"

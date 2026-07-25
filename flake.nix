@@ -580,8 +580,10 @@
                 "vbmetaimage"
                 "vbmetasystemimage"
                 "vbmetavendorimage"
+                "checkvintf"
               ];
               installPhase = ''
+                bash ${./scripts/audit-lineage-vintf} "$ANDROID_BUILD_TOP"
                 mkdir -p "$out"
                 for image in \
                   boot system system_ext product vendor odm \

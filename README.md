@@ -153,6 +153,9 @@ nix run .#audit-lineage-images -- ./result
 The audit verifies the boot structure, authenticated ADB, complete AVB chain,
 byte-exact stock `vendor` and `odm`, and the preserved live standard-image
 budget. Passing it is necessary but does not by itself authorize flashing.
+The full Nix target additionally builds AOSP's host `checkvintf` and verifies
+the generated framework metadata against the exact `.3001` vendor/odm VINTF
+files for the live `dsds` hardware SKU.
 
 With the phone still running the exact rooted `.3001` baseline, combine that
 audit with the live slot-0 layout and the scoped rollback set:
