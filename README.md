@@ -12,6 +12,9 @@ official OxygenOS installation, followed by reversible package hardening. The
 bootloader of the test phone is currently unlocked for recovery and LineageOS
 bring-up.
 
+For the current resumable checkpoint, active s-tau paths, mandatory next gates
+and rollback order, see [`docs/follow-up.md`](docs/follow-up.md).
+
 The scripts refuse to operate on a device unless ADB reports both:
 
 - model `CPH2399`;
