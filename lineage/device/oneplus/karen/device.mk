@@ -8,6 +8,12 @@ PRODUCT_SHIPPING_API_LEVEL := 31
 PRODUCT_USE_DYNAMIC_PARTITIONS := true
 PRODUCT_BUILD_SUPER_PARTITION := false
 
+ifeq ($(KAREN_FULL_SYSTEM),true)
+# The pinned stock vendor requires the Android 12 VNDK snapshot. Android 14
+# no longer enables legacy VNDK snapshots by default.
+PRODUCT_EXTRA_VNDK_VERSIONS += 31
+endif
+
 PRODUCT_PACKAGES += \
     fastbootd \
     fstab.mt6893.first_stage_ramdisk \

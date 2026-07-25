@@ -76,7 +76,7 @@ output="$temporary_directory/checkvintf.txt"
   --property ro.boot.product.hardware.sku=dsds \
   --property ro.boot.product.vendor.sku= \
   >"$output" 2>&1 || {
-  sed -n '1,240p' "$output" >&2
+  tail -n 240 "$output" >&2
   fail "stock vendor/odm is not compatible with the built framework metadata"
 }
 

@@ -1,0 +1,15 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<compatibility-matrix version="7.0" type="framework">
+    <!--
+        The .3001 vendor manifest exposes this instance at 1.0, while the
+        stock device framework matrix only lists its newer 1.1 form.
+    -->
+    <hal format="hidl" optional="true">
+        <name>vendor.mediatek.hardware.camera.isphal</name>
+        <version>1.0</version>
+        <interface>
+            <name>IISPModule</name>
+            <instance>internal/0</instance>
+        </interface>
+    </hal>
+</compatibility-matrix>

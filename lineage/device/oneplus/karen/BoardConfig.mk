@@ -130,5 +130,7 @@ BOARD_PREBUILT_ODMIMAGE := $(DEVICE_PATH)/prebuilt/stock/odm.img
 # The exact stock FCM extension is derived from the pinned OTA and remains an
 # ignored build input. It declares optional MTK/OPlus device HALs to framework
 # VINTF without copying any proprietary service into the Lineage system.
-DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE := $(abspath $(DEVICE_PATH)/prebuilt/stock-framework-vintf/compatibility_matrix.device.xml)
+DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE := \
+    $(abspath $(DEVICE_PATH)/prebuilt/stock-framework-vintf/compatibility_matrix.device.xml) \
+    $(abspath $(DEVICE_PATH)/vintf/compatibility_matrix.karen.xml)
 endif
