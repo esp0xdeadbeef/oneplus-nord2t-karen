@@ -268,6 +268,32 @@ device is listed, or if the connected model is not the expected `CPH2399`.
 Unlocking changes Verified Boot from green/locked to orange/unlocked until a
 safe stock relock is deliberately performed.
 
+## Tested exact-stock relock
+
+On 2026-07-25 the phone completed the reverse Lineage-to-stock path before
+relocking. Exact `.3001` stock boot/recovery and all three AVB images were
+staged first in ordinary bootloader-fastboot. Stock recovery-fastbootd then
+reported slot A and exposed the five explicit `_a` logical mappings. The
+bounded restore wrote exact public-OTA `product`, `system`, `system_ext`,
+`vendor` and `odm`, followed by stock AVB and `boot_a`. The already exact
+stock `dtbo` and every OPlus or device-unique partition remained untouched.
+
+Stock Android required a factory reset to replace Lineage's userdata
+encryption policy. Before relocking, it booted exact `.3001` with encryption,
+SELinux enforcing and no Magisk, `su` or elevated ADB. In
+bootloader-fastboot, slot A was active, successful and bootable. The tested
+lock command was:
+
+```sh
+fastboot flashing lock
+```
+
+After the on-device lock confirmation and mandatory second wipe,
+bootloader-fastboot reported `unlocked=no`. The completed OxygenOS boot
+reported green Verified Boot, `flash.locked=1`, vbmeta state `locked`, verity
+enforcing and no root. This result authorizes only exact-stock relocking; it
+does not make custom AVB relocking safe.
+
 ## Black “Fastboot mode” screen
 
 After the privacy changes, one reboot entered a black OPlus/MediaTek screen

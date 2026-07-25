@@ -14,8 +14,8 @@ rsync flow and artifact-return checks.
 
 ## Current checkpoint
 
-- Git `main` and `origin/main` contained code checkpoint `e3feb5b` before this
-  boot-success documentation checkpoint.
+- Git `main` and `origin/main` contain restore-order checkpoint `210cea5`
+  before this stock-roundtrip documentation checkpoint.
 - For this owner session, Android compilation is offloaded to `s-tau` because
   full builds exhausted the memory available on `l-esp`.
 - The persistent checkout is
@@ -23,12 +23,38 @@ rsync flow and artifact-return checks.
   `/build` while an incremental build is active.
 - User lingering is enabled for `deadbeef` on `s-tau`; transient build units
   otherwise stop when the final SSH session closes.
-- The successful VINTF rebuild unit was
-  `karen-lineage-vintf-vndk-retry2.service`.
+- The current OLED-fix rebuild unit is
+  `karen-lineage-oled-fix3.service`.
 - The compiler cache is
   `/home/deadbeef/.cache/nord2t-ccache` on `s-tau`, with a 400 GB limit.
-- The phone is on slot A with the second audited Lineage candidate written.
-  It now completes an encrypted Lineage 21 boot with SELinux enforcing.
+- The phone is on exact `.3001` stock slot A with the bootloader relocked.
+  OxygenOS completes an encrypted, SELinux-enforcing boot with green Verified
+  Boot and no root.
+
+### Exact stock restore and relock
+
+The Lineage recovery-fastbootd slot workaround was not sufficient: it still
+created no logical mappings. Staging the exact stock `boot_a`,
+`vbmeta_system_a`, `vbmeta_vendor_a` and `vbmeta_a` supplied stock recovery
+and stock fastbootd without touching a logical or unique partition. That
+fastbootd correctly reported slot A and exposed explicit `_a` logical names.
+
+The first bounded restore wrote exact stock `system_a`, then stopped before
+writing `system_ext_a` because the add-on-capable Lineage `product_a`
+allocation still held its large headroom. The restore order now shrinks and
+writes exact stock `product_a` first. The complete retry then wrote all five
+exact public-OTA logical images followed by the three stock AVB images and
+stock `boot_a`. It never named an OPlus, radio, calibration or persistent
+partition, and it left the already exact stock `dtbo` untouched.
+
+The first stock system boot required a manual stock recovery factory reset
+because Lineage userdata had the reverse incompatible encryption policy.
+After setup, runtime reported exact `.3001`, slot A, encryption, SELinux
+enforcing, shell-only ADB and no Magisk process/package or `su`. The
+bootloader then accepted `fastboot flashing lock`, performed its mandatory
+wipe and reported `unlocked=no`. The post-lock stock boot reports green
+Verified Boot, `flash.locked=1`, vbmeta state `locked`, verity enforcing and
+still no root.
 
 ### First successful full-system boot
 
@@ -294,7 +320,9 @@ the absolute depfiles.
   other device-unique partitions.
 - Do not treat a successful compile as permission to flash. AVB, VINTF,
   rollback and live-layout preflight are separate mandatory gates.
-- Do not relock the bootloader during bring-up.
+- Never relock while any custom boot, recovery, AVB or logical image is
+  installed. The only tested lock path is after the complete exact `.3001`
+  stock restore and rootless runtime verification recorded above.
 
 After each material result, update this file and
 [lineage-port.md](lineage-port.md), commit with the required `Assisted-by`

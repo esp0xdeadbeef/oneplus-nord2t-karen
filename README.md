@@ -26,37 +26,39 @@ phones.
 
 ## Current state
 
-The test phone currently boots the private LineageOS
-`21.0-20260725-UNOFFICIAL-karen` build on slot A. Android 14 completes boot
-with file-based encryption and SELinux enforcing; the bootloader remains
-unlocked and Verified Boot reports orange. The successful first boot required
-Lineage Recovery's factory reset because stock userdata had an incompatible
-encryption policy on `/data/app`.
+The test phone currently boots exact OxygenOS
+`CPH2399_14.0.0.3001(EX01)` on slot A after a complete Lineage-to-stock
+rollback. The bootloader is relocked, Verified Boot reports green, encryption
+and SELinux enforcing are active, and the runtime contains no Magisk process,
+package or `su` command. Returning from Lineage userdata required a stock
+factory reset; the subsequent bootloader lock performed its own mandatory
+wipe.
 
-Display, touch, camera, audio and internet have been exercised successfully.
-The passive runtime audit reports the expected framework, binder services,
-core processes, input devices and DRM node. Calls, SMS, mobile data, Wi-Fi
-association, Bluetooth pairing, NFC, GPS/navigation, suspend/resume, charging,
-push notifications and banking-app behavior still need explicit real-world
-checks.
+The earlier Lineage boot exercised display, touch, camera, audio and internet
+successfully. Its passive runtime audit reported the expected framework,
+binder services, core processes, input devices and DRM node. Calls, SMS,
+mobile data, Wi-Fi association, Bluetooth pairing, NFC, GPS/navigation,
+suspend/resume, charging, push notifications and banking-app behavior still
+need explicit real-world checks after the next audited Lineage install.
 
 The official full EU `.3001` OTA was independently verified and installed
 through OxygenOS Local install on 2026-07-24 before Lineage bring-up.
 
 The bootloader was unlocked and userdata was wiped on 2026-07-24 for recovery
-bring-up. Exact stock rollback images remain available, but Lineage now
-occupies the active slot-A userspace and boot chain. The working unlock path
-was fastbootd -> bootloader-fastboot over a cable connected directly to the
+bring-up. Exact stock rollback and relock were completed on 2026-07-25.
+Stock recovery-fastbootd supplied the working reverse path and all restored
+images came from the pinned public OTA; OPlus, radio, calibration and
+persistent partitions remained untouched. The working unlock path was
+fastbootd -> bootloader-fastboot over a cable connected directly to the
 laptop; bootloader-fastboot did not enumerate behind the Lenovo dock. See the
-[tested unlock procedure](docs/recovery.md#tested-bootloader-unlock).
+[tested unlock and relock procedures](docs/recovery.md#tested-bootloader-unlock).
 
 The full root stack can mask Android's `ro.boot.*` property view as
-`green/locked` for application compatibility. The raw kernel command line
-still reports `androidboot.vbmeta.device_state=unlocked` and
-`androidboot.verifiedbootstate=orange`. The audit and stock-boot helpers prefer
-that kernel source when approved root can read it and otherwise fail
-conservatively; bootloader-fastboot remains the final authority before a
-write.
+`green/locked` for application compatibility. That masking was not used for
+the current result: stock directly reports `green`, `locked` and
+`flash.locked=1`, and bootloader-fastboot independently reported
+`unlocked=no`. The audit and stock-boot helpers still fail conservatively when
+they cannot establish the underlying boot state.
 
 On the former stock baseline, an exact stock `boot_a` unroot/root round trip
 was verified with pinned Magisk 30.7. The separate Lineage helpers below keep

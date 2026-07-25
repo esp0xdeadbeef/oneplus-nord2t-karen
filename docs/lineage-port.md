@@ -659,8 +659,10 @@ not itself the eventual Lineage device tree.
 
 ## Minimum gate before flashing
 
-The phone is now deliberately unlocked for bring-up. Do not flash a custom
-system or relock it until all of the following exist:
+The phone is currently back on exact stock with its bootloader relocked. A
+future custom-system test must deliberately unlock and accept the resulting
+wipe again. Never relock a custom system. Before flashing, continue to require
+all of the following:
 
 - a bootable image produced from reviewable source;
 - a current, exact `CPH2399` blob and firmware baseline;
