@@ -479,6 +479,35 @@ corresponding base-pair restore action. The enforcing variant supplied the
 first verified full Lineage boot, but remains a private diagnostic access
 path rather than a release configuration.
 
+Later hardware work separated two independent fastbootd problems. Adding
+AOSP's recovery BootControl service and narrowly labelling the concrete
+extended-devt misc node fixed slot reporting: fastbootd reports slot A, two
+slots and the unlocked bootloader state. Logical mappings still fail because
+the concrete `super` node is recreated with the `tmpfs` label even though its
+by-name symlink and final recovery file contexts identify it as
+`super_block_device`. A live root-recovery `restorecon` proves that rule, but
+does not persist across the separate fastbootd boot. Relabel actions at the
+recovery `fs`, `boot` and fastboot USB triggers did not change the hardware
+result.
+
+A temporary audited permissive recovery made the same fastbootd expose
+`super`, all five standard logical mappings and all ten preserved OPlus
+mappings. That isolated the remaining fault to SELinux labelling. The host
+then wrote only the audited ext4 `system`, `system_ext` and `product` images
+with 64 MiB sparse chunks. Every chunk succeeded, exact stock `vendor`/`odm`
+and all OPlus mappings remained present, and the enforcing AVB/boot chain was
+restored before the first Android boot.
+
+The generated full A/B installation ZIP is correctly signed and contains a
+full ten-partition payload, but is not yet a safe replacement for that
+bounded path. Its dynamic metadata lists only the five standard logical
+partitions. Live Karen metadata has those plus ten OPlus partitions only in
+`main_a`; update-engine's non-partial snapshot metadata updater deletes
+target-suffix partitions absent from the manifest. A publishable standard
+installer must model that preserved layout or use an audited partial-update
+design. Device-specific side images should likewise be published only when
+the final target-files configuration and installation order require them.
+
 ### Interactive checkout
 
 The following fallback is useful while iterating on Android makefiles because

@@ -211,9 +211,13 @@ required_ramdisk_files=(
   sepolicy
   system/bin/adbd
   system/bin/fastbootd
+  system/bin/hw/android.hardware.boot-service.default_recovery
   system/bin/init
   system/bin/recovery
+  system/etc/init/android.hardware.boot-service.default_recovery.rc
   system/etc/recovery.fstab
+  system/etc/vintf/manifest/android.hardware.boot-service.default.xml
+  vendor_file_contexts
 )
 
 for path in "${required_ramdisk_files[@]}"; do
@@ -223,6 +227,10 @@ done
 
 properties="$candidate_ramdisk_directory/prop.default"
 fstab="$candidate_ramdisk_directory/system/etc/recovery.fstab"
+boot_control_rc="$candidate_ramdisk_directory/system/etc/init/android.hardware.boot-service.default_recovery.rc"
+boot_control_manifest="$candidate_ramdisk_directory/system/etc/vintf/manifest/android.hardware.boot-service.default.xml"
+device_recovery_rc="$candidate_ramdisk_directory/init.recovery.mt6893.rc"
+vendor_file_contexts="$candidate_ramdisk_directory/vendor_file_contexts"
 
 grep -Fxq "ro.product.system.device=karen" "$properties" ||
   fail "ramdisk product device is not karen"
@@ -231,6 +239,53 @@ if grep -Fxq "ro.recovery.ui.blank_unblank_on_init=true" "$properties"; then
 fi
 grep -Fxq "ro.secure=1" "$properties" ||
   fail "ramdisk does not enable secure mode"
+grep -Fq "interface aidl android.hardware.boot.IBootControl/default" \
+  "$boot_control_rc" ||
+  fail "recovery boot-control service does not publish the AIDL interface"
+grep -Fq "<fqname>IBootControl/default</fqname>" "$boot_control_manifest" ||
+  fail "recovery boot-control VINTF fragment lacks the default interface"
+grep -Eq \
+  '^/dev/block/sdc1[[:space:]]+u:object_r:misc_block_device:s0$' \
+  "$vendor_file_contexts" ||
+  fail "recovery does not label the concrete misc block device"
+grep -Eq \
+  '^/dev/block/sdc68[[:space:]]+u:object_r:super_block_device:s0$' \
+  "$vendor_file_contexts" ||
+  fail "recovery does not label the concrete super block device"
+grep -Fq "restorecon /dev/block/sdc68" "$device_recovery_rc" ||
+  fail "recovery does not apply the concrete super block label before fastbootd"
+boot_label_action="$(
+  awk '
+    /^on boot$/ {
+      in_boot_action = 1
+      next
+    }
+    /^on / {
+      in_boot_action = 0
+    }
+    in_boot_action
+  ' "$device_recovery_rc"
+)"
+grep -Fq "restorecon /dev/block/sdc1" <<<"$boot_label_action" ||
+  fail "recovery does not refresh the concrete misc block label before starting services"
+grep -Fq "restorecon /dev/block/sdc68" <<<"$boot_label_action" ||
+  fail "recovery does not refresh the concrete super block label before starting services"
+fastboot_label_action="$(
+  awk '
+    /^on property:sys\.usb\.config=fastboot$/ {
+      in_fastboot_action = 1
+      next
+    }
+    /^on / {
+      in_fastboot_action = 0
+    }
+    in_fastboot_action
+  ' "$device_recovery_rc"
+)"
+grep -Fq "restorecon /dev/block/sdc1" <<<"$fastboot_label_action" ||
+  fail "recovery does not refresh the concrete misc block label for fastbootd"
+grep -Fq "restorecon /dev/block/sdc68" <<<"$fastboot_label_action" ||
+  fail "recovery does not refresh the concrete super block label for fastbootd"
 
 if grep -Fxq "ro.adb.secure=1" "$properties"; then
   adb_security="authenticated"

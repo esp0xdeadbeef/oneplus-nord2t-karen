@@ -21,6 +21,7 @@ PRODUCT_EXTRA_VNDK_VERSIONS += 31
 endif
 
 PRODUCT_PACKAGES += \
+    android.hardware.boot-service.default_recovery \
     fastbootd \
     fstab.mt6893.first_stage_ramdisk \
     fstab.mt6893.ramdisk \

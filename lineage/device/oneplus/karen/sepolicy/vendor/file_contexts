@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# The public .3001 GPT exposes misc as UFS LUN sdc partition 1. Label both the
+# stable by-name path and its concrete recovery device node so AOSP's
+# boot-control HAL can read the A/B metadata without broad block-device access.
+/dev/block/by-name/misc    u:object_r:misc_block_device:s0
+/dev/block/sdc1            u:object_r:misc_block_device:s0
+
+# Fastbootd resolves the by-name symlink, checks write access on the concrete
+# node and only then reads logical-partition metadata.
+/dev/block/by-name/super   u:object_r:super_block_device:s0
+/dev/block/sdc68           u:object_r:super_block_device:s0

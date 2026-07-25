@@ -78,6 +78,42 @@ grep -Fq 'fastboot_arguments=(-S 64M flash "$partition" "$image")' \
   "$script_directory/scripts/lineage-userspace"
 grep -Fq 'Fastbootd attested: userspace=yes, slot=a' \
   "$script_directory/scripts/lineage-userspace"
+grep -Fq 'android.hardware.boot-service.default_recovery' \
+  "$script_directory/lineage/device/oneplus/karen/device.mk"
+grep -Fq "BOARD_VENDOR_SEPOLICY_DIRS += \$(DEVICE_PATH)/sepolicy/vendor" \
+  "$board_config"
+grep -Fq '/dev/block/sdc1' \
+  "$script_directory/lineage/device/oneplus/karen/sepolicy/vendor/file_contexts"
+grep -Fq 'u:object_r:misc_block_device:s0' \
+  "$script_directory/lineage/device/oneplus/karen/sepolicy/vendor/file_contexts"
+grep -Fq '/dev/block/sdc68' \
+  "$script_directory/lineage/device/oneplus/karen/sepolicy/vendor/file_contexts"
+grep -Fq 'u:object_r:super_block_device:s0' \
+  "$script_directory/lineage/device/oneplus/karen/sepolicy/vendor/file_contexts"
+grep -Fq 'system/bin/hw/android.hardware.boot-service.default_recovery' \
+  "$script_directory/scripts/audit-boot-image"
+grep -Fq 'interface aidl android.hardware.boot.IBootControl/default' \
+  "$script_directory/scripts/audit-boot-image"
+grep -Fq 'recovery does not label the concrete misc block device' \
+  "$script_directory/scripts/audit-boot-image"
+grep -Fq 'recovery does not label the concrete super block device' \
+  "$script_directory/scripts/audit-boot-image"
+grep -Fq 'restorecon /dev/block/sdc68' \
+  "$script_directory/lineage/device/oneplus/karen/rootdir/etc/init.recovery.mt6893.rc"
+grep -Fq 'on boot' \
+  "$script_directory/lineage/device/oneplus/karen/rootdir/etc/init.recovery.mt6893.rc"
+grep -Fq 'on property:sys.usb.config=fastboot' \
+  "$script_directory/lineage/device/oneplus/karen/rootdir/etc/init.recovery.mt6893.rc"
+grep -Fq 'recovery does not apply the concrete super block label before fastbootd' \
+  "$script_directory/scripts/audit-boot-image"
+grep -Fq 'recovery does not refresh the concrete super block label before starting services' \
+  "$script_directory/scripts/audit-boot-image"
+grep -Fq 'recovery does not refresh the concrete super block label for fastbootd' \
+  "$script_directory/scripts/audit-boot-image"
+grep -Fq 'select_fastboot_device' \
+  "$script_directory/scripts/lineage-keybound-adb"
+grep -Fq 'expected one device in bootloader-fastboot after the image audits' \
+  "$script_directory/scripts/lineage-keybound-adb"
 # shellcheck disable=SC2016
 grep -Fq 'run_fastboot delete-logical-partition "$partition"' \
   "$script_directory/scripts/lineage-userspace"
@@ -109,7 +145,6 @@ grep -Fq -- '--stay-bootloader is valid only for a private install' \
   "$keybound_helper"
 grep -Fq 'Phone remains in bootloader-fastboot for the recovery add-on step.' \
   "$keybound_helper"
-grep -Fq 'expected exactly one device already in bootloader-fastboot' "$keybound_helper"
 grep -Fq 'slot A is not active' "$keybound_helper"
 grep -Fq -- '--allow-permissive-selinux is valid only for a private install' \
   "$keybound_helper"

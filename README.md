@@ -40,14 +40,20 @@ no root after a successful bootloader relock and its mandatory wipe. This
 proves the complete stock/recovery/lock side of the roundtrip.
 
 The bootloader has since been deliberately unlocked again, performing the
-expected second wipe. An explicit recovery request currently enters the
-corrected private Lineage Recovery on slot A, while a normal boot still enters
-exact rootless stock userspace. Recovery has authenticated root ADB and the
-OLED init fix; no full Lineage userspace or root package is currently
-installed. A read-only recovery metadata check found nine virtual-A/B COW
-partitions left by stock. Stock fastbootd reports snapshot status `none`; the
-default install gate still refuses them. An explicit cleanup mode accepts
-only their already audited names and sizes before removing them.
+expected second wipe. The complete ext4 Lineage `system`, `system_ext` and
+`product` images are now installed on slot A alongside the exact pinned stock
+`vendor` and `odm`. All ten existing OPlus logical partitions were preserved.
+The enforcing private Lineage Recovery is active with authenticated root ADB
+and the OLED init fix. At this checkpoint the required Lineage factory reset,
+optional MindTheGapps sideload and first Android boot are still pending; no
+root package is installed.
+
+Lineage fastbootd can report slot A through the added AOSP recovery
+BootControl service, but enforcing mode still labels the concrete extended
+`super` device incorrectly. The successful bounded install therefore used a
+temporary audited permissive Lineage Recovery, then immediately restored the
+enforcing AVB/boot pair before any Android boot. No stock recovery staging was
+used for that install.
 
 The earlier Lineage boot exercised display, touch, camera, audio and internet
 successfully. Its passive runtime audit reported the expected framework,
@@ -55,6 +61,14 @@ binder services, core processes, input devices and DRM node. Calls, SMS,
 mobile data, Wi-Fi association, Bluetooth pairing, NFC, GPS/navigation,
 suspend/resume, charging, push notifications and banking-app behavior still
 need explicit real-world checks after the next audited Lineage install.
+
+A standard testkey-signed Lineage A/B installation ZIP has also been built
+and cryptographically verified, but must not be flashed yet. Its full payload
+contains only the five standard logical partitions, while the live device has
+ten additional required OPlus partitions only in `main_a`. AOSP update-engine
+deletes target-slot partitions omitted by a non-partial payload. The
+publishable installer must therefore model that layout or use an audited
+partial-update strategy before the ZIP becomes the recommended path.
 
 The official full EU `.3001` OTA was independently verified and installed
 through OxygenOS Local install on 2026-07-24 before Lineage bring-up.

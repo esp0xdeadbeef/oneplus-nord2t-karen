@@ -299,6 +299,74 @@ An independently rehashed copy is available on the phone host:
 Neither location contains device-unique data; all files come from the pinned
 public `.3001` OTA.
 
+### Lineage fastbootd and standard installer checkpoint
+
+The stock roundtrip is complete and is no longer part of the active install
+path. The remaining mixed logical layout is an interrupted Lineage install
+state to replace, not a reason to repeat the stock restore:
+
+- `system_a` contains the complete ext4 Lineage image;
+- `system_ext_a` has the intended expanded size but its data write did not
+  start;
+- `product_a` still has its small stock allocation;
+- `vendor_a` and `odm_a` still match their pinned stock images;
+- no OPlus, radio, calibration or persistent partition was touched.
+
+Lineage Recovery now includes AOSP's recovery BootControl service. Its first
+hardware test exposed a concrete SELinux denial on the extended-devt
+`/dev/block/sdc1` misc node. Labelling that node
+`misc_block_device` made the service stable; the built recovery subsequently
+reported slot A, two slots and an unlocked bootloader in fastbootd.
+
+Fastbootd then failed separately at `super`. Its by-name symlink has the
+expected `super_block_device` label, but the concrete extended-devt
+`/dev/block/sdc68` node is recreated as `tmpfs` during each recovery boot.
+An authenticated root recovery shell can relabel the node and prove the file
+context is correct, but that live correction does not survive the distinct
+fastbootd reboot. Recovery-init relabel attempts at `fs`, `boot` and the
+fastboot USB property did not make fastbootd expose `super` or any logical
+mapping. Each experiment wrote only the audited slot-A `vbmeta`/`boot` pair;
+no logical write was attempted.
+
+A temporary key-bound permissive recovery proved that the remaining
+fastbootd failure is SELinux labelling rather than liblp metadata or USB.
+That fastbootd exposed `super`, all five standard mappings and all ten OPlus
+mappings with snapshot status `none`. Using explicit 64 MiB sparse chunks,
+all 15 `system_a`, seven `system_ext_a` and eight `product_a` chunks wrote
+successfully without a retry. Their resulting logical sizes exactly match
+the audited ext4 images. Exact stock `vendor_a`/`odm_a` sizes and all ten
+OPlus mappings were re-attested before leaving fastbootd. The enforcing
+`vbmeta_system_a`, `vbmeta_vendor_a`, `vbmeta_a` and `boot_a` were then
+restored before any Android boot.
+
+A testkey-signed full A/B installation ZIP was generated from the same
+target files. AOSP's verifier accepted both its whole-file and payload
+signatures, and its full payload contains the intended ten boot/AVB/standard
+partitions. It is not safe to sideload: the payload's dynamic metadata knows
+only the five standard logical partitions, while live metadata has a single
+`main_a` group containing those five plus ten OPlus partitions. AOSP
+update-engine deletes target-suffix partitions omitted by a non-partial
+payload. The ZIP must remain a diagnostic artifact until the installer
+models the preserved OPlus layout or uses a separately audited partial OTA
+strategy.
+
+Do not return to the stock-fastbootd staging route for the active install.
+The phone is now in enforcing ordinary Lineage Recovery awaiting the official
+post-install order: factory reset, optional MindTheGapps sideload, then the
+first Lineage boot. Loose recovery/boot/dtbo/vbmeta/super-empty artifacts
+should be published only when Karen's generated target files and installation
+order require them.
+
+The unlocked bootloader may pause on its Orange State warning while changing
+boot modes. During that pause both ADB and fastboot USB can be absent; wait
+for or acknowledge the on-screen warning before treating the transition as a
+USB failure.
+
+The owner build has both an rsynced repository mirror and the persistent
+Android checkout. Updating only the mirror is insufficient: device-tree
+changes must also reach `/build/device/oneplus/karen`. The boot audit caught
+two stale incremental candidates before they could be flashed.
+
 ## Resume commands
 
 Inspect the active or most recent build without starting a local Android

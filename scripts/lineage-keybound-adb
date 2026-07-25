@@ -198,13 +198,26 @@ if [[ "$assume_yes" != true ]]; then
   fi
 fi
 
-mapfile -t fastboot_devices < <(
-  fastboot devices |
-    awk '$2 == "fastboot" { print $1 }'
-)
-[[ "${#fastboot_devices[@]}" -eq 1 ]] ||
-  fail "expected exactly one device already in bootloader-fastboot"
-fastboot_serial="${fastboot_devices[0]}"
+select_fastboot_device() {
+  local attempt
+
+  for attempt in $(seq 1 60); do
+    mapfile -t fastboot_devices < <(
+      fastboot devices |
+        awk '$2 == "fastboot" { print $1 }'
+    )
+    if [[ "${#fastboot_devices[@]}" -eq 1 ]]; then
+      fastboot_serial="${fastboot_devices[0]}"
+      return
+    fi
+    [[ "${#fastboot_devices[@]}" -eq 0 ]] ||
+      fail "more than one device is in bootloader-fastboot"
+    sleep 1
+  done
+  fail "expected one device in bootloader-fastboot after the image audits"
+}
+
+select_fastboot_device
 
 redact_fastboot_output() {
   sed "s/${fastboot_serial//\//\\/}/<device>/g" "$1"
