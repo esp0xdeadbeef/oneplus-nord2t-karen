@@ -41,6 +41,10 @@ grep -Fq 'fastbootd_slot_a_verified=true' \
   "$script_directory/scripts/lineage-userspace"
 grep -Fq 'slot A was not active before entering fastbootd' \
   "$script_directory/scripts/lineage-userspace"
+grep -Fq 'fastboot_variable is-logical:system_a' \
+  "$script_directory/scripts/lineage-userspace"
+grep -Fq 'fastbootd exposed no writable slot-A system mapping' \
+  "$script_directory/scripts/lineage-userspace"
 # shellcheck disable=SC2016
 grep -Fq 'echo "${partition}_a"' \
   "$script_directory/scripts/lineage-userspace"

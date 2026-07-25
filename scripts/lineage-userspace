@@ -243,7 +243,7 @@ fastbootd_slot_a_verified=false
 fastbootd_requires_explicit_slot=false
 
 verify_fastbootd() {
-  local current_slot
+  local current_slot logical_system logical_system_a
 
   [[ "$(fastboot_variable is-userspace)" == yes ]] ||
     fail "device is not in fastbootd"
@@ -252,9 +252,19 @@ verify_fastbootd() {
     (-z "$current_slot" && "$fastbootd_slot_a_verified" == true) ]] ||
     fail "slot A is not active in fastbootd"
   if [[ -z "$current_slot" ]]; then
+    :
+  elif [[ "$current_slot" != a ]]; then
+    fail "slot A is not active in fastbootd"
+  fi
+
+  logical_system="$(fastboot_variable is-logical:system || true)"
+  logical_system_a="$(fastboot_variable is-logical:system_a || true)"
+  if [[ "$logical_system" == yes ]]; then
+    fastbootd_requires_explicit_slot=false
+  elif [[ "$logical_system_a" == yes ]]; then
     fastbootd_requires_explicit_slot=true
   else
-    fastbootd_requires_explicit_slot=false
+    fail "fastbootd exposed no writable slot-A system mapping"
   fi
 }
 

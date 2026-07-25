@@ -129,6 +129,14 @@ reapply restored the UI immediately. Karen now leaves
 `TARGET_RECOVERY_UI_BLANK_UNBLANK_ON_INIT` disabled and tests that it stays
 disabled; the corrected recovery still needs a rebuild and hardware boot.
 
+Staging only the exact `.3001` stock `boot_a` and three AVB images in
+bootloader-fastboot provided a working recovery alternative. Stock fastbootd
+reported `current-slot=a`, exposed `system_a` as logical and returned its
+expected partition size. It did not expose the unsuffixed `system` alias.
+The restore helper now probes both names after slot attestation and selects
+the mapping fastbootd actually exposes; it still stops before writing when
+neither mapping exists.
+
 The corrected nine-image bundle completed 117,156 actions on `s-tau` in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
 first VINTF check was rejected before any phone write: Lineage's empty

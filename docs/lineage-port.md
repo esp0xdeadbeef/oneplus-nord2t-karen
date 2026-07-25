@@ -414,6 +414,13 @@ reports an empty `current-slot` and creates no `system` or `system_a` mapping.
 The bounded restore helper consequently remains fail-closed before any logical
 write while the fastbootd slot/mapping source is investigated.
 
+An exact stock boot/recovery and AVB pre-stage subsequently supplied a working
+fallback: stock fastbootd reported slot A and created `system_a`. It exposed
+only the explicitly suffixed logical name, even though `current-slot` was
+valid. The bounded helper therefore detects unsuffixed and `_a` mappings
+independently of slot reporting instead of inferring one behavior from the
+other.
+
 As a headless fallback, the product now accepts an opt-in
 `KAREN_DEBUG_ADB_KEYS` path for one local Android public key while retaining
 `ro.adb.secure=1`. The normal audit rejects such a boot image; an explicit
