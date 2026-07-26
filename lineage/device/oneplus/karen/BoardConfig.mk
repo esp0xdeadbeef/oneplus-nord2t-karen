@@ -89,6 +89,11 @@ BOARD_MKBOOTIMG_ARGS += --header_version $(BOARD_BOOT_HEADER_VERSION)
 ifeq ($(KAREN_BUILD_SOURCE_KERNEL),true)
 BOARD_KERNEL_IMAGE_NAME := Image.gz
 TARGET_KERNEL_SOURCE := kernel/oneplus/mt6893
+# Lineage's source-kernel task otherwise stages modules below vendor/ while
+# its prebuilt-vendor branch records them in the system image file list. Keep
+# the exact stock vendor image immutable and install the seven modules built
+# and signed alongside this kernel into the writable Lineage system instead.
+NEED_KERNEL_MODULE_SYSTEM := true
 # This derived defconfig is the pinned OnePlus virtual-A/B baseline plus the
 # reviewed Mobile NixOS control-kernel fragment, including classic
 # CONFIG_KEXEC=y.

@@ -1,8 +1,13 @@
 # SPDX-License-Identifier: MIT
 args: let
   artifacts = import ./artifacts.nix args;
-  kernel = import ./kernel args;
   deviceTools = import ./device-tools.nix (args // {inherit artifacts;});
+  kernel =
+    import ./kernel
+    (args
+      // {
+        inherit deviceTools;
+      });
   lineage =
     import ./lineage.nix
     (args

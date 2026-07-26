@@ -482,6 +482,7 @@
 in {
   inherit
     extractStock
+    stockBoot3001
     stockFrameworkVintf3001
     stockLineage3001
     ;

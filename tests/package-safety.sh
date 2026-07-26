@@ -34,6 +34,8 @@ grep -Fq 'PRODUCT_ADB_KEYS := $(strip $(KAREN_DEBUG_ADB_KEYS))' "$device_makefil
 grep -Fq 'ifeq ($(KAREN_DEBUG_PERMISSIVE),true)' "$board_config"
 grep -Fq 'BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive' "$board_config"
 grep -Fq 'BOARD_KERNEL_CMDLINE += androidboot.slot_suffix=_a' "$board_config"
+# shellcheck disable=SC2016
+grep -Fq 'NEED_KERNEL_MODULE_SYSTEM := true' "$board_config"
 if grep -Fq 'TARGET_RECOVERY_UI_BLANK_UNBLANK_ON_INIT := true' "$board_config"; then
   echo "Karen recovery must not power-cycle its OLED during UI init." >&2
   exit 1
@@ -276,6 +278,15 @@ grep -Fq \
   'source.dirs."kernel/oneplus/vendor/mediatek/kernel_modules".src' \
   "$robotnix_device"
 grep -Fq 'source.dirs."kernel/oneplus/vendor/oplus".src' "$robotnix_device"
+grep -Fq 'karen-stock-module-signing-certificate.x509.der' \
+  "$nixos_kernel_packages"
+grep -Fq \
+  '30ee2ffb56cefe69f1c6d0439b7c566fa6121f784ba90d80bfba212404f7000d' \
+  "$nixos_kernel_packages"
+grep -Fq 'serial=9DFB3A7B9EEB1555' "$nixos_kernel_packages"
+grep -Fq \
+  'CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"' \
+  "$nixos_kernel_packages"
 grep -Fq \
   'path_regex: '"'"'^secrets/vector-signing-shared\.json\.age$'"'"'' \
   "$sops_config"
