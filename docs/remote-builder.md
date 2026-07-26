@@ -201,6 +201,26 @@ Other NixOS hosts can opt in with the equivalent settings:
 }
 ```
 
+That example is sufficient on a persistent root filesystem. An
+impermanence-based builder must additionally persist the cache directory;
+otherwise the cache survives builds but disappears at the next root
+rotation:
+
+```nix
+environment.persistence."/persist".directories = [
+  {
+    directory = "/var/cache/ccache";
+    user = "root";
+    group = "nixbld";
+    mode = "2770";
+  }
+];
+```
+
+After activation, verify that `findmnt /var/cache/ccache` resolves to the
+persistent backing tree before starting a cached build. A directory that
+merely exists and is sandbox-visible is not proof of persistence.
+
 After applying that host configuration, use the owner-key-free and private
 kernel-only targets for short source/config ABI iterations:
 
