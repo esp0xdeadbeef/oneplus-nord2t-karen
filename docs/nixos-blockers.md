@@ -274,6 +274,20 @@ This closes the secure boot-image construction gate, not the install gate:
 the candidate still needs a complete matching Lineage userspace/AVB bundle,
 the root-full patch and a live boot/runtime audit.
 
+The complete source-kernel image target keeps the exact stock `vendor` and
+`odm` images. Lineage's source-kernel build therefore routes only the modules
+built alongside the new kernel into `system/lib/modules`. The control kernel
+also trusts the public module-signing certificate derived from the exact
+pinned stock boot image; no stock private key is present or required.
+
+Signature trust alone does not prove ABI compatibility. Source-kernel
+artifacts consequently export `Module.symvers` and `kernel.release`. The
+normal full-image audit extracts all ten pinned stock MediaTek modules,
+verifies each PKCS#7 signature against that public certificate, checks the
+kernel release and compares every imported modversion CRC against the new
+kernel plus the complete stock module set. A mismatch is a pre-flash failure,
+not a runtime experiment.
+
 ## Concrete remaining gates
 
 ### First headless NixOS through vendor 4.19

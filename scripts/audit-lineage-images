@@ -116,11 +116,232 @@ verify_stock_partition() {
 verify_stock_partition vendor "$image_directory/vendor.img"
 verify_stock_partition odm "$image_directory/odm.img"
 
-temporary_directory="$(mktemp -d -t nord2t-lineage-audit.XXXXXXXX)"
+cache_root="${XDG_CACHE_HOME:-$HOME/.cache}"
+audit_temp_root="${NORD2T_AUDIT_TMPDIR:-$cache_root/nord2t-recovery/audit-tmp}"
+mkdir -p "$audit_temp_root"
+chmod 0700 "$audit_temp_root"
+temporary_directory="$(
+  mktemp -d --tmpdir="$audit_temp_root" nord2t-lineage-audit.XXXXXXXX
+)"
+chmod 0700 "$temporary_directory"
 cleanup() {
   rm -rf -- "$temporary_directory"
 }
 trap cleanup EXIT
+export TMPDIR="$temporary_directory"
+
+module_abi_status=not-exported
+stock_vendor_module_count=0
+module_symvers="$image_directory/Module.symvers"
+kernel_release_file="$image_directory/kernel.release"
+if [[ -e "$module_symvers" || -e "$kernel_release_file" ||
+  -n "$expected_kernel_sha256" ]]; then
+  [[ -s "$module_symvers" ]] ||
+    fail "a non-stock kernel bundle must export Module.symvers"
+  [[ -s "$kernel_release_file" ]] ||
+    fail "a non-stock kernel bundle must export kernel.release"
+
+  mapfile -t kernel_release_lines <"$kernel_release_file"
+  [[ "${#kernel_release_lines[@]}" -eq 1 ]] ||
+    fail "kernel.release must contain exactly one line"
+  kernel_release="${kernel_release_lines[0]}"
+  [[ "$kernel_release" =~ ^[A-Za-z0-9._+-]+$ ]] ||
+    fail "kernel.release contains an invalid release string"
+
+  stock_module_certificate="${STOCK_MODULE_CERTIFICATE:-@STOCK_MODULE_CERTIFICATE@}"
+  [[ -s "$stock_module_certificate" ]] ||
+    fail "the pinned stock module certificate is not readable"
+  [[ "$(sha256sum "$stock_module_certificate" | cut -d ' ' -f 1)" == \
+    30ee2ffb56cefe69f1c6d0439b7c566fa6121f784ba90d80bfba212404f7000d ]] ||
+    fail "the stock module certificate does not match the pinned public key"
+  stock_module_certificate_pem="$temporary_directory/stock-module-certificate.pem"
+  openssl x509 \
+    -inform DER \
+    -in "$stock_module_certificate" \
+    -out "$stock_module_certificate_pem" ||
+    fail "could not decode the pinned stock module certificate"
+
+  verify_module_signature() {
+    local module="$1"
+    local module_name="$2"
+    local module_size signature_length signature_offset unsigned_size
+    local trailer_offset trailer_magic
+    local -a trailer
+
+    module_size="$(stat -c %s "$module")"
+    trailer_magic="$(tail -c 28 "$module")"
+    [[ "$trailer_magic" == "~Module signature appended~" ]] ||
+      fail "$module_name has no appended kernel-module signature"
+    trailer_offset=$((module_size - 28 - 12))
+    ((trailer_offset > 0)) ||
+      fail "$module_name has an invalid module-signature trailer"
+    read -r -a trailer < <(
+      od -An -t u1 -N 12 -j "$trailer_offset" "$module"
+    )
+    [[ "${#trailer[@]}" -eq 12 ]] ||
+      fail "$module_name has an unreadable module-signature trailer"
+    [[ "${trailer[2]}" -eq 2 ]] ||
+      fail "$module_name does not use a PKCS#7 module signature"
+
+    signature_length=$((
+      (trailer[8] << 24) |
+        (trailer[9] << 16) |
+        (trailer[10] << 8) |
+        trailer[11]
+    ))
+    ((signature_length > 0)) ||
+      fail "$module_name has an empty module signature"
+    signature_offset=$((
+      trailer_offset -
+        trailer[3] -
+        trailer[4] -
+        signature_length
+    ))
+    unsigned_size="$signature_offset"
+    ((unsigned_size > 0)) ||
+      fail "$module_name has invalid signed-content bounds"
+
+    dd \
+      if="$module" \
+      of="$temporary_directory/$module_name.unsigned" \
+      iflag=count_bytes \
+      count="$unsigned_size" \
+      status=none
+    dd \
+      if="$module" \
+      of="$temporary_directory/$module_name.p7s" \
+      iflag=skip_bytes,count_bytes \
+      skip="$signature_offset" \
+      count="$signature_length" \
+      status=none
+    openssl cms \
+      -verify \
+      -binary \
+      -inform DER \
+      -in "$temporary_directory/$module_name.p7s" \
+      -content "$temporary_directory/$module_name.unsigned" \
+      -certfile "$stock_module_certificate_pem" \
+      -noverify \
+      -out /dev/null \
+      >/dev/null 2>&1 ||
+      fail "$module_name is not signed by the pinned stock module key"
+  }
+
+  vendor_modules=(
+    bt_drv_6893.ko
+    connfem.ko
+    conninfra.ko
+    fmradio_drv_connac2x.ko
+    fpsgo.ko
+    gps_drv.ko
+    met.ko
+    trace_mmstat.ko
+    wlan_drv_gen4m.ko
+    wmt_chrdev_wifi.ko
+  )
+  vendor_module_directory="$temporary_directory/vendor-modules"
+  mkdir "$vendor_module_directory"
+  for module in "${vendor_modules[@]}"; do
+    dump.erofs \
+      --cat \
+      --path="/lib/modules/$module" \
+      "$image_directory/vendor.img" \
+      >"$vendor_module_directory/$module" 2>/dev/null ||
+      fail "exact stock vendor is missing lib/modules/$module"
+    [[ -s "$vendor_module_directory/$module" ]] ||
+      fail "exact stock vendor module is empty: $module"
+  done
+  dump.erofs \
+    --cat \
+    --path=/lib/modules/modules.load \
+    "$image_directory/vendor.img" \
+    >"$vendor_module_directory/modules.load" 2>/dev/null ||
+    fail "exact stock vendor is missing lib/modules/modules.load"
+
+  expected_load="$temporary_directory/expected-modules.load"
+  actual_load="$temporary_directory/actual-modules.load"
+  printf '%s\n' "${vendor_modules[@]}" | sort -u >"$expected_load"
+  awk '
+    {
+      sub(/\r$/, "")
+      sub(/^.*\//, "")
+      if ($0 != "") print
+    }
+  ' "$vendor_module_directory/modules.load" | sort -u >"$actual_load"
+  cmp -s "$expected_load" "$actual_load" ||
+    fail "exact stock vendor modules.load differs from the pinned module set"
+
+  declare -A available_symbol_crc
+  declare -A available_symbol_source
+  add_available_symbol() {
+    local crc="${1,,}"
+    local symbol="$2"
+    local source="$3"
+
+    [[ "$crc" =~ ^0x[0-9a-f]{8}$ ]] ||
+      fail "$source has an invalid module-version CRC for $symbol"
+    [[ "$symbol" =~ ^[A-Za-z0-9_]+$ ]] ||
+      fail "$source has an invalid exported symbol name"
+    if [[ -n "${available_symbol_crc[$symbol]+present}" &&
+      "${available_symbol_crc[$symbol]}" != "$crc" ]]; then
+      fail "$source exports $symbol as $crc, but ${available_symbol_source[$symbol]} exports it as ${available_symbol_crc[$symbol]}"
+    fi
+    available_symbol_crc["$symbol"]="$crc"
+    available_symbol_source["$symbol"]="$source"
+  }
+
+  module_symvers_count=0
+  while read -r crc symbol _; do
+    [[ -n "$crc" ]] || continue
+    add_available_symbol "$crc" "$symbol" Module.symvers
+    ((module_symvers_count += 1))
+  done <"$module_symvers"
+  ((module_symvers_count > 0)) ||
+    fail "Module.symvers contains no exported symbols"
+
+  for module in "${vendor_modules[@]}"; do
+    module_path="$vendor_module_directory/$module"
+    module_vermagic="$(modinfo -F vermagic "$module_path")" ||
+      fail "could not read vermagic from $module"
+    [[ "${module_vermagic%% *}" == "$kernel_release" ]] ||
+      fail "$module has release ${module_vermagic%% *}, expected $kernel_release"
+    verify_module_signature "$module_path" "$module"
+
+    exports="$temporary_directory/$module.exports"
+    if ! modprobe --show-exports "$module_path" >"$exports" 2>/dev/null; then
+      # kmod reports ENODATA when a valid module exports no symbols.
+      : >"$exports"
+    fi
+    while read -r crc symbol _; do
+      [[ -n "$crc" ]] || continue
+      add_available_symbol "$crc" "$symbol" "$module"
+    done <"$exports"
+  done
+
+  imported_symbol_count=0
+  for module in "${vendor_modules[@]}"; do
+    module_path="$vendor_module_directory/$module"
+    imports="$temporary_directory/$module.imports"
+    if ! modprobe --show-modversions "$module_path" >"$imports" 2>/dev/null; then
+      # kmod reports ENODATA when a valid module has no versioned imports.
+      : >"$imports"
+    fi
+    while read -r crc symbol _; do
+      [[ -n "$crc" ]] || continue
+      crc="${crc,,}"
+      [[ -n "${available_symbol_crc[$symbol]+present}" ]] ||
+        fail "$module requires $symbol, which is absent from Module.symvers and the pinned stock module set"
+      [[ "${available_symbol_crc[$symbol]}" == "$crc" ]] ||
+        fail "$module requires $symbol as $crc, but ${available_symbol_source[$symbol]} provides ${available_symbol_crc[$symbol]}"
+      ((imported_symbol_count += 1))
+    done <"$imports"
+  done
+  ((imported_symbol_count > 0)) ||
+    fail "the pinned stock modules expose no versioned imports"
+
+  module_abi_status=compatible
+  stock_vendor_module_count="${#vendor_modules[@]}"
+fi
 
 declare -A expanded_image_bytes
 declare -A minimum_free_bytes=(
@@ -258,4 +479,6 @@ echo "standard_image_bytes=$standard_image_bytes"
 echo "standard_image_ceiling=$standard_image_ceiling"
 echo "stock_vendor=exact"
 echo "stock_odm=exact"
+echo "stock_vendor_module_count=$stock_vendor_module_count"
+echo "stock_vendor_module_abi=$module_abi_status"
 echo "avb_chain=verified"

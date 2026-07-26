@@ -16,6 +16,7 @@ lineage_unroot="$script_directory/scripts/lineage-unroot"
 owner_apk_signer="$script_directory/scripts/owner-sign-apk"
 adaway_dependency_lock="$script_directory/gradle/adaway-deps.json"
 artifact_packages="$script_directory/nix/packages/artifacts.nix"
+device_tools_packages="$script_directory/nix/packages/device-tools.nix"
 lineage_packages="$script_directory/nix/packages/lineage.nix"
 nixos_kernel_packages="$script_directory/nix/packages/kernel/nixos.nix"
 robotnix_device="$script_directory/lineage/robotnix-karen.nix"
@@ -279,17 +280,24 @@ grep -Fq \
   "$robotnix_device"
 grep -Fq 'source.dirs."kernel/oneplus/vendor/oplus".src' "$robotnix_device"
 grep -Fq 'karen-stock-module-signing-certificate.x509.der' \
-  "$nixos_kernel_packages"
+  "$device_tools_packages"
 grep -Fq \
   '30ee2ffb56cefe69f1c6d0439b7c566fa6121f784ba90d80bfba212404f7000d' \
-  "$nixos_kernel_packages"
-grep -Fq 'serial=9DFB3A7B9EEB1555' "$nixos_kernel_packages"
+  "$device_tools_packages"
+grep -Fq 'serial=9DFB3A7B9EEB1555' "$device_tools_packages"
 grep -Fq \
   'CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"' \
   "$nixos_kernel_packages"
+# shellcheck disable=SC2016
+grep -Fq 'modprobe --show-modversions "$module_path"' "$image_audit"
+grep -Fq 'openssl cms' "$image_audit"
+# shellcheck disable=SC2016
+grep -Fq 'stock_vendor_module_abi=$module_abi_status' "$image_audit"
+# shellcheck disable=SC2016
 grep -Fq \
   'cp --reflink=auto "$kernel_object/Module.symvers" "$out/Module.symvers"' \
   "$lineage_packages"
+# shellcheck disable=SC2016
 grep -Fq \
   '"$kernel_object/include/config/kernel.release"' \
   "$lineage_packages"
