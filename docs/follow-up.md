@@ -34,32 +34,48 @@ along with the host boundary, rsync flow and artifact-return checks.
   decrypted only the shared half. `l-portal` has the recipient recorded from
   the NixOS repository but was offline during the live decrypt check.
 - The ext4 Lineage userspace, exact stock vendor/odm, pinned MindTheGapps and
-  Magisk-patched private boot are installed on slot A. Lineage 21 completes
-  encrypted and enforcing normal boots.
+  Magisk-patched private boot previously completed encrypted and enforcing
+  normal boots on slot A. The phone is currently back on exact `.3001` stock
+  after the completed rollback test; restore the audited Lineage userspace
+  before writing a Lineage boot image.
 - The compiled recovery policy now gives the tmpfs-created extended `super`
   node its exact `super_block_device` label. Enforcing Lineage fastbootd
   exposes every standard and preserved OPlus logical mapping; the temporary
   permissive recovery is no longer needed.
-- The current full-root Lineage runtime has Magisk 30.7, Zygisk, Vector,
-  Shamiko and Systemless Hosts active. The kexec module currently supplies
-  only its userspace loader: the installed stock-derived kernel has the
-  classic syscall compiled out. HMA's `system` scope is disabled after it
-  reproducibly stalled Launcher/SystemUI; its native library is denied while
-  Vector injects it into `system_server`. Do not automate that scope until the
-  framework issue and rollback health check are resolved.
+- The last validated full-root Lineage runtime had Magisk 30.7, Zygisk,
+  Vector, Shamiko and Systemless Hosts active. Its kexec module supplied only
+  the userspace loader because that runtime still used the stock-derived
+  kernel with the classic syscall compiled out. HMA's `system` scope was
+  disabled after it reproducibly stalled Launcher/SystemUI; its native
+  library was denied while Vector injected it into `system_server`. Do not
+  automate that scope until the framework issue and rollback health check are
+  resolved.
 - The pinned OnePlus 4.19 source plus matching MediaTek/OPlus modules now
   compiles successfully with the control fragment on the optional build host.
   The 11-minute build produced a 64 MiB boot image and an effective config
   with `CONFIG_KEXEC=y`, devtmpfs, file handles and the requested cgroup
   controllers. Its exported kernel SHA-256 is
   `0ec542e43f759a6d69eb81a1995ef056052b9b2655c6a1a43c6243c117e7b3a6`.
-  The diagnostic ramdisk has insecure ADB and is not flashable; first
-  repackage that kernel in the normal key-bound Magisk/root-full Lineage
-  bootpair and matching AVB.
+  The diagnostic ramdisk has insecure ADB and remains non-flashable; the
+  secure follow-up candidate is recorded next.
+- The follow-up secure key-bound `bootimage` build completed on the optional
+  build host in 10 minutes 31 seconds. Its config is byte-identical to the
+  diagnostic config and contains `CONFIG_KEXEC=y` and
+  `CONFIG_KEXEC_CORE=y`. The normal recovery ramdisk is authenticated with
+  exactly one owner ADB public key, remains SELinux-enforcing and contains the
+  OLED fix. The complete source-kernel boot audit passed against pinned stock:
+  `boot.img` is
+  `f1bd81e3f78674c2c8a1f7153a70ad98a4af7765b6779534d9d7e5c05a257cc1`,
+  the compressed kernel is
+  `89827d94738926488fbba1d2ebf2c3bb544b6bb44736a6ea0f427fb6712e1325`
+  and the DTB remains exact stock. This candidate is not installed yet.
+  Combine it with the already validated complete Lineage userspace/AVB set,
+  rerun the complete bundle audit and only then apply the root-full profile.
 - The earlier exact-stock relock and green/rootless boot completed
-  successfully. The bootloader was then deliberately unlocked again, with
-  the expected wipe, before installing the current Lineage system. The tested
-  stock roundtrip remains rollback evidence rather than the active OS state.
+  successfully. The bootloader was deliberately unlocked again, with the
+  expected wipe, and the next Lineage installation also booted successfully.
+  A later restore returned the phone to stock; the tested roundtrip remains
+  rollback evidence and stock is the active OS state.
 - With adbd returned to normal shell mode, the passive runtime audit passed
   all 37 non-boot-state checks. Its three remaining property checks see
   `green/locked` because the deliberate full-root concealment stack masks the
