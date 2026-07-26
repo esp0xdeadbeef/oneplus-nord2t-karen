@@ -175,6 +175,7 @@
             ./patches/vector/0001-sepolicy-allow-system-service-native-modules.patch
             ./patches/vector/0002-build-use-pinned-release-metadata.patch
             ./patches/vector/0003-build-accept-public-signing-certificate.patch
+            ./patches/vector/0004-build-raise-gradle-daemon-memory.patch
           ];
 
           nativeBuildInputs = [
@@ -199,7 +200,6 @@
           gradleFlags = [
             "--no-daemon"
             "-Dorg.gradle.java.home=${pkgs.jdk21.home}"
-            "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
             "-Pandroid.aapt2FromMavenOverride=${vectorAndroid.androidsdk}/libexec/android-sdk/build-tools/36.0.0/aapt2"
           ]
           ++ pkgs.lib.optional (signingCertificate != null)
@@ -262,6 +262,30 @@
             chmod -R u+w "$out"
             patch --batch --forward --fuzz=0 -d "$out" -p1 \
               <${./nixos/patches/kernel/0001-clang-fix-control-kernel-errors.patch}
+            patch --batch --forward --fuzz=0 -d "$out" -p1 \
+              <${./nixos/patches/kernel/0003-clang-fix-control-kernel-warnings.patch}
+            substituteInPlace "$out/net/oplus_nwpower/oplus_nwpower.c" \
+              --replace-fail \
+              'static void nwpower_unsl_blacklist_reject() {' \
+              'static void nwpower_unsl_blacklist_reject(void) {' \
+              --replace-fail \
+              'extern void oplus_match_modem_wakeup() {' \
+              'extern void oplus_match_modem_wakeup(void) {' \
+              --replace-fail \
+              'extern void oplus_match_wlan_wakeup() {' \
+              'extern void oplus_match_wlan_wakeup(void) {' \
+              --replace-fail \
+              'extern void oplus_ipa_schedule_work() {' \
+              'extern void oplus_ipa_schedule_work(void) {' \
+              --replace-fail \
+              'static void nwpower_unsl_app_wakeup()' \
+              'static void nwpower_unsl_app_wakeup(void)' \
+              --replace-fail \
+              'static void nwpower_hook_on() {' \
+              'static void nwpower_hook_on(void) {' \
+              --replace-fail \
+              'static void nwpower_unsl_mdaci() {' \
+              'static void nwpower_unsl_mdaci(void) {'
             control_defconfig="$out/arch/arm64/configs/k6893v1_64_k419_nixos_control_defconfig"
             cp \
               "$out/arch/arm64/configs/k6893v1_64_k419_defconfig" \
@@ -280,6 +304,8 @@
             chmod -R u+w "$out"
             patch --batch --forward --fuzz=0 -d "$out" -p1 \
               <${./nixos/patches/kernel/0002-oplus-fix-clang-strict-prototypes.patch}
+            patch --batch --forward --fuzz=0 -d "$out" -p1 \
+              <${./nixos/patches/kernel/0004-oplus-fix-control-kernel-warnings.patch}
             substituteInPlace \
               "$out/vendor/oplus/kernel/secureguard/rootguard/oplus_guard_general.c" \
               --replace-fail \

@@ -1,0 +1,54 @@
+From f6cf801d85a3dd04bc16d7cb73240a94fcf0d418 Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 03:45:00 +0200
+Subject: [PATCH] oplus: fix control-kernel Clang diagnostics
+
+Complete the prototypes for the sched-assist helpers. Preserve the TFA
+power-down side effect without retaining its deliberately ignored result,
+and propagate the MediaTek DSP read result through the value already checked
+by the function.
+
+Assisted-by: Codex:gpt-5
+---
+ .../oplus_performance/sched_assist/sched_assist_slide_v1.c | 2 +-
+ .../oplus_performance/sched_assist/sync/locking_main.h     | 2 +-
+ .../oplus_performance/uxio_first/uxio_first_opt.c          | 2 +-
+ vendor/oplus/kernel_4.19/audio/tfa98xx/tfa98xx.c           | 6 +++---
+ 4 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/vendor/oplus/kernel/oplus_performance/sched_assist/sched_assist_slide_v1.c b/vendor/oplus/kernel/oplus_performance/sched_assist/sched_assist_slide_v1.c
+index 6e5af71..47b58e8 100644
+--- a/vendor/oplus/kernel/oplus_performance/sched_assist/sched_assist_slide_v1.c
++++ b/vendor/oplus/kernel/oplus_performance/sched_assist/sched_assist_slide_v1.c
+@@ -209 +209 @@
+-void adjust_sched_assist_input_ctrl() {
++void adjust_sched_assist_input_ctrl(void) {
+diff --git a/vendor/oplus/kernel/oplus_performance/sched_assist/sync/locking_main.h b/vendor/oplus/kernel/oplus_performance/sched_assist/sync/locking_main.h
+index 3f0bfb7..973fa76 100644
+--- a/vendor/oplus/kernel/oplus_performance/sched_assist/sync/locking_main.h
++++ b/vendor/oplus/kernel/oplus_performance/sched_assist/sync/locking_main.h
+@@ -79 +79 @@
+-static inline bool lock_supp_level(level)
++static inline bool lock_supp_level(unsigned int level)
+diff --git a/vendor/oplus/kernel/oplus_performance/uxio_first/uxio_first_opt.c b/vendor/oplus/kernel/oplus_performance/uxio_first/uxio_first_opt.c
+index 917cb83..c43c327 100644
+--- a/vendor/oplus/kernel/oplus_performance/uxio_first/uxio_first_opt.c
++++ b/vendor/oplus/kernel/oplus_performance/uxio_first/uxio_first_opt.c
+@@ -204 +204 @@
+-bool blk_uxio_get_read_opt()
++bool blk_uxio_get_read_opt(void)
+diff --git a/vendor/oplus/kernel_4.19/audio/tfa98xx/tfa98xx.c b/vendor/oplus/kernel_4.19/audio/tfa98xx/tfa98xx.c
+index c89aa83..9b2cdf3 100644
+--- a/vendor/oplus/kernel_4.19/audio/tfa98xx/tfa98xx.c
++++ b/vendor/oplus/kernel_4.19/audio/tfa98xx/tfa98xx.c
+@@ -1360 +1360 @@ static int tfa98xx_speaker_recalibration(struct tfa_device *tfa,
+-	int err, error = Tfa98xx_Error_Ok;
++	int error = Tfa98xx_Error_Ok;
+@@ -1384 +1384 @@ static int tfa98xx_speaker_recalibration(struct tfa_device *tfa,
+-			err = tfa98xx_powerdown(tfa, 0);  //leave power off
++			tfa98xx_powerdown(tfa, 0);  //leave power off
+@@ -3458 +3457,0 @@ tfa98xx_read_dsp(struct tfa_device *tfa,
+-	enum Tfa98xx_Error error;
+@@ -3460 +3459 @@
+-	error = tfa98xx_receive_data_from_dsp(
++	ret = tfa98xx_receive_data_from_dsp(

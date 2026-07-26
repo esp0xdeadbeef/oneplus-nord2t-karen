@@ -18,6 +18,7 @@ sops_config="$script_directory/.sops.yaml"
 userspace_preflight="$script_directory/scripts/preflight-lineage-userspace"
 vector_owner_build="$script_directory/scripts/vector-owner-build-intermediate"
 vector_owner_patch="$script_directory/patches/vector/0003-build-accept-public-signing-certificate.patch"
+vector_memory_patch="$script_directory/patches/vector/0004-build-raise-gradle-daemon-memory.patch"
 vector_owner_sign="$script_directory/scripts/vector-owner-sign"
 vector_signing_generator="$script_directory/scripts/vector-signing-key-generator"
 
@@ -119,6 +120,13 @@ if grep -Eq \
 fi
 grep -Fq 'androidSigningCertificateFile' "$vector_owner_patch"
 grep -Fq 'CertificateFactory.getInstance("X.509")' "$vector_owner_patch"
+grep -Fq \
+  'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8' \
+  "$vector_memory_patch"
+if grep -Fq -- '-Dorg.gradle.jvmargs=-Xmx4g ' "$script_directory/flake.nix"; then
+  echo "Space-separated Gradle JVM arguments must live in gradle.properties." >&2
+  exit 1
+fi
 # shellcheck disable=SC2016
 grep -Fq 'KAREN_VECTOR_SIGNING_CERTIFICATE_FILE="$certificate"' \
   "$vector_owner_build"
@@ -159,6 +167,10 @@ grep -Fxq 'CONFIG_KEXEC=y' \
 grep -Fq "grep -Fxq 'CONFIG_KEXEC=y' \"\$effective_config\"" \
   "$script_directory/flake.nix"
 grep -Fq 'kernel.config' "$script_directory/flake.nix"
+grep -Fq 'nwpower_unsl_blacklist_reject(void)' "$script_directory/flake.nix"
+grep -Fq 'oplus_match_modem_wakeup(void)' "$script_directory/flake.nix"
+grep -Fq 'lock_supp_level(unsigned int level)' \
+  "$script_directory/nixos/patches/kernel/0004-oplus-fix-control-kernel-warnings.patch"
 grep -Fq \
   'source.dirs."kernel/oneplus/vendor/mediatek/kernel_modules".src' \
   "$robotnix_device"

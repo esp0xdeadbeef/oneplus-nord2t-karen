@@ -1,0 +1,23 @@
+From d534eff26ba52976905c98241e6038228ac95fe2 Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 03:40:00 +0200
+Subject: [PATCH] build: raise Gradle daemon memory
+
+The Vector Android build exhausts and thrashes the default 512 MiB Gradle
+daemon heap while resolving and compiling the native module. Put the JVM
+arguments in Gradle's properties file so the complete space-separated value
+reaches the daemon as one property in both dependency and offline builds.
+
+Assisted-by: Codex:gpt-5
+---
+ gradle.properties | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/gradle.properties b/gradle.properties
+index 941da43..95abc8d 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -14 +14,2 @@
+-android.useAndroidX=true
++org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
++android.useAndroidX=true

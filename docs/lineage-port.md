@@ -397,6 +397,16 @@ encryption, SELinux enforcing, authenticated shell ADB, slot A active and the
 expected unlocked/orange boot state. All passive framework service and core
 process checks passed.
 
+The enforcing runtime later exposed a separate userspace regression: Jelly
+reproducibly died after its WebView 147 renderer trapped twice on `fast.com`.
+Both renderer failures had the same native stack and occurred after roughly
+46 seconds; memory pressure did not kill either process. Installing upstream
+Lineage's same-certificate arm64 WebView `150.0.7871.63` as a reversible
+package update kept the same page and renderer alive. The build now pins that
+exact LFS-backed upstream revision independently of Robotnix's older generated
+source lock. A rebuilt image must repeat the test before this becomes a
+closed runtime gate.
+
 The owner confirmed display/touch, camera, audio and internet operation.
 GNSS and the remainder of the manual parity matrix are still pending. No
 device identifier, authorization key, radio data or calibration data is

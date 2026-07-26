@@ -1,0 +1,24 @@
+From 6841e6f75603885c380ed66268ada85d15a9957a Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 03:44:00 +0200
+Subject: [PATCH] kernel: validate the DVFSRC device data
+
+The interrupt-log store handler fetched its device data without using it,
+which Clang rejects in this warning-as-error build. Match the neighboring
+sysfs handler by rejecting access when the device data is unavailable.
+
+Assisted-by: Codex:gpt-5
+---
+ drivers/devfreq/helio-dvfsrc-v3/helio-dvfsrc-sysfs.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/devfreq/helio-dvfsrc-v3/helio-dvfsrc-sysfs.c b/drivers/devfreq/helio-dvfsrc-v3/helio-dvfsrc-sysfs.c
+index e7f28aa..c07a5f1 100644
+--- a/drivers/devfreq/helio-dvfsrc-v3/helio-dvfsrc-sysfs.c
++++ b/drivers/devfreq/helio-dvfsrc-v3/helio-dvfsrc-sysfs.c
+@@ -256 +256,4 @@
+-	dvfsrc = dev_get_drvdata(dev);
++	dvfsrc = dev_get_drvdata(dev);
++	if (!dvfsrc)
++		return -ENODEV;
++
