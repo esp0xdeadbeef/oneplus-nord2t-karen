@@ -268,6 +268,12 @@ nix run .#karen-source-kernel-bootimage
 nix run .#karen-source-kernel-bootimage-cached
 nix run .#karen-source-kernel-full-images-cached
 
+# Check the kernel-only result against all exact pinned vendor-module imports
+# before spending time on a complete Android image.
+nix run .#audit-kernel-module-abi -- \
+  ./result-karen-source-kernel-bootimage-cached \
+  /private/path/to/vendor.img
+
 # Compare a candidate with the pinned stock boot image and inspect its ramdisk.
 nix run .#audit-boot -- ./result-karen-bootimage/boot.img
 

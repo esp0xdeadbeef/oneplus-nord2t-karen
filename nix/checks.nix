@@ -10,6 +10,7 @@ in {
     (self.packages.${system})
     adb-key-generator
     audit-boot
+    audit-kernel-module-abi
     audit-lineage-images
     audit-lineage-runtime
     extract-stock

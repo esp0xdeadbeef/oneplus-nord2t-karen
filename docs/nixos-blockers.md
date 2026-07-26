@@ -302,8 +302,36 @@ published defconfig. Its SHA-256 is checked before the small
 suffix, the public trust key and an explicit compat-vDSO disable. The
 devtmpfs, file-handle and extra cgroup options are still available in the
 separate `nixos-control.config` for the second kernel; they no longer alter
-the first Android control kernel's module ABI. A kernel-only rebuild and the
-same 1,192-import census are required before another full image build.
+the first Android control kernel's module ABI.
+
+The cached kernel-only rebuild completed on `s-tau` in 11 minutes 44 seconds.
+Its exported artifacts are:
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `boot.img` | 67,108,864 | `5fb358715ffc84b1d7004675e6f0202e9bafe27b162dfebb9da887dccf463b36` |
+| `kernel` | 18,821,417 | `30aa5c3f6a3bc2e5b584718b898f7c1ab5a3d92c7c5fb0d7efe62af5b0407c94` |
+| `kernel.config` | 174,738 | `86d37d9425e6b6c246fbf42b6b40fff7dc270295c5fa8fc335b7afb95eada624` |
+| `Module.symvers` | 699,837 | `cad62c9040b6039f9bf13f71a3686f7185ce7ce47271bdb2b4d93f13dc96c0a8` |
+| `kernel.release` | 10 | `cf4e751fe121927727319b6db64a053f29360c3d324989ce8d9f21ef9f6d094a` |
+
+The dedicated `audit-kernel-module-abi` gate reproduces the earlier
+943/1,192 baseline and reports 1,065 matches for this exact-config rebuild.
+There are still 127 mismatches and no missing symbols. Wi-Fi accounts for 77,
+Bluetooth for 20 and the other affected modules for 30; `fpsgo` and
+`met` now match completely. Every remaining mismatch was already present in
+the earlier set, so the exact config removed 122 mismatches without
+introducing a new one.
+
+Kconfig still normalizes away stock symbols that do not exist or are no
+longer selectable in the published source, including several touch drivers,
+and the public build uses Clang 17 where `.3001` identifies Clang 11. The
+remaining mismatch is therefore a source/toolchain compatibility problem,
+not cache loss or a reason to bypass modversions. No complete image was
+rebuilt and this kernel was not flashed. The next bounded experiment is to
+build the pinned, published MediaTek connectivity modules alongside this
+kernel—or prove a closer source/toolchain match—and repeat the kernel-only
+gate first.
 
 ## Concrete remaining gates
 

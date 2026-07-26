@@ -725,9 +725,21 @@ kernel configuration. The flake extracts and hashes the effective config
 embedded in the exact pinned `.3001` boot image, then adds only
 `CONFIG_KEXEC=y`, the required `4.19.191+` release suffix, the public module
 trust key and an explicit compat-vDSO disable. NixOS-only devtmpfs,
-file-handle and cgroup options remain in `nixos-control.config`. Rebuild the
-kernel-only target first and require complete modversion compatibility before
-spending time on another full Android image or performing any flash.
+file-handle and cgroup options remain in `nixos-control.config`.
+
+That kernel-only rebuild reduced the mismatch from 249 to 127 of 1,192
+imports, with no missing symbols, but did not close the gate. The repository
+now exposes the reusable check directly:
+
+```sh
+nix run .#audit-kernel-module-abi -- \
+  ./result-karen-source-kernel-bootimage-cached \
+  /private/path/to/vendor.img
+```
+
+Require zero mismatches before spending time on another complete Android
+image or performing any flash. The current official-source result was not
+flashed.
 
 The verified full Android 14 OTA in this repository's manifest is the preferred
 source for matching proprietary blobs. Rooting the currently installed system

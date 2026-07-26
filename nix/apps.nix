@@ -13,6 +13,7 @@
     adb-key-generator = "nord2t-adb-key-generator";
     android-fhs = "nord2t-android-fhs";
     audit-boot = "nord2t-audit-boot";
+    audit-kernel-module-abi = "nord2t-audit-kernel-module-abi";
     audit-lineage-images = "nord2t-audit-lineage-images";
     audit-lineage-runtime = "nord2t-audit-lineage-runtime";
     extract-stock = "nord2t-extract-stock";

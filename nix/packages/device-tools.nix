@@ -423,6 +423,25 @@
     text = builtins.readFile (repositoryRoot + /scripts/audit-boot-image);
   };
 
+  auditKernelModuleAbi = pkgs.writeShellApplication {
+    name = "nord2t-audit-kernel-module-abi";
+    runtimeInputs = with pkgs; [
+      coreutils
+      erofs-utils
+      gawk
+      jq
+      kmod
+    ];
+    text =
+      builtins.replaceStrings
+      ["@PARTITION_MANIFEST@"]
+      ["${repositoryRoot + /firmware/partitions-3001.json}"]
+      (
+        builtins.readFile
+        (repositoryRoot + /scripts/audit-kernel-module-abi)
+      );
+  };
+
   auditLineageImages = pkgs.writeShellApplication {
     name = "nord2t-audit-lineage-images";
     runtimeInputs = with pkgs; [
@@ -557,6 +576,7 @@ in {
   public = {
     adb-key-generator = adbKeyGenerator;
     audit-boot = auditBoot;
+    audit-kernel-module-abi = auditKernelModuleAbi;
     audit-lineage-images = auditLineageImages;
     audit-lineage-runtime = auditLineageRuntime;
     default = auditLineageRuntime;

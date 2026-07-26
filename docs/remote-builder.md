@@ -233,6 +233,19 @@ KAREN_DEBUG_ADB_PUBLIC_KEY_FILE=/private/path/adbkey.pub \
   .#karen-source-kernel-keybound-bootimage-cached
 ```
 
+Audit that small result against an exact extracted `.3001` `vendor.img`
+before starting a full-image build:
+
+```sh
+nix run .#audit-kernel-module-abi -- \
+  ./result-karen-source-kernel-bootimage-cached \
+  /private/path/to/vendor.img
+```
+
+This enumerates every versioned import from the ten pinned modules, reports
+per-module matches and mismatches and fails closed on any missing or different
+CRC. The local vendor image remains outside the Nix store and repository.
+
 The corresponding full-image builds are:
 
 ```sh

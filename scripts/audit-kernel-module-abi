@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-audit-kernel-module-abi KERNEL_BUNDLE VENDOR_IMAGE
+
+Compare a source-built Karen kernel bundle against every versioned symbol
+imported by the exact pinned stock-derived vendor modules. The bundle must
+contain Module.symvers and kernel.release.
+EOF
+}
+
+fail() {
+  echo "Karen kernel module ABI audit failed: $*" >&2
+  exit 1
+}
+
+if [[ $# -ne 2 ]]; then
+  usage
+  exit 2
+fi
+
+kernel_bundle="$(realpath "$1")"
+vendor_image="$(realpath "$2")"
+module_symvers="$kernel_bundle/Module.symvers"
+kernel_release_file="$kernel_bundle/kernel.release"
+partition_manifest="${PARTITION_MANIFEST:-@PARTITION_MANIFEST@}"
+
+[[ -d "$kernel_bundle" ]] ||
+  fail "kernel bundle is not a readable directory: $kernel_bundle"
+[[ -s "$module_symvers" ]] ||
+  fail "kernel bundle does not contain Module.symvers"
+[[ -s "$kernel_release_file" ]] ||
+  fail "kernel bundle does not contain kernel.release"
+[[ -s "$vendor_image" ]] ||
+  fail "vendor image is not readable: $vendor_image"
+[[ -r "$partition_manifest" ]] ||
+  fail "partition manifest is not readable: $partition_manifest"
+
+expected_vendor_size="$(
+  jq -er '.partitions[] | select(.name == "vendor") | .size' \
+    "$partition_manifest"
+)"
+expected_vendor_hash="$(
+  jq -er '.partitions[] | select(.name == "vendor") | .sha256' \
+    "$partition_manifest"
+)"
+actual_vendor_size="$(stat -c %s "$vendor_image")"
+actual_vendor_hash="$(sha256sum "$vendor_image" | cut -d ' ' -f 1)"
+[[ "$actual_vendor_size" == "$expected_vendor_size" ]] ||
+  fail "vendor image is $actual_vendor_size bytes, expected $expected_vendor_size"
+[[ "$actual_vendor_hash" == "$expected_vendor_hash" ]] ||
+  fail "vendor image does not match the exact pinned stock-derived image"
+
+mapfile -t kernel_release_lines <"$kernel_release_file"
+[[ "${#kernel_release_lines[@]}" -eq 1 ]] ||
+  fail "kernel.release must contain exactly one line"
+kernel_release="${kernel_release_lines[0]}"
+[[ "$kernel_release" =~ ^[A-Za-z0-9._+-]+$ ]] ||
+  fail "kernel.release contains an invalid release string"
+
+cache_root="${XDG_CACHE_HOME:-$HOME/.cache}"
+audit_temp_root="${NORD2T_AUDIT_TMPDIR:-$cache_root/nord2t-recovery/audit-tmp}"
+mkdir -p "$audit_temp_root"
+chmod 0700 "$audit_temp_root"
+temporary_directory="$(
+  mktemp -d --tmpdir="$audit_temp_root" nord2t-kernel-abi.XXXXXXXX
+)"
+chmod 0700 "$temporary_directory"
+cleanup() {
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+export TMPDIR="$temporary_directory"
+
+vendor_modules=(
+  bt_drv_6893.ko
+  connfem.ko
+  conninfra.ko
+  fmradio_drv_connac2x.ko
+  fpsgo.ko
+  gps_drv.ko
+  met.ko
+  trace_mmstat.ko
+  wlan_drv_gen4m.ko
+  wmt_chrdev_wifi.ko
+)
+
+module_directory="$temporary_directory/vendor-modules"
+mkdir "$module_directory"
+for module in "${vendor_modules[@]}"; do
+  dump.erofs \
+    --cat \
+    --path="/lib/modules/$module" \
+    "$vendor_image" \
+    >"$module_directory/$module" 2>/dev/null ||
+    fail "exact vendor is missing lib/modules/$module"
+  [[ -s "$module_directory/$module" ]] ||
+    fail "exact vendor module is empty: $module"
+done
+dump.erofs \
+  --cat \
+  --path=/lib/modules/modules.load \
+  "$vendor_image" \
+  >"$module_directory/modules.load" 2>/dev/null ||
+  fail "exact vendor is missing lib/modules/modules.load"
+
+expected_load="$temporary_directory/expected-modules.load"
+actual_load="$temporary_directory/actual-modules.load"
+printf '%s\n' "${vendor_modules[@]}" | sort -u >"$expected_load"
+awk '
+  {
+    sub(/\r$/, "")
+    sub(/^.*\//, "")
+    if ($0 != "") print
+  }
+' "$module_directory/modules.load" | sort -u >"$actual_load"
+cmp -s "$expected_load" "$actual_load" ||
+  fail "exact vendor modules.load differs from the pinned module set"
+
+providers="$temporary_directory/providers.tsv"
+imports="$temporary_directory/imports.tsv"
+module_order="$temporary_directory/module-order.txt"
+: >"$providers"
+: >"$imports"
+printf '%s\n' "${vendor_modules[@]}" >"$module_order"
+
+while read -r crc symbol _; do
+  [[ -n "$crc" ]] || continue
+  printf '%s\t%s\t%s\n' "${crc,,}" "$symbol" Module.symvers >>"$providers"
+done <"$module_symvers"
+[[ -s "$providers" ]] ||
+  fail "Module.symvers contains no exported symbols"
+
+for module in "${vendor_modules[@]}"; do
+  module_path="$module_directory/$module"
+  module_vermagic="$(modinfo -F vermagic "$module_path")" ||
+    fail "could not read vermagic from $module"
+  [[ "${module_vermagic%% *}" == "$kernel_release" ]] ||
+    fail "$module has release ${module_vermagic%% *}, expected $kernel_release"
+
+  exports="$temporary_directory/$module.exports"
+  if ! modprobe --show-exports "$module_path" >"$exports" 2>/dev/null; then
+    # kmod reports ENODATA when a valid module exports no symbols.
+    : >"$exports"
+  fi
+  while read -r crc symbol _; do
+    [[ -n "$crc" ]] || continue
+    printf '%s\t%s\t%s\n' "${crc,,}" "$symbol" "$module" >>"$providers"
+  done <"$exports"
+
+  module_imports="$temporary_directory/$module.imports"
+  if ! modprobe --show-modversions "$module_path" >"$module_imports" 2>/dev/null; then
+    # kmod reports ENODATA when a valid module has no versioned imports.
+    : >"$module_imports"
+  fi
+  while read -r crc symbol _; do
+    [[ -n "$crc" ]] || continue
+    printf '%s\t%s\t%s\n' "$module" "${crc,,}" "$symbol" >>"$imports"
+  done <"$module_imports"
+done
+[[ -s "$imports" ]] ||
+  fail "the pinned vendor modules expose no versioned imports"
+
+set +e
+gawk -F '\t' -v release="$kernel_release" '
+  ARGIND == 1 {
+    crc = tolower($1)
+    symbol = $2
+    source = $3
+    if (symbol in provider_crc && provider_crc[symbol] != crc) {
+      printf("provider_conflict symbol=%s first_crc=%s first_source=%s second_crc=%s second_source=%s\n", symbol, provider_crc[symbol], provider_source[symbol], crc, source)
+      provider_conflicts++
+      next
+    }
+    provider_crc[symbol] = crc
+    provider_source[symbol] = source
+    next
+  }
+  ARGIND == 2 {
+    module_order[++module_count] = $1
+    next
+  }
+  ARGIND == 3 {
+    module = $1
+    wanted_crc = tolower($2)
+    symbol = $3
+    imports[module]++
+    total_imports++
+
+    if (!(symbol in provider_crc)) {
+      printf("missing module=%s symbol=%s wanted_crc=%s\n", module, symbol, wanted_crc)
+      missing[module]++
+      total_missing++
+    } else if (provider_crc[symbol] != wanted_crc) {
+      printf("mismatch module=%s symbol=%s wanted_crc=%s provided_crc=%s provider=%s\n", module, symbol, wanted_crc, provider_crc[symbol], provider_source[symbol])
+      mismatches[module]++
+      total_mismatches++
+    } else {
+      matches[module]++
+      total_matches++
+    }
+  }
+  END {
+    for (module_index = 1; module_index <= module_count; module_index++) {
+      module = module_order[module_index]
+      printf("module=%s imports=%d matches=%d mismatches=%d missing=%d\n", module, imports[module], matches[module], mismatches[module], missing[module])
+    }
+    printf("kernel_release=%s\n", release)
+    printf("vendor_module_count=%d\n", module_count)
+    printf("module_imports=%d\n", total_imports)
+    printf("module_matches=%d\n", total_matches)
+    printf("module_mismatches=%d\n", total_mismatches)
+    printf("module_missing=%d\n", total_missing)
+    printf("provider_conflicts=%d\n", provider_conflicts)
+
+    if (provider_conflicts != 0 || total_mismatches != 0 || total_missing != 0) {
+      exit 1
+    }
+  }
+' "$providers" "$module_order" "$imports"
+audit_status=$?
+set -e
+
+if ((audit_status != 0)); then
+  fail "the source-built kernel is incompatible with the pinned vendor modules"
+fi
+
+echo "Karen kernel module ABI audit passed."
