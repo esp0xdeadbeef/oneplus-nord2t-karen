@@ -131,11 +131,22 @@ and the stock `.3001` boot image derived from the OTA are both locked by
 root workflow uses them.
 
 The optional full rooted stack adds four more locked upstream inputs:
-Vector 2.0, Shamiko 1.2.5, Hide My Applist 3.8 and AdAway 6.1.4. Vector is
-built from its exact Git revision and a generated Nix Gradle dependency lock;
-the other three inputs are pinned release artifacts. The helper checks their
-exact byte sizes and SHA-256 values in addition to Nix's lock hashes; it never
-resolves a “latest” URL at runtime.
+Vector 2.0, Shamiko 1.2.5, Hide My Applist 3.8 and AdAway 6.1.4. Vector and
+AdAway are built from exact Git revisions with generated Nix Gradle dependency
+locks. AdAway stays unsigned in the Nix store and is signed on the trusted
+phone host with the split SOPS owner identity immediately before installation.
+Its upstream-required Gradle 8.9 distribution is also fixed by version and Nix
+content hash; the current nixpkgs `gradle_8` is newer and is not substituted.
+Shamiko and Hide My Applist remain exact official release inputs for the
+licensing/source-availability reasons documented below. No helper resolves a
+“latest” URL at runtime.
+
+`npins` would also be able to lock these repositories, but this flake does not
+maintain a second lock format: every non-flake Git input carries an explicit
+`rev`, while `flake.lock` records that revision and its NAR hash. Maven
+artifacts which Git cannot cover are fixed separately in `gradle/*-deps.json`.
+Upgrading a component therefore changes its source revision, dependency lock
+and audited output together.
 
 The optional Google-app profile pins the official Android 14 arm64
 MindTheGapps release separately. It is not part of the vanilla image and is
@@ -165,7 +176,7 @@ workflow, only its public half may be copied to the build host as
 their own isolated `secrets/HOST-USER-adb-host-key.age` by running the same
 command on their phone/build host.
 
-## Owner Vector signing
+## Owner Android signing
 
 The opinionated root-full profile needs a stable Vector manager identity so an
 update cannot silently change the certificate trusted by Vector's daemon.
@@ -203,6 +214,14 @@ same certificate, signs both embedded APKs, checks their signer digest,
 refreshes the module checksums and creates a new ZIP. Generic users may keep
 using `vector-module`; neither SOPS identity nor a remote builder is required
 for the non-owner build.
+
+The same owner identity signs the source-built AdAway APK. Both root-full
+helpers invoke `owner-sign-apk` automatically after all device checks and
+explicit confirmation. The unsigned APK is compiled by Nix; only the final
+signing step decrypts the private document, outside the Nix store. Android
+cannot update an already installed official AdAway with this different owner
+certificate. In that case the helper stops without deleting app data; removal
+of the old package must be an explicit owner action before rerunning it.
 
 Both full-root routes use that reproducible generic module by default. The
 owner-signed output can be selected without putting it in Git:

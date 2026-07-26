@@ -1,0 +1,50 @@
+From 224871e079797868612b540778d559868abec1c8 Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 04:42:00 +0200
+Subject: [PATCH] oplus: fix remaining control-kernel type declarations
+
+Keep Clang's fatal implicit-integer and pointer-width diagnostics enabled, and
+make the legacy charger and sensor declarations explicit instead.
+
+Assisted-by: Codex:gpt-5
+---
+ vendor/oplus/kernel/charger/charger_ic/oplus_battery_mtk6893R.c | 2 +-
+ vendor/oplus/kernel/charger/gauge_ic/oplus_optiga/oplus_optiga.c | 2 +-
+ vendor/oplus/kernel/charger/oplus_charger.c                       | 2 +-
+ vendor/oplus/sensor/kernel/oplus_sensor_devinfo/sensor_devinfo.c | 6 +++---
+ 4 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/vendor/oplus/kernel/charger/charger_ic/oplus_battery_mtk6893R.c b/vendor/oplus/kernel/charger/charger_ic/oplus_battery_mtk6893R.c
+index 65e384e..bdd4baa 100644
+--- a/vendor/oplus/kernel/charger/charger_ic/oplus_battery_mtk6893R.c
++++ b/vendor/oplus/kernel/charger/charger_ic/oplus_battery_mtk6893R.c
+@@ -6558 +6558 @@ void oplus_chg_choose_gauge_curve(int index_curve)
+-	static last_curve_index = -1;
++	static int last_curve_index = -1;
+diff --git a/vendor/oplus/kernel/charger/gauge_ic/oplus_optiga/oplus_optiga.c b/vendor/oplus/kernel/charger/gauge_ic/oplus_optiga/oplus_optiga.c
+index 0c8bbbe..38fbc62 100644
+--- a/vendor/oplus/kernel/charger/gauge_ic/oplus_optiga/oplus_optiga.c
++++ b/vendor/oplus/kernel/charger/gauge_ic/oplus_optiga/oplus_optiga.c
+@@ -145 +145 @@ EXPORT_SYMBOL_GPL(oem_gpio_control);
+-static try_count = 0;
++static int try_count = 0;
+diff --git a/vendor/oplus/kernel/charger/oplus_charger.c b/vendor/oplus/kernel/charger/oplus_charger.c
+index f0d6a0b..403bf20 100644
+--- a/vendor/oplus/kernel/charger/oplus_charger.c
++++ b/vendor/oplus/kernel/charger/oplus_charger.c
+@@ -11090 +11090 @@ static void oplus_chg_check_status_full(struct oplus_chg_chip *chip)
+-	static last_recharging_vol = 0;
++	static int last_recharging_vol = 0;
+diff --git a/vendor/oplus/sensor/kernel/oplus_sensor_devinfo/sensor_devinfo.c b/vendor/oplus/sensor/kernel/oplus_sensor_devinfo/sensor_devinfo.c
+index c9ca63f..79910c9 100644
+--- a/vendor/oplus/sensor/kernel/oplus_sensor_devinfo/sensor_devinfo.c
++++ b/vendor/oplus/sensor/kernel/oplus_sensor_devinfo/sensor_devinfo.c
+@@ -50 +50 @@ int unregister_lcdinfo_notifier(struct notifier_block *nb);
+-__attribute__((weak)) int register_lcdinfo_notifier() {
++__attribute__((weak)) int register_lcdinfo_notifier(struct notifier_block *nb) {
+@@ -54 +54 @@ __attribute__((weak)) int register_lcdinfo_notifier() {
+-__attribute__((weak)) int unregister_lcdinfo_notifier() {
++__attribute__((weak)) int unregister_lcdinfo_notifier(struct notifier_block *nb) {
+@@ -70 +70 @@ enum {
+-#define Ptr2UINT32(p)   (uint32_t)(p)
++#define Ptr2UINT32(p)   ((uint32_t)(uintptr_t)(p))

@@ -16,19 +16,35 @@ and stock boot SHA-256
 `7ad447405db4e74276395123c8029c67c63adc3fc6d82c4c180ae6c2e31882c0`.
 They also check the expected byte sizes. The APK is never fetched at runtime.
 
-The optional full stack pins one source build and three independent release
+The optional full stack pins two source builds and two independent release
 artifacts:
 
-| Component | Version | Upstream artifact | SHA-256 |
+| Component | Version | Upstream artifact | Integrity pin |
 | --- | --- | --- | --- |
 | Vector | 2.0 (3021) | exact `JingMatrix/Vector` Git revision plus Nix Gradle dependency lock | `b66605a0cf2cdbac9ca9accc9e47edc203791d3374d59fed2fa11f5a654f8333` |
 | Shamiko | 1.2.5 (414) | [`LSPosed/LSPosed.github.io`](https://github.com/LSPosed/LSPosed.github.io/releases/tag/shamiko-414) release ZIP | `308d31b2f52a80e49eb58f46bc4c764a6588a79e4b8d101b44860832023f88b4` |
 | Hide My Applist | 3.8 (499) | [LSPosed module repository](https://github.com/Xposed-Modules-Repo/com.tsng.hidemyapplist/releases/tag/499-3.8.r499.3a346c0) APK | `0adaa6bcdf7ee1e9e1c310f33b86f2f4d03f8839a10be8384e34d6cb5bd99c39` |
-| AdAway | 6.1.4 | [`AdAway/AdAway`](https://github.com/AdAway/AdAway/releases/tag/v6.1.4) APK | `09f8e1528a53e5ffad59e57a174e90d4e10c5092bf4f6a60ab6594f046614417` |
+| AdAway | 6.1.4 | exact `AdAway/AdAway` Git revision plus Nix Gradle dependency lock; locally owner-signed after compilation | owner certificate checked at signing and Android install time |
 
-`flake.lock` fixes every source or release NAR. `gradle/vector-deps.json`
-fixes Vector's Maven inputs. `stock-root-full` additionally checks each raw
-file's byte size and SHA-256 before it accesses the phone.
+`flake.lock` fixes every source or release NAR. `gradle/vector-deps.json` and
+`gradle/adaway-deps.json` fix the Maven inputs. `stock-root-full` checks the
+static release/module inputs before it accesses the phone and verifies the
+split SOPS certificate before signing the source-built AdAway APK.
+Only the dependency-refresh helper disables its optional bubblewrap layer:
+Android Gradle Plugin generates and immediately executes an NDK
+`prefab_command` through the conventional NixOS interpreter path which that
+extra root omits. The refresh still runs in a pure Nix shell, and the actual
+offline AdAway derivation remains in the normal Nix build sandbox.
+
+The two remaining binary inputs are deliberate boundaries, not missing pins.
+[Hide My Applist's upstream copyright
+notice](https://github.com/Dr-TSNG/Hide-My-Applist#copyright-notice) says that
+versions from 3.4 onward may not be modified or redistributed, so this
+repository neither patches nor republishes 3.8. The pinned Shamiko release
+repository publishes the module as an asset without a corresponding public
+source tree. Generic images intended for redistribution must omit both; the
+personal root-full installer downloads their exact official artifacts for
+local installation only.
 
 Realizing `stock-root` or `stock-unroot` for the first time can require the
 roughly 5.6 GB OTA because Nix derives the stock boot image from that source.
@@ -139,16 +155,20 @@ pinned persistent `stock-root` path first.
 
 The helper then:
 
-1. verifies all four extra inputs by byte size and raw SHA-256;
-2. installs the AdAway and Hide My Applist APKs for user 0;
-3. enables Zygisk in Magisk 30.7;
-4. disables Magisk's built-in denylist enforcement, as explicitly required by
+1. realizes the Vector and unsigned AdAway source builds from their Git and
+   Gradle locks, and verifies the two official binary inputs by byte size and
+   raw SHA-256;
+2. signs AdAway with the split SOPS owner identity on the trusted host;
+3. installs the owner-signed AdAway and official Hide My Applist APKs for
+   user 0;
+4. enables Zygisk in Magisk 30.7;
+5. disables Magisk's built-in denylist enforcement, as explicitly required by
    Shamiko;
-5. adds only denylist targets supplied on the command line;
-6. installs the Vector and Shamiko Magisk modules;
-7. creates Magisk's built-in-style Systemless Hosts module without overwriting
+6. adds only denylist targets supplied on the command line;
+7. installs the Vector and Shamiko Magisk modules;
+8. creates Magisk's built-in-style Systemless Hosts module without overwriting
    an existing hosts module;
-8. reboots and verifies root, Zygisk, both Android packages and all three
+9. reboots and verifies root, Zygisk, both Android packages and all three
    Magisk modules.
 
 Shamiko reads Magisk's denylist, but its own upstream instructions require

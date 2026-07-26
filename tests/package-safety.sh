@@ -13,6 +13,8 @@ lineage_root="$script_directory/scripts/lineage-root"
 lineage_root_full="$script_directory/scripts/lineage-root-full"
 lineage_system_fingerprint="$script_directory/scripts/read-lineage-system-fingerprint"
 lineage_unroot="$script_directory/scripts/lineage-unroot"
+owner_apk_signer="$script_directory/scripts/owner-sign-apk"
+adaway_dependency_lock="$script_directory/gradle/adaway-deps.json"
 robotnix_device="$script_directory/lineage/robotnix-karen.nix"
 runtime_audit="$script_directory/scripts/audit-lineage-runtime"
 sops_config="$script_directory/.sops.yaml"
@@ -136,6 +138,9 @@ grep -Fq 'vector-module-owner-intermediate' "$vector_owner_build"
 grep -Fq 'repository-root mirror' "$vector_owner_build"
 grep -Fq 'nord2t-read-lineage-system-fingerprint' "$lineage_root"
 grep -Fq 'nord2t-read-lineage-system-fingerprint' "$lineage_root_full"
+grep -Fq 'nord2t-owner-sign-apk' "$lineage_root_full"
+grep -Fq 'nord2t-owner-sign-apk' \
+  "$script_directory/scripts/stock-root-full"
 grep -Fq "debugfs" "$lineage_system_fingerprint"
 grep -Fq "dump.erofs" "$lineage_system_fingerprint"
 grep -Fq -- '--vector-module-sha256' "$lineage_root_full"
@@ -161,6 +166,25 @@ grep -Fq -- '--key-pass "file:$key_password_file"' "$vector_owner_sign"
 grep -Fq '@APKSIGNER@ verify --print-certs' "$vector_owner_sign"
 # shellcheck disable=SC2016
 grep -Fq 'sha256sum "$apk"' "$vector_owner_sign"
+# shellcheck disable=SC2016
+grep -Fq -- '--ks-pass "file:$store_password_file"' "$owner_apk_signer"
+# shellcheck disable=SC2016
+grep -Fq -- '--key-pass "file:$key_password_file"' "$owner_apk_signer"
+grep -Fq 'input APK is already signed' "$owner_apk_signer"
+grep -Fq '@APKSIGNER@ verify --print-certs' "$owner_apk_signer"
+grep -Fq \
+  'git+https://github.com/AdAway/AdAway.git?rev=89dc7277f5bd539ba108c20a857aae6e93199856' \
+  "$script_directory/flake.nix"
+grep -Fq 'data = ./gradle/adaway-deps.json;' \
+  "$script_directory/flake.nix"
+grep -Fq 'version = "8.9";' "$script_directory/flake.nix"
+grep -Fq 'useBwrap = false;' "$script_directory/flake.nix"
+jq -e 'type == "object" and length > 0' \
+  "$adaway_dependency_lock" >/dev/null
+if grep -Fq 'AdAway-6.1.4-20241027.apk' "$script_directory/flake.nix"; then
+  echo "AdAway must be built from its pinned upstream source." >&2
+  exit 1
+fi
 grep -Fq \
   'https://github.com/LineageOS/android_external_chromium-webview_prebuilt_arm64.git' \
   "$script_directory/flake.nix"
@@ -197,6 +221,20 @@ if grep -Fq -- '-Wno-error=implicit-int' \
   exit 1
 fi
 grep -Fq 'static int oplus_misc_healthinfo_parse_dt(' \
+  "$script_directory/flake.nix"
+grep -Fq 'extern int sysctl_sched_impt_tgid;' \
+  "$script_directory/nixos/patches/kernel/0006-clang-fix-control-kernel-types.patch"
+grep -Fq 'DPMA_DRB_DATA_INFO("%p(%04d):"' \
+  "$script_directory/nixos/patches/kernel/0006-clang-fix-control-kernel-types.patch"
+grep -Fq '../../../../drivers/misc/mediatek/typec/tcpc/inc/tcpm.h' \
+  "$script_directory/nixos/patches/kernel/0007-oplus-fix-lineage-kernel-include-paths.patch"
+grep -Fq 'static int last_recharging_vol = 0;' \
+  "$script_directory/nixos/patches/kernel/0008-oplus-fix-control-kernel-types.patch"
+grep -Fq '#define Ptr2UINT32(p)   ((uint32_t)(uintptr_t)(p))' \
+  "$script_directory/nixos/patches/kernel/0008-oplus-fix-control-kernel-types.patch"
+grep -Fq "'static int stm8s_parse_fw_from_array('" \
+  "$script_directory/flake.nix"
+grep -Fq "'extern void Eeprom_DistortionParamsRead('" \
   "$script_directory/flake.nix"
 grep -Fq \
   'source.dirs."kernel/oneplus/vendor/mediatek/kernel_modules".src' \

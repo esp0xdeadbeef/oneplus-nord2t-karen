@@ -1,0 +1,59 @@
+From 6c2e41993c12ff8a504ea67d75f36551269837d0 Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 04:25:00 +0200
+Subject: [PATCH] kernel: fix remaining control-build type errors
+
+Retain fatal implicit-integer and pointer-width diagnostics while correcting
+the declarations and debug formatting they exposed. The EEPROM helper is
+fixed separately across all selected sensor variants because the vendor tree
+duplicates that declaration.
+
+Assisted-by: Codex:gpt-5
+---
+ drivers/gpu/drm/mediatek/mtk_disp_recovery.c              | 2 +-
+ drivers/misc/mediatek/eccci/hif/ccci_hif_dpmaif.c         | 4 ++--
+ drivers/misc/mediatek/freqhopping/fhctl_new/clk-fhctl-mcupm.c | 2 +-
+ drivers/misc/mediatek/task_turbo/task_turbo.h              | 2 +-
+ kernel/sysctl.c                                            | 2 +-
+ 5 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/mediatek/mtk_disp_recovery.c b/drivers/gpu/drm/mediatek/mtk_disp_recovery.c
+index d0b36ec..4e984fa 100644
+--- a/drivers/gpu/drm/mediatek/mtk_disp_recovery.c
++++ b/drivers/gpu/drm/mediatek/mtk_disp_recovery.c
+@@ -52 +52 @@
+-static count_irq_sta = 1;
++static int count_irq_sta = 1;
+diff --git a/drivers/misc/mediatek/eccci/hif/ccci_hif_dpmaif.c b/drivers/misc/mediatek/eccci/hif/ccci_hif_dpmaif.c
+index 5100f58..660f6c0 100644
+--- a/drivers/misc/mediatek/eccci/hif/ccci_hif_dpmaif.c
++++ b/drivers/misc/mediatek/eccci/hif/ccci_hif_dpmaif.c
+@@ -452,2 +452,2 @@
+-		DPMA_DRB_DATA_INFO("%08X(%04d): %016llX %016llX %016llX %016llX %016llX %016llX %016llX %016llX\n",
+-			(u32)data_64ptr, (i * 8),
++		DPMA_DRB_DATA_INFO("%p(%04d): %016llX %016llX %016llX %016llX %016llX %016llX %016llX %016llX\n",
++			data_64ptr, (i * 8),
+@@ -466 +466 @@
+-		DPMA_DRB_DATA_INFO("%08X(%04d):", (u32)data_8ptr, count * 8);
++		DPMA_DRB_DATA_INFO("%p(%04d):", data_8ptr, count * 8);
+diff --git a/drivers/misc/mediatek/freqhopping/fhctl_new/clk-fhctl-mcupm.c b/drivers/misc/mediatek/freqhopping/fhctl_new/clk-fhctl-mcupm.c
+index b3baf59..667215f 100644
+--- a/drivers/misc/mediatek/freqhopping/fhctl_new/clk-fhctl-mcupm.c
++++ b/drivers/misc/mediatek/freqhopping/fhctl_new/clk-fhctl-mcupm.c
+@@ -308 +308 @@
+-			+ (unsigned int)match_data->reg_tr;
++			+ (unsigned long)match_data->reg_tr;
+diff --git a/drivers/misc/mediatek/task_turbo/task_turbo.h b/drivers/misc/mediatek/task_turbo/task_turbo.h
+index 04d66f8..56c55d2 100644
+--- a/drivers/misc/mediatek/task_turbo/task_turbo.h
++++ b/drivers/misc/mediatek/task_turbo/task_turbo.h
+@@ -16 +16 @@
+-extern sched_set_cpuprefer(pid_t pid, unsigned int prefer_type);
++extern int sched_set_cpuprefer(pid_t pid, unsigned int prefer_type);
+diff --git a/kernel/sysctl.c b/kernel/sysctl.c
+index ef7873e..ef178e0 100644
+--- a/kernel/sysctl.c
++++ b/kernel/sysctl.c
+@@ -150 +150 @@
+-extern sysctl_sched_impt_tgid;
++extern int sysctl_sched_impt_tgid;

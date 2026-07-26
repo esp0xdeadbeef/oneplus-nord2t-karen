@@ -1,15 +1,20 @@
 {
   "nodes": {
-    "adaway-apk": {
+    "adaway-source": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-zwszYznjVRwNcIq5MhglmiEuey2TRBgQWTQgukSNjk4=",
-        "type": "file",
-        "url": "https://github.com/AdAway/AdAway/releases/download/v6.1.4/AdAway-6.1.4-20241027.apk"
+        "lastModified": 1730038074,
+        "narHash": "sha256-uD7dA+DlsaPRUbNKmf2OeUPAxcnVVEwWbs3XpgV3bKc=",
+        "ref": "refs/heads/master",
+        "rev": "89dc7277f5bd539ba108c20a857aae6e93199856",
+        "revCount": 4606,
+        "type": "git",
+        "url": "https://github.com/AdAway/AdAway.git"
       },
       "original": {
-        "type": "file",
-        "url": "https://github.com/AdAway/AdAway/releases/download/v6.1.4/AdAway-6.1.4-20241027.apk"
+        "rev": "89dc7277f5bd539ba108c20a857aae6e93199856",
+        "type": "git",
+        "url": "https://github.com/AdAway/AdAway.git"
       }
     },
     "androidPkgs": {
@@ -232,7 +237,7 @@
     },
     "root": {
       "inputs": {
-        "adaway-apk": "adaway-apk",
+        "adaway-source": "adaway-source",
         "hma-apk": "hma-apk",
         "magisk-apk": "magisk-apk",
         "mindthegapps-14-arm64": "mindthegapps-14-arm64",

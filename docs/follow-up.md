@@ -61,6 +61,12 @@ along with the host boundary, rsync flow and artifact-return checks.
   public-certificate intermediate plus trusted-host final signer produced
   byte-identical owner-signed outputs in two independent signing runs. No
   private signing material entered the remote host or Nix store.
+- AdAway 6.1.4 now builds from its exact Git revision and independent Gradle
+  dependency lock instead of consuming the release APK. The offline Nix build
+  produced the expected unsigned `org.adaway` 6.1.4 APK. Two independent
+  trusted-host SOPS signing runs verified against the public certificate and
+  produced byte-identical APKs; the private JKS and passwords entered neither
+  the remote host nor the Nix store.
 - A bounded read-only copy of the first 4 MiB of `super` found the expected 15
   active slot-A partitions plus nine COW snapshot partitions. A complete
   stock boot did not remove them. Bootloader-fastboot returned no usable

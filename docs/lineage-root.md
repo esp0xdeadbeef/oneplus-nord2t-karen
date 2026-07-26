@@ -93,9 +93,15 @@ It first establishes the same minimal pinned Magisk root when needed, then:
 - leaves Magisk denylist enforcement off as required by Shamiko;
 - adds no package to the denylist unless `--denylist` is repeated explicitly.
 
-The default Vector module is built reproducibly from the pinned source and
-Gradle dependency lock. An owner-signed module produced by the split SOPS
-workflow can be selected only with an explicit matching hash:
+The default Vector module and unsigned AdAway APK are built from pinned source
+and independent Gradle dependency locks. Immediately before installation, the
+full helper signs AdAway with the split SOPS owner identity on the trusted
+phone host; the private JKS and passwords never enter Nix. It stops rather
+than deleting app data when an already installed AdAway has a different
+certificate.
+
+An owner-signed Vector module produced by the split SOPS workflow can be
+selected only with an explicit matching hash:
 
 ```bash
 vector_zip=/private/path/Vector-owner-signed.zip
@@ -108,6 +114,11 @@ nix run .#lineage-root-full -- /path/to/lineage-images \
 
 The same two flags are available on `stock-root-full`. They are deliberately
 absent from minimal-root and unroot helpers.
+
+The AdAway source build and owner-signing boundary were exercised on
+2026-07-26. The offline derivation produced the expected unsigned
+`org.adaway` 6.1.4 APK; two independent trusted-host signing runs both
+verified against the SOPS public certificate and were byte-identical.
 
 Shell root must be approved in the Magisk app before the full helper can
 install modules. Use minimal root while debugging Lineage itself; use the full

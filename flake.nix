@@ -19,8 +19,8 @@
     url = "git+https://github.com/JingMatrix/Vector.git?rev=76141fed151f49b818144d54f2ebb6ab9a2df11c&submodules=1";
     flake = false;
   };
-  inputs.adaway-apk = {
-    url = "file+https://github.com/AdAway/AdAway/releases/download/v6.1.4/AdAway-6.1.4-20241027.apk";
+  inputs.adaway-source = {
+    url = "git+https://github.com/AdAway/AdAway.git?rev=89dc7277f5bd539ba108c20a857aae6e93199856";
     flake = false;
   };
   inputs.hma-apk = {
@@ -45,7 +45,7 @@
   };
 
   outputs = {
-    adaway-apk,
+    adaway-source,
     hma-apk,
     self,
     magisk-apk,
@@ -141,15 +141,43 @@
           includeSystemImages = false;
         };
 
-        vectorSigningAndroid =
-          vectorAndroidPkgs.androidenv.composeAndroidPackages {
-            platformVersions = [];
-            buildToolsVersions = ["36.0.0"];
-            includeNDK = false;
-            includeCmake = false;
-            includeSources = false;
-            includeSystemImages = false;
+        vectorSigningAndroid = vectorAndroidPkgs.androidenv.composeAndroidPackages {
+          platformVersions = [];
+          buildToolsVersions = ["36.0.0"];
+          includeNDK = false;
+          includeCmake = false;
+          includeSources = false;
+          includeSystemImages = false;
+        };
+
+        adawayGradleUnwrapped = pkgs.gradle-packages.mkGradle {
+          version = "8.9";
+          hash = "sha256-1yXXB7+r1N/clYxiQAOzyArMwD9wN7USLEsdDvFc7Ks=";
+          defaultJava = pkgs.jdk17;
+        };
+
+        adawayGradle = adawayGradleUnwrapped.wrapped;
+
+        adawayAndroidPkgs = import nixpkgs {
+          inherit system;
+          config = {
+            allowUnfree = true;
+            android_sdk.accept_license = true;
           };
+        };
+
+        adawayAndroid = adawayAndroidPkgs.androidenv.composeAndroidPackages {
+          platformVersions = [
+            "33"
+            "34"
+          ];
+          buildToolsVersions = ["34.0.0"];
+          includeNDK = true;
+          ndkVersions = ["25.2.9519653"];
+          includeCmake = false;
+          includeSources = false;
+          includeSystemImages = false;
+        };
 
         vectorOwnerCertificateEnvironment =
           builtins.getEnv "KAREN_VECTOR_SIGNING_CERTIFICATE_FILE";
@@ -167,63 +195,64 @@
           signingCertificate ? null,
         }:
           pkgs.stdenv.mkDerivation (finalAttrs: {
-          inherit pname;
-          version = "2.0-3021";
+            inherit pname;
+            version = "2.0-3021";
 
-          src = vector-source;
-          patches = [
-            ./patches/vector/0001-sepolicy-allow-system-service-native-modules.patch
-            ./patches/vector/0002-build-use-pinned-release-metadata.patch
-            ./patches/vector/0003-build-accept-public-signing-certificate.patch
-            ./patches/vector/0004-build-raise-gradle-daemon-memory.patch
-          ];
+            src = vector-source;
+            patches = [
+              ./patches/vector/0001-sepolicy-allow-system-service-native-modules.patch
+              ./patches/vector/0002-build-use-pinned-release-metadata.patch
+              ./patches/vector/0003-build-accept-public-signing-certificate.patch
+              ./patches/vector/0004-build-raise-gradle-daemon-memory.patch
+            ];
 
-          nativeBuildInputs = [
-            vectorGradle
-            pkgs.cmake
-            pkgs.gitMinimal
-            pkgs.jdk21
-            pkgs.ninja
-            pkgs.unzip
-            vectorAndroid.androidsdk
-          ];
+            nativeBuildInputs = [
+              vectorGradle
+              pkgs.cmake
+              pkgs.gitMinimal
+              pkgs.jdk21
+              pkgs.ninja
+              pkgs.unzip
+              vectorAndroid.androidsdk
+            ];
 
-          mitmCache = vectorGradle.fetchDeps {
-            pkg = finalAttrs.finalPackage;
-            data = ./gradle/vector-deps.json;
-          };
+            mitmCache = vectorGradle.fetchDeps {
+              pkg = finalAttrs.finalPackage;
+              data = ./gradle/vector-deps.json;
+            };
 
-          ANDROID_HOME = "${vectorAndroid.androidsdk}/libexec/android-sdk";
-          ANDROID_SDK_ROOT = "${vectorAndroid.androidsdk}/libexec/android-sdk";
-          JAVA_HOME = pkgs.jdk21.home;
-          gradleBuildTask = ":zygisk:zipRelease";
-          gradleUpdateTask = ":zygisk:zipRelease";
-          gradleFlags = [
-            "--no-daemon"
-            "-Dorg.gradle.java.home=${pkgs.jdk21.home}"
-            "-Pandroid.aapt2FromMavenOverride=${vectorAndroid.androidsdk}/libexec/android-sdk/build-tools/36.0.0/aapt2"
-          ]
-          ++ pkgs.lib.optional (signingCertificate != null)
-          "-PandroidSigningCertificateFile=${signingCertificate}";
-          dontUseCmakeConfigure = true;
-          doCheck = false;
+            ANDROID_HOME = "${vectorAndroid.androidsdk}/libexec/android-sdk";
+            ANDROID_SDK_ROOT = "${vectorAndroid.androidsdk}/libexec/android-sdk";
+            JAVA_HOME = pkgs.jdk21.home;
+            gradleBuildTask = ":zygisk:zipRelease";
+            gradleUpdateTask = ":zygisk:zipRelease";
+            gradleFlags =
+              [
+                "--no-daemon"
+                "-Dorg.gradle.java.home=${pkgs.jdk21.home}"
+                "-Pandroid.aapt2FromMavenOverride=${vectorAndroid.androidsdk}/libexec/android-sdk/build-tools/36.0.0/aapt2"
+              ]
+              ++ pkgs.lib.optional (signingCertificate != null)
+              "-PandroidSigningCertificateFile=${signingCertificate}";
+            dontUseCmakeConfigure = true;
+            doCheck = false;
 
-          installPhase = ''
-            runHook preInstall
-            mapfile -t modules < <(
-              find zygisk/release \
-                -maxdepth 1 \
-                -type f \
-                -name 'Vector-v2.0-3021-Release.zip' \
-                -print
-            )
-            test "''${#modules[@]}" = 1
-            unzip -p "''${modules[0]}" sepolicy.rule |
-              grep -Fxq 'allow system_server apk_data_file file execute'
-            cp "''${modules[0]}" "$out"
-            runHook postInstall
-          '';
-        });
+            installPhase = ''
+              runHook preInstall
+              mapfile -t modules < <(
+                find zygisk/release \
+                  -maxdepth 1 \
+                  -type f \
+                  -name 'Vector-v2.0-3021-Release.zip' \
+                  -print
+              )
+              test "''${#modules[@]}" = 1
+              unzip -p "''${modules[0]}" sepolicy.rule |
+                grep -Fxq 'allow system_server apk_data_file file execute'
+              cp "''${modules[0]}" "$out"
+              runHook postInstall
+            '';
+          });
 
         vectorModule = mkVectorModule {
           pname = "vector-karen-generic";
@@ -238,9 +267,74 @@
               signingCertificate = vectorOwnerCertificate;
             };
 
-        adawayApk = pkgs.runCommand "AdAway-6.1.4-20241027.apk" {} ''
-          ln -s ${adaway-apk} "$out"
-        '';
+        adawayApk = pkgs.stdenv.mkDerivation (finalAttrs: {
+          pname = "adaway-karen-owner-unsigned";
+          version = "6.1.4";
+
+          src = adaway-source;
+
+          nativeBuildInputs = [
+            adawayAndroid.androidsdk
+            adawayGradle
+            pkgs.jdk17
+          ];
+
+          mitmCache = adawayGradle.fetchDeps {
+            pkg = finalAttrs.finalPackage;
+            data = ./gradle/adaway-deps.json;
+            # AGP creates and immediately executes prefab_command while
+            # configuring the NDK build. fetchDeps' optional bubblewrap root
+            # omits its generated interpreter path; the pure nix-shell still
+            # isolates inputs and the final derivation remains sandboxed.
+            useBwrap = false;
+          };
+
+          ANDROID_HOME = "${adawayAndroid.androidsdk}/libexec/android-sdk";
+          ANDROID_SDK_ROOT = "${adawayAndroid.androidsdk}/libexec/android-sdk";
+          CONFIG_SHELL = "${pkgs.bash}/bin/sh";
+          JAVA_HOME = pkgs.jdk17.home;
+          SHELL = "${pkgs.bash}/bin/sh";
+          gradleBuildTask = ":app:assembleRelease";
+          gradleUpdateTask = ":app:assembleRelease";
+          gradleFlags = [
+            "--no-daemon"
+            "-Dorg.gradle.java.home=${pkgs.jdk17.home}"
+            "-Pandroid.aapt2FromMavenOverride=${adawayAndroid.androidsdk}/libexec/android-sdk/build-tools/34.0.0/aapt2"
+          ];
+          postPatch = ''
+            substituteInPlace tcpdump/jni/Android.mk \
+              --replace-fail \
+              'include jni/stub/Android.mk' \
+              'SHELL := ${pkgs.bash}/bin/sh
+            include jni/stub/Android.mk'
+            substituteInPlace webserver/jni/Android.mk \
+              --replace-fail \
+              'LOCAL_PATH := $(call my-dir)' \
+              'SHELL := ${pkgs.bash}/bin/sh
+            LOCAL_PATH := $(call my-dir)'
+            patchShebangs tcpdump/jni webserver/jni
+          '';
+          preConfigure = ''
+            export ANDROID_USER_HOME="$PWD/.android-user-home"
+            mkdir -p "$ANDROID_USER_HOME"
+          '';
+          dontUseCmakeConfigure = true;
+          doCheck = false;
+
+          installPhase = ''
+            runHook preInstall
+            mapfile -t apks < <(
+              find app/build/outputs/apk/release \
+                -maxdepth 1 \
+                -type f \
+                -name '*-unsigned.apk' \
+                -print
+            )
+            test "''${#apks[@]}" = 1
+            cp "''${apks[0]}" "$out"
+            runHook postInstall
+          '';
+        });
 
         hmaApk = pkgs.runCommand "HMA-V3.8.r499.3a346c0-release.apk" {} ''
           ln -s ${hma-apk} "$out"
@@ -267,6 +361,8 @@
               <${./nixos/patches/kernel/0003-clang-fix-control-kernel-warnings.patch}
             patch --batch --forward --fuzz=0 -d "$out" -p1 \
               <${./nixos/patches/kernel/0005-clang-tolerate-legacy-vendor-warnings.patch}
+            patch --batch --forward --fuzz=0 -d "$out" -p1 \
+              <${./nixos/patches/kernel/0006-clang-fix-control-kernel-types.patch}
             substituteInPlace "$out/net/oplus_nwpower/oplus_nwpower.c" \
               --replace-fail \
               'static void nwpower_unsl_blacklist_reject() {' \
@@ -294,6 +390,19 @@
               --replace-fail \
               'static oplus_misc_healthinfo_parse_dt(' \
               'static int oplus_misc_healthinfo_parse_dt('
+            mapfile -t eeprom_sensor_sources < <(
+              grep -RIl \
+                --include='*.c' \
+                '^extern Eeprom_DistortionParamsRead' \
+                "$out/drivers/misc/mediatek/imgsensor"
+            )
+            test "''${#eeprom_sensor_sources[@]}" -gt 0
+            for sensor_source in "''${eeprom_sensor_sources[@]}"; do
+              substituteInPlace "$sensor_source" \
+                --replace-fail \
+                'extern Eeprom_DistortionParamsRead(' \
+                'extern void Eeprom_DistortionParamsRead('
+            done
             control_defconfig="$out/arch/arm64/configs/k6893v1_64_k419_nixos_control_defconfig"
             cp \
               "$out/arch/arm64/configs/k6893v1_64_k419_defconfig" \
@@ -314,6 +423,20 @@
               <${./nixos/patches/kernel/0002-oplus-fix-clang-strict-prototypes.patch}
             patch --batch --forward --fuzz=0 -d "$out" -p1 \
               <${./nixos/patches/kernel/0004-oplus-fix-control-kernel-warnings.patch}
+            patch --batch --forward --fuzz=0 -d "$out" -p1 \
+              <${./nixos/patches/kernel/0007-oplus-fix-lineage-kernel-include-paths.patch}
+            patch --batch --forward --fuzz=0 -d "$out" -p1 \
+              <${./nixos/patches/kernel/0008-oplus-fix-control-kernel-types.patch}
+            substituteInPlace \
+              "$out/vendor/oplus/kernel/charger/charger_ic/oplus_usbtemp.c" \
+              --replace-fail \
+              'static current_read_count = 0;' \
+              'static int current_read_count = 0;'
+            substituteInPlace \
+              "$out/vendor/oplus/kernel/charger/vooc_ic/oplus_stm8s.c" \
+              --replace-fail \
+              'static stm8s_parse_fw_from_array(' \
+              'static int stm8s_parse_fw_from_array('
             substituteInPlace \
               "$out/vendor/oplus/kernel/secureguard/rootguard/oplus_guard_general.c" \
               --replace-fail \
@@ -381,6 +504,23 @@
             ["@APKSIGNER@"]
             ["${vectorSigningAndroid.androidsdk}/libexec/android-sdk/build-tools/36.0.0/apksigner"]
             (builtins.readFile ./scripts/vector-owner-sign);
+        };
+
+        ownerSignApk = pkgs.writeShellApplication {
+          name = "nord2t-owner-sign-apk";
+          runtimeInputs = with pkgs; [
+            coreutils
+            gitMinimal
+            jdk21
+            jq
+            gnused
+            sops
+          ];
+          text =
+            builtins.replaceStrings
+            ["@APKSIGNER@"]
+            ["${vectorSigningAndroid.androidsdk}/libexec/android-sdk/build-tools/36.0.0/apksigner"]
+            (builtins.readFile ./scripts/owner-sign-apk);
         };
 
         installAurora = pkgs.writeShellApplication {
@@ -530,6 +670,7 @@
             gawk
             gnugrep
             gnused
+            ownerSignApk
             stockRoot
           ];
           text =
@@ -607,6 +748,7 @@
             gnugrep
             gnused
             lineageRoot
+            ownerSignApk
             readLineageSystemFingerprint
           ];
           text =
@@ -1038,6 +1180,7 @@
           mindthegapps-14-arm64 = mindTheGapps14Arm64;
           oneplus-kernel-modules = oneplusKernelModules;
           oneplus-kernel-source = oneplusKernelSource;
+          owner-sign-apk = ownerSignApk;
           preflight-lineage-userspace = preflightLineageUserspace;
           probe-preloader = probePreloader;
           read-lineage-system-fingerprint = readLineageSystemFingerprint;
@@ -1159,6 +1302,10 @@
           type = "app";
           program = "${self.packages.${system}.stock-unroot}/bin/nord2t-stock-unroot";
         };
+        owner-sign-apk = {
+          type = "app";
+          program = "${self.packages.${system}.owner-sign-apk}/bin/nord2t-owner-sign-apk";
+        };
         verify-firmware = {
           type = "app";
           program = "${self.packages.${system}.verify-firmware}/bin/nord2t-verify-firmware";
@@ -1184,6 +1331,7 @@
           lineage-root-full
           lineage-unroot
           lineage-userspace
+          owner-sign-apk
           preflight-lineage-userspace
           probe-preloader
           read-gpt
@@ -1240,6 +1388,7 @@
               pkgs.coreutils
               pkgs.gawk
               pkgs.gnugrep
+              pkgs.jq
             ];
             src = ./.;
           } ''

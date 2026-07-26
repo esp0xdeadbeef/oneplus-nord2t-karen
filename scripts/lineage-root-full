@@ -142,11 +142,8 @@ verify_file \
   "$vector_module_size" \
   "$vector_module_hash" \
   "Vector module"
-verify_file \
-  "$adaway_apk" \
-  13955875 \
-  09f8e1528a53e5ffad59e57a174e90d4e10c5092bf4f6a60ab6594f046614417 \
-  "AdAway APK"
+[[ -r "$adaway_apk" && -f "$adaway_apk" ]] ||
+  fail "source-built AdAway APK is not a readable regular file"
 verify_file \
   "$hma_apk" \
   3591847 \
@@ -248,6 +245,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
+nord2t-owner-sign-apk \
+  "$adaway_apk" \
+  --output "$host_work/adaway-owner.apk" \
+  >/dev/null
+adaway_apk="$host_work/adaway-owner.apk"
+
 if ! has_root; then
   nord2t-lineage-root \
     "$image_directory" \
@@ -268,7 +271,8 @@ magisk_version="$(
 [[ "$magisk_version" == 30.7:* ]] ||
   fail "running Magisk is not the pinned v30.7 baseline"
 
-adb -s "$adb_serial" install --user 0 -r "$adaway_apk" >/dev/null
+adb -s "$adb_serial" install --user 0 -r "$adaway_apk" >/dev/null ||
+  fail "could not install owner-signed AdAway; remove an existing differently signed AdAway explicitly, then rerun"
 adb -s "$adb_serial" install --user 0 -r "$hma_apk" >/dev/null
 
 adb -s "$adb_serial" shell "mkdir '$remote_work'"
