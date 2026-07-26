@@ -263,8 +263,9 @@ nix run .#karen-full-images
 # Build and export the current official-source control kernel.
 nix run .#karen-source-kernel-bootimage
 
-# Build the complete source-kernel bundle with an explicitly configured
-# persistent Robotnix compiler cache.
+# Use the persistent Robotnix compiler cache for repeated kernel ABI probes,
+# then for the complete source-kernel bundle.
+nix run .#karen-source-kernel-bootimage-cached
 nix run .#karen-source-kernel-full-images-cached
 
 # Compare a candidate with the pinned stock boot image and inspect its ramdisk.

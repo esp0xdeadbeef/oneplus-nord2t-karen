@@ -201,8 +201,19 @@ Other NixOS hosts can opt in with the equivalent settings:
 }
 ```
 
-After applying that host configuration, the owner-key-free and private
-full-image builds are respectively:
+After applying that host configuration, use the owner-key-free and private
+kernel-only targets for short source/config ABI iterations:
+
+```sh
+nix run --keep-failed --accept-flake-config \
+  .#karen-source-kernel-bootimage-cached
+
+KAREN_DEBUG_ADB_PUBLIC_KEY_FILE=/private/path/adbkey.pub \
+  nix run --keep-failed --accept-flake-config --impure \
+  .#karen-source-kernel-keybound-bootimage-cached
+```
+
+The corresponding full-image builds are:
 
 ```sh
 nix run --keep-failed --accept-flake-config \

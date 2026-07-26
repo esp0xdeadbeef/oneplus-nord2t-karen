@@ -228,6 +228,24 @@
       )
     else null;
 
+  karenSourceKernelCachedRobotnix =
+    if system == "x86_64-linux"
+    then
+      robotnix.lib.robotnixSystem (
+        import (repositoryRoot + /lineage/robotnix-karen.nix) {
+          buildSourceKernel = true;
+          deviceTree = karenDeviceTree;
+          enableCcache = true;
+          insecureRecoveryAdb = true;
+          kernelModules = oneplusControlKernelModules;
+          kernelSource = oneplusControlKernelSource;
+          lineageLockfile = robotnixLineage21Lock;
+          vendorLineagePatches = robotnixVendorLineagePatches;
+          webviewSource = lineageWebviewArm64;
+        }
+      )
+    else null;
+
   karenSourceKernelFullRobotnix =
     if system == "x86_64-linux"
     then
@@ -394,12 +412,30 @@
       }
     else null;
 
+  karenSourceKernelBootimageCached =
+    if system == "x86_64-linux"
+    then
+      mkKarenSourceKernelBootimage {
+        name = "lineage-21-karen-source-kernel-bootimage-cached";
+        robotnixSystem = karenSourceKernelCachedRobotnix;
+      }
+    else null;
+
   karenSourceKernelKeyboundBootimage =
     if system == "x86_64-linux" && adbPublicKey != null
     then
       mkKarenSourceKernelBootimage {
         name = "lineage-21-karen-source-kernel-keybound-bootimage";
         robotnixSystem = karenSourceKernelKeyboundFullRobotnix;
+      }
+    else null;
+
+  karenSourceKernelKeyboundBootimageCached =
+    if system == "x86_64-linux" && adbPublicKey != null
+    then
+      mkKarenSourceKernelBootimage {
+        name = "lineage-21-karen-source-kernel-keybound-bootimage-cached";
+        robotnixSystem = karenSourceKernelKeyboundFullCachedRobotnix;
       }
     else null;
 
@@ -493,6 +529,8 @@ in {
       karen-device-tree = karenDeviceTree;
       karen-full-images = karenFullImages;
       karen-source-kernel-bootimage = karenSourceKernelBootimage;
+      karen-source-kernel-bootimage-cached =
+        karenSourceKernelBootimageCached;
       karen-source-kernel-full-images = karenSourceKernelFullImages;
       karen-source-kernel-full-images-cached =
         karenSourceKernelFullImagesCached;
@@ -500,6 +538,8 @@ in {
     // pkgs.lib.optionalAttrs (karenSourceKernelKeyboundFullImages != null) {
       karen-source-kernel-keybound-bootimage =
         karenSourceKernelKeyboundBootimage;
+      karen-source-kernel-keybound-bootimage-cached =
+        karenSourceKernelKeyboundBootimageCached;
       karen-source-kernel-keybound-full-images =
         karenSourceKernelKeyboundFullImages;
       karen-source-kernel-keybound-full-images-cached =

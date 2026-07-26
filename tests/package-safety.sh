@@ -231,24 +231,21 @@ grep -Fq 'hash = "sha256-xBjQHGb8+RYzgR08qzA/dEpG0p5G9CnctSGmk5oHMYw=";' \
   "$artifact_packages"
 grep -Fq 'fetchLFS = true;' "$artifact_packages"
 if [[ "$(grep -Fc 'webviewSource = lineageWebviewArm64;' \
-  "$lineage_packages")" -ne 7 ]]; then
+  "$lineage_packages")" -ne 8 ]]; then
   echo "Every Karen Robotnix variant must use the pinned WebView source." >&2
   exit 1
 fi
 grep -Fq 'ccache.enable = enableCcache;' "$robotnix_device"
-if [[ "$(grep -Fc 'enableCcache = true;' "$lineage_packages")" -ne 2 ]]; then
-  echo "Only the explicit cached full-image variants may enable ccache." >&2
+if [[ "$(grep -Fc 'enableCcache = true;' "$lineage_packages")" -ne 3 ]]; then
+  echo "Only the explicit cached boot and full-image variants may enable ccache." >&2
   exit 1
 fi
 grep -Fq 'source.dirs."external/chromium-webview/prebuilt/arm64".src' \
   "$robotnix_device"
 grep -Fq 'lib.mkForce webviewSource;' "$robotnix_device"
 grep -Fq \
-  'TARGET_KERNEL_CONFIG := k6893v1_64_k419_ab_nixos_control_defconfig' \
+  'TARGET_KERNEL_CONFIG := k6893v1_64_k419_ab_lineage_control_defconfig' \
   "$board_config"
-grep -Fq \
-  'k6893v1_64_k419_ab_defconfig' \
-  "$nixos_kernel_packages"
 grep -Fxq 'CONFIG_KEXEC=y' \
   "$script_directory/nixos/families/mt6893/kernel/nixos-control.config"
 grep -Fq "grep -Fxq 'CONFIG_KEXEC=y' \"\$effective_config\"" \
@@ -333,6 +330,12 @@ grep -Fq '"$out/scripts/extract-ikconfig"' "$nixos_kernel_packages"
 grep -Fq \
   'k6893v1_64_k419_ab_lineage_control_defconfig' \
   "$script_directory/lineage/device/oneplus/karen/BoardConfig.mk"
+grep -Fq \
+  'karen-source-kernel-bootimage-cached' \
+  "$lineage_packages"
+grep -Fq \
+  'karen-source-kernel-keybound-bootimage-cached' \
+  "$script_directory/nix/apps.nix"
 grep -Fq "'4.19.191+'" "$lineage_packages"
 grep -Fq \
   'CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"' \

@@ -99,6 +99,12 @@
         defaultDirectory = "result-karen-source-kernel-bootimage";
         name = "karen-source-kernel-bootimage";
       };
+      karen-source-kernel-bootimage-cached = mkArtifactApp {
+        artifact =
+          self.packages.${system}.karen-source-kernel-bootimage-cached;
+        defaultDirectory = "result-karen-source-kernel-bootimage-cached";
+        name = "karen-source-kernel-bootimage-cached";
+      };
       karen-source-kernel-full-images = mkArtifactApp {
         artifact = self.packages.${system}.karen-source-kernel-full-images;
         defaultDirectory = "result-karen-source-kernel-full-images";
@@ -126,6 +132,12 @@
           self.packages.${system}.karen-source-kernel-keybound-bootimage;
         defaultDirectory = "result-karen-source-kernel-keybound-bootimage";
         name = "karen-source-kernel-keybound-bootimage";
+      };
+      karen-source-kernel-keybound-bootimage-cached = mkArtifactApp {
+        artifact =
+          self.packages.${system}.karen-source-kernel-keybound-bootimage-cached;
+        defaultDirectory = "result-karen-source-kernel-keybound-bootimage-cached";
+        name = "karen-source-kernel-keybound-bootimage-cached";
       };
       karen-source-kernel-keybound-full-images = mkArtifactApp {
         artifact =
