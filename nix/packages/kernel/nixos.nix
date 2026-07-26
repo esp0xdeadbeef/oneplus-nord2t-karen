@@ -139,6 +139,7 @@
       CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"
       EOF
       grep -Fxq 'CONFIG_KEXEC=y' "$control_defconfig"
+      grep -Fxq 'CONFIG_LOCALVERSION="+"' "$control_defconfig"
       grep -Fxq \
         'CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"' \
         "$control_defconfig"

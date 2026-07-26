@@ -304,6 +304,9 @@ grep -Fq \
 grep -Fq 'serial=9DFB3A7B9EEB1555' "$device_tools_packages"
 grep -Fq -- '-inform DER' "$nixos_kernel_packages"
 grep -Fq -- "'-----BEGIN CERTIFICATE-----'" "$nixos_kernel_packages"
+grep -Fq 'CONFIG_LOCALVERSION="+"' \
+  "$script_directory/nixos/families/mt6893/kernel/nixos-control.config"
+grep -Fq "'4.19.191+'" "$lineage_packages"
 grep -Fq \
   'CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"' \
   "$nixos_kernel_packages"

@@ -334,6 +334,9 @@
         grep -Fxq 'CONFIG_KEXEC=y' "$effective_config"
         test -s "$kernel_object/Module.symvers"
         test -s "$kernel_object/include/config/kernel.release"
+        grep -Fxq \
+          '4.19.191+' \
+          "$kernel_object/include/config/kernel.release"
         mkdir -p "$out"
         cp --reflink=auto "$ANDROID_PRODUCT_OUT/boot.img" "$out/boot.img"
         cp --reflink=auto "$ANDROID_PRODUCT_OUT/kernel" "$out/kernel"
@@ -390,6 +393,9 @@
         grep -Fxq 'CONFIG_KEXEC=y' "$effective_config"
         test -s "$kernel_object/Module.symvers"
         test -s "$kernel_object/include/config/kernel.release"
+        grep -Fxq \
+          '4.19.191+' \
+          "$kernel_object/include/config/kernel.release"
         mkdir -p "$out"
         for image in \
           boot system system_ext product vendor odm \
