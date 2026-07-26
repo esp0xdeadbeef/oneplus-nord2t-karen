@@ -16,18 +16,19 @@ and stock boot SHA-256
 `7ad447405db4e74276395123c8029c67c63adc3fc6d82c4c180ae6c2e31882c0`.
 They also check the expected byte sizes. The APK is never fetched at runtime.
 
-The optional full stack pins four additional release artifacts as independent
-non-flake inputs:
+The optional full stack pins one source build and three independent release
+artifacts:
 
 | Component | Version | Upstream artifact | SHA-256 |
 | --- | --- | --- | --- |
-| Vector | 2.0 (3021) | [`JingMatrix/Vector`](https://github.com/JingMatrix/Vector/releases/tag/v2.0) release ZIP | `d5e39669c02c2c699ab948eb8f3639b348eefb7749553224a9c62fa4a2f2dc18` |
+| Vector | 2.0 (3021) | exact `JingMatrix/Vector` Git revision plus Nix Gradle dependency lock | `b66605a0cf2cdbac9ca9accc9e47edc203791d3374d59fed2fa11f5a654f8333` |
 | Shamiko | 1.2.5 (414) | [`LSPosed/LSPosed.github.io`](https://github.com/LSPosed/LSPosed.github.io/releases/tag/shamiko-414) release ZIP | `308d31b2f52a80e49eb58f46bc4c764a6588a79e4b8d101b44860832023f88b4` |
 | Hide My Applist | 3.8 (499) | [LSPosed module repository](https://github.com/Xposed-Modules-Repo/com.tsng.hidemyapplist/releases/tag/499-3.8.r499.3a346c0) APK | `0adaa6bcdf7ee1e9e1c310f33b86f2f4d03f8839a10be8384e34d6cb5bd99c39` |
 | AdAway | 6.1.4 | [`AdAway/AdAway`](https://github.com/AdAway/AdAway/releases/tag/v6.1.4) APK | `09f8e1528a53e5ffad59e57a174e90d4e10c5092bf4f6a60ab6594f046614417` |
 
-`flake.lock` fixes the NAR for every artifact. `stock-root-full` additionally
-checks each raw file's byte size and SHA-256 before it accesses the phone.
+`flake.lock` fixes every source or release NAR. `gradle/vector-deps.json`
+fixes Vector's Maven inputs. `stock-root-full` additionally checks each raw
+file's byte size and SHA-256 before it accesses the phone.
 
 Realizing `stock-root` or `stock-unroot` for the first time can require the
 roughly 5.6 GB OTA because Nix derives the stock boot image from that source.

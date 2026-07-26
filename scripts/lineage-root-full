@@ -8,6 +8,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: nord2t-lineage-root-full IMAGE_DIR --persist
        [--allow-embedded-adb-key] [--yes]
+       [--vector-module FILE --vector-module-sha256 SHA256]
        [--denylist PACKAGE[:PROCESS]]...
 
 Ensure minimal Magisk root on the audited enforcing Lineage boot in IMAGE_DIR,
@@ -41,6 +42,8 @@ persist=false
 allow_embedded_adb_key=false
 assume_yes=false
 denylist_targets=()
+vector_module_override=
+vector_module_hash_override=
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -55,6 +58,24 @@ while [[ $# -gt 0 ]]; do
     --yes)
       assume_yes=true
       shift
+      ;;
+    --vector-module)
+      [[ $# -ge 2 ]] || {
+        usage
+        exit 2
+      }
+      vector_module_override="$2"
+      shift 2
+      ;;
+    --vector-module-sha256)
+      [[ $# -ge 2 ]] || {
+        usage
+        exit 2
+      }
+      [[ "$2" =~ ^[0-9a-f]{64}$ ]] ||
+        fail "invalid Vector module SHA-256"
+      vector_module_hash_override="$2"
+      shift 2
       ;;
     --denylist)
       [[ $# -ge 2 ]] || {
@@ -86,9 +107,21 @@ done
   fail "Lineage image directory is not readable"
 
 vector_module="@VECTOR_MODULE@"
+vector_module_size=8432605
+vector_module_hash=b66605a0cf2cdbac9ca9accc9e47edc203791d3374d59fed2fa11f5a654f8333
 adaway_apk="@ADAWAY_APK@"
 hma_apk="@HMA_APK@"
 shamiko_module="@SHAMIKO_MODULE@"
+
+if [[ -n "$vector_module_override" ||
+  -n "$vector_module_hash_override" ]]; then
+  [[ -n "$vector_module_override" &&
+    -n "$vector_module_hash_override" ]] ||
+    fail "--vector-module and --vector-module-sha256 must be supplied together"
+  vector_module="$(realpath "$vector_module_override")"
+  vector_module_size="$(stat -Lc %s "$vector_module")"
+  vector_module_hash="$vector_module_hash_override"
+fi
 
 verify_file() {
   local file="$1"
@@ -106,8 +139,8 @@ verify_file() {
 
 verify_file \
   "$vector_module" \
-  8434264 \
-  d5e39669c02c2c699ab948eb8f3639b348eefb7749553224a9c62fa4a2f2dc18 \
+  "$vector_module_size" \
+  "$vector_module_hash" \
   "Vector module"
 verify_file \
   "$adaway_apk" \

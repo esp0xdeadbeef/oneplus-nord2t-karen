@@ -184,6 +184,7 @@
             pkgs.gitMinimal
             pkgs.jdk21
             pkgs.ninja
+            pkgs.unzip
             vectorAndroid.androidsdk
           ];
 
@@ -264,6 +265,8 @@
               <${./nixos/patches/kernel/0001-clang-fix-control-kernel-errors.patch}
             patch --batch --forward --fuzz=0 -d "$out" -p1 \
               <${./nixos/patches/kernel/0003-clang-fix-control-kernel-warnings.patch}
+            patch --batch --forward --fuzz=0 -d "$out" -p1 \
+              <${./nixos/patches/kernel/0005-clang-tolerate-legacy-vendor-warnings.patch}
             substituteInPlace "$out/net/oplus_nwpower/oplus_nwpower.c" \
               --replace-fail \
               'static void nwpower_unsl_blacklist_reject() {' \
@@ -286,6 +289,11 @@
               --replace-fail \
               'static void nwpower_unsl_mdaci() {' \
               'static void nwpower_unsl_mdaci(void) {'
+            substituteInPlace \
+              "$out/drivers/misc/oplus_misc_healthinfo/oplus_misc_healthinfo.c" \
+              --replace-fail \
+              'static oplus_misc_healthinfo_parse_dt(' \
+              'static int oplus_misc_healthinfo_parse_dt('
             control_defconfig="$out/arch/arm64/configs/k6893v1_64_k419_nixos_control_defconfig"
             cp \
               "$out/arch/arm64/configs/k6893v1_64_k419_defconfig" \

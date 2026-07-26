@@ -26,8 +26,8 @@ rather than a supported release. The exact official OxygenOS
 `CPH2399_14.0.0.3001(EX01)` inputs and bounded rollback paths remain pinned.
 
 For the current resumable checkpoint, active owner paths, mandatory next gates
-and rollback order, see [`docs/follow-up.md`](docs/follow-up.md). The named
-`s-tau` host is only the owner's optional compilation offload; see the
+and rollback order, see [`docs/follow-up.md`](docs/follow-up.md). The owner's
+optional compilation offload is described separately in the
 [remote-build-host guide](docs/remote-builder.md).
 
 The scripts refuse to operate on a device unless ADB reports both:
@@ -130,10 +130,12 @@ and the stock `.3001` boot image derived from the OTA are both locked by
 `flake.lock` and checked against hard-coded size and SHA-256 pins before the
 root workflow uses them.
 
-The optional full rooted stack adds four more locked upstream artifacts:
-Vector 2.0, Shamiko 1.2.5, Hide My Applist 3.8 and AdAway 6.1.4. The helper
-checks their exact byte sizes and SHA-256 values in addition to Nix's lock
-hashes; it never resolves a “latest” URL at runtime.
+The optional full rooted stack adds four more locked upstream inputs:
+Vector 2.0, Shamiko 1.2.5, Hide My Applist 3.8 and AdAway 6.1.4. Vector is
+built from its exact Git revision and a generated Nix Gradle dependency lock;
+the other three inputs are pinned release artifacts. The helper checks their
+exact byte sizes and SHA-256 values in addition to Nix's lock hashes; it never
+resolves a “latest” URL at runtime.
 
 The optional Google-app profile pins the official Android 14 arm64
 MindTheGapps release separately. It is not part of the vanilla image and is
@@ -175,7 +177,7 @@ nix run .#vector-signing-key-generator
 
 The command creates two committed, SOPS-encrypted JSON documents. The shared
 document contains only the public X.509 certificate, its digest and the key
-alias; `l-esp`, `l-portal` and the optional `s-tau` builder can decrypt it.
+alias; `l-esp`, `l-portal` and the optional remote builder can decrypt it.
 The private document contains the JKS and the four Android signing attributes
 `androidStoreFile`, `androidStorePassword`, `androidKeyAlias` and
 `androidKeyPassword`; only `l-esp` and `l-portal` can decrypt it. Passwords
@@ -199,8 +201,24 @@ nix run .#vector-owner-sign -- \
 The final signing helper verifies that both encrypted documents describe the
 same certificate, signs both embedded APKs, checks their signer digest,
 refreshes the module checksums and creates a new ZIP. Generic users may keep
-using `vector-module`; neither SOPS identity nor `s-tau` is required for the
-non-owner build.
+using `vector-module`; neither SOPS identity nor a remote builder is required
+for the non-owner build.
+
+Both full-root routes use that reproducible generic module by default. The
+owner-signed output can be selected without putting it in Git:
+
+```bash
+vector_zip=/private/path/Vector-owner-signed.zip
+vector_hash="$(sha256sum "$vector_zip" | cut -d' ' -f1)"
+nix run .#lineage-root-full -- /path/to/lineage-images \
+  --persist \
+  --vector-module "$vector_zip" \
+  --vector-module-sha256 "$vector_hash"
+```
+
+`--vector-module` and its explicit hash are accepted only by the two
+`root-full` helpers; minimal-root and unroot paths cannot install the
+concealment stack.
 
 The repository then adds the local `karen` tree without committing proprietary
 or stock-derived binaries. There are three useful build paths:
@@ -228,7 +246,7 @@ nix run .#android-fhs
 The first clean build of `karen-bootimage` must fetch and realize the complete
 LineageOS/AOSP source graph. Those repositories become ordinary immutable Nix
 store paths and are reused by later builds. A sufficiently large local machine
-can run every target directly. The owner optionally uses `s-tau` over SSH
+can run every target directly. The owner optionally uses a host over SSH
 because `l-esp` ran out of memory during full Android builds; no host exception
 or machine-specific builder configuration is part of this repository. See the
 [optional remote-build-host workflow](docs/remote-builder.md).
@@ -302,7 +320,7 @@ pair can be installed before entering recovery for add-ons.
 
 For a private headless bring-up build, `KAREN_DEBUG_ADB_KEYS` may point to
 exactly one Android public key on the selected build host, including the
-optional `s-tau` workflow. This keeps `ro.adb.secure=1`; it does not enable
+optional remote-build workflow. This keeps `ro.adb.secure=1`; it does not enable
 open or root ADB. Images containing that key are rejected by the normal audit
 and must remain outside Git:
 
@@ -344,8 +362,8 @@ enforcing Lineage 21 boot on slot A. Display/touch, camera, audio, internet and
 the passive framework/core-service checks have passed; the remaining manual
 hardware matrix is tracked in [the follow-up](docs/follow-up.md).
 
-The pinned build completed successfully on `s-tau` and its resulting
-recovery-as-boot image passed the repository's structural audit. Its kernel
+The pinned build completed successfully on the optional remote build host and
+its resulting recovery-as-boot image passed the repository's structural audit. Its kernel
 and DTB are byte-identical to `.3001` stock, while the ramdisk contains the
 expected Lineage Recovery, fastbootd, first-stage fstab, virtual A/B
 `snapuserd` and SELinux policy. Temporary `fastboot boot` transferred
@@ -530,6 +548,8 @@ Add `--allow-embedded-adb-key` only for a private key-bound bring-up bundle.
 Minimal Lineage root does not enable Zygisk or install concealment modules, so
 a clean baseline keeps runtime debugging representative. The full profile
 deliberately enables the same pinned concealment stack as `stock-root-full`.
+Both full routes also accept a locally owner-signed Vector ZIP only when its
+explicit SHA-256 is supplied alongside it.
 Unroot restores the exact audited Lineage `vbmeta_a`/`boot_a` pair. See
 [LineageOS root and unroot](docs/lineage-root.md) for the safety gates and the
 bootloop recovery form.

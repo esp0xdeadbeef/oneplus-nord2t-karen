@@ -21,8 +21,14 @@ fail() {
   exit 1
 }
 
-repository_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
-  fail "run from a Git checkout"
+if repository_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  :
+else
+  repository_root="$(pwd -P)"
+  [[ -f "$repository_root/flake.nix" &&
+    -d "$repository_root/secrets" ]] ||
+    fail "run from a Git checkout or a repository-root mirror"
+fi
 shared_secret_file="$repository_root/secrets/vector-signing-shared.json.age"
 age_key_file="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
 output_file=
@@ -108,6 +114,7 @@ actual_fingerprint="$(sha256sum "$certificate" | cut -d' ' -f1)"
 mapfile -t build_outputs < <(
   KAREN_VECTOR_SIGNING_CERTIFICATE_FILE="$certificate" \
     nix build \
+      --accept-flake-config \
       --impure \
       --no-link \
       --print-out-paths \

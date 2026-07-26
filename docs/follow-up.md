@@ -6,30 +6,31 @@ This is the resumable handoff for the current Karen LineageOS bring-up. It is
 deliberately operational rather than a second porting guide; durable findings
 and rationale remain in [lineage-port.md](lineage-port.md).
 
-All `s-tau` names and paths below describe the repository owner's current
+All remote names and paths below describe the repository owner's current
 offloaded build session. They are not prerequisites for this port: builds may
-run locally or on another sufficiently capable host. See the
-[optional remote-build-host guide](remote-builder.md) for the host boundary,
-rsync flow and artifact-return checks.
+run locally or on another sufficiently capable host. The concrete host mapping
+is centralized in the [optional remote-build-host guide](remote-builder.md),
+along with the host boundary, rsync flow and artifact-return checks.
 
 ## Current checkpoint
 
 - Git `main` and `origin/main` contain the stock roundtrip and OLED recovery
   checkpoints; commit the snapshot gate below before the next phone write.
-- For this owner session, Android compilation is offloaded to `s-tau` because
+- For this owner session, Android compilation is offloaded because
   full builds exhausted the memory available on `l-esp`.
 - The persistent checkout is
   `/home/deadbeef/build/lineage-21-karen-incremental`, bind-mounted at
   `/build` while an incremental build is active.
-- User lingering is enabled for `deadbeef` on `s-tau`; transient build units
-  otherwise stop when the final SSH session closes.
+- User lingering is enabled for `deadbeef` on the optional build host;
+  transient build units otherwise stop when the final SSH session closes.
 - The successful forced OLED-fix rebuild unit was
   `karen-lineage-oled-fix4.service`.
 - The compiler cache is
-  `/home/deadbeef/.cache/nord2t-ccache` on `s-tau`, with a 400 GB limit.
+  `/home/deadbeef/.cache/nord2t-ccache` on that host, with a 400 GB limit.
 - Vector owner signing is split into a public SOPS document readable by
-  `l-esp`, `l-portal` and `s-tau`, and a private JKS document readable only by
-  `l-esp` and `l-portal`. The generator passed a local round-trip; `s-tau`
+  `l-esp`, `l-portal` and the optional build host, and a private JKS document
+  readable only by `l-esp` and `l-portal`. The generator passed a local
+  round-trip; the build host
   decrypted only the shared half. `l-portal` has the recipient recorded from
   the NixOS repository but was offline during the live decrypt check.
 - The ext4 Lineage userspace, exact stock vendor/odm, pinned MindTheGapps and
@@ -39,15 +40,27 @@ rsync flow and artifact-return checks.
   node its exact `super_block_device` label. Enforcing Lineage fastbootd
   exposes every standard and preserved OPlus logical mapping; the temporary
   permissive recovery is no longer needed.
-- The current full-root runtime has Magisk 30.7, Zygisk, Vector, Shamiko,
-  Systemless Hosts and kexec active. HMA's `system` scope is disabled after it
+- The current full-root Lineage runtime has Magisk 30.7, Zygisk, Vector,
+  Shamiko and Systemless Hosts active. The kexec module currently supplies
+  only its userspace loader: the installed stock-derived kernel has the
+  classic syscall compiled out. HMA's `system` scope is disabled after it
   reproducibly stalled Launcher/SystemUI; its native library is denied while
   Vector injects it into `system_server`. Do not automate that scope until the
   framework issue and rollback health check are resolved.
-- The exact-stock relock and green/rootless boot completed successfully. The
-  bootloader was then deliberately unlocked again, with the expected wipe.
-  A recovery request currently enters the corrected private Lineage Recovery
-  on slot A, while a normal boot still enters exact rootless stock userspace.
+- The earlier exact-stock relock and green/rootless boot completed
+  successfully. The bootloader was then deliberately unlocked again, with
+  the expected wipe, before installing the current Lineage system. The tested
+  stock roundtrip remains rollback evidence rather than the active OS state.
+- With adbd returned to normal shell mode, the passive runtime audit passed
+  all 37 non-boot-state checks. Its three remaining property checks see
+  `green/locked` because the deliberate full-root concealment stack masks the
+  unlocked/orange runtime; minimal root remains the representative debugging
+  profile.
+- Vector now builds from its pinned Git revision and generated Gradle
+  dependency lock. The generic module built successfully, and the split
+  public-certificate intermediate plus trusted-host final signer produced
+  byte-identical owner-signed outputs in two independent signing runs. No
+  private signing material entered the remote host or Nix store.
 - A bounded read-only copy of the first 4 MiB of `super` found the expected 15
   active slot-A partitions plus nine COW snapshot partitions. A complete
   stock boot did not remove them. Bootloader-fastboot returned no usable
@@ -147,8 +160,8 @@ failed add-on attempt and Lineage rebooted normally. The device tree now
 builds `system`, `system_ext` and `product` as ext4 with explicit add-on
 headroom, while exact stock `vendor`/`odm` stay EROFS.
 
-The resulting vanilla bundle was built on `s-tau` and passed VINTF, boot, AVB,
-filesystem and preserved-layout audits. Its sparse ext4 images expand to
+The resulting vanilla bundle was built on the optional remote host and passed
+VINTF, boot, AVB, filesystem and preserved-layout audits. Its sparse ext4 images expand to
 977,920,000 bytes for `system`, 500,445,184 bytes for `system_ext` and
 1,850,867,712 bytes for `product`; they retain at least 32 MiB, 64 MiB and
 1.25 GiB of free space respectively. Together with exact stock `vendor` and
@@ -216,7 +229,7 @@ The restore helper now probes both names after slot attestation and selects
 the mapping fastbootd actually exposes; it still stops before writing when
 neither mapping exists.
 
-The corrected nine-image bundle completed 117,156 actions on `s-tau` in
+The corrected nine-image bundle completed 117,156 actions remotely in
 1:10:10 and passed the boot, AVB, exact stock vendor/odm and size audit. Its
 first VINTF check was rejected before any phone write: Lineage's empty
 device-specific framework matrix did not declare the stock FCM-5
@@ -295,15 +308,15 @@ general boot logs before deciding whether to continue or restore stock.
 A key-bound fallback was prepared without weakening ADB authentication.
 Checkpoint `d2b48f5` adds the opt-in `KAREN_DEBUG_ADB_KEYS` build variable and
 makes the normal boot/image audits reject an embedded host key unless the
-private bring-up flag is explicit. The incremental `s-tau` build completed in
+private bring-up flag is explicit. The incremental remote build completed in
 2:58 and placed exactly one local Android public key in the boot ramdisk.
 
 Both the complete private bundle and a smaller hybrid consisting of its new
 `boot`/`vbmeta` pair plus the original candidate's other seven images passed
 the complete explicit audit, including the AVB chain and exact stock
 vendor/odm checks. Independent copies are stored in private directories under
-`/home/deadbeef/build` on `s-tau` and the phone host; no key or key-derived
-image is in Git. The enforcing variant is now the active bootpair.
+`/home/deadbeef/build` on the build host and the phone host; no key or
+key-derived image is in Git. The enforcing variant is now the active bootpair.
 `lineage-keybound-adb` verifies the matching local private key and can write
 or restore only `vbmeta_a` and `boot_a`.
 
@@ -313,7 +326,7 @@ instead of falsely rejecting an image over its disposable `user@host`
 comment.
 
 The scoped ten-image stock rollback set is protected by an explicit GC root
-on `s-tau`:
+on the optional build host:
 
 ```text
 /home/deadbeef/build/gcroots/karen-stock-restore-3001
@@ -399,18 +412,19 @@ two stale incremental candidates before they could be flashed.
 ## Resume commands
 
 Inspect the active or most recent build without starting a local Android
-compile:
+compile. Set `KAREN_BUILD_HOST` to the owner alias documented in the
+[optional remote-build-host guide](remote-builder.md):
 
 ```bash
-ssh s-tau \
+ssh "$KAREN_BUILD_HOST" \
   'systemctl --user show karen-lineage-vintf-vndk-retry2.service \
     -p ActiveState -p SubState -p Result -p ExecMainStatus'
-ssh s-tau \
+ssh "$KAREN_BUILD_HOST" \
   'journalctl --user -u karen-lineage-vintf-vndk-retry2.service \
     -n 80 --no-pager'
 ```
 
-The intended s-tau targets are:
+The intended remote-build targets are:
 
 ```text
 bootimage systemimage systemextimage productimage vendorimage odmimage
@@ -432,8 +446,8 @@ the absolute depfiles.
 3. Build the host `checkvintf` target and run
    `scripts/audit-lineage-vintf /build` against the generated framework and
    exact stock vendor/odm VINTF metadata for the live `dsds` SKU.
-4. Rsync the audited candidate directory from `s-tau` to the phone host and
-   hash it again.
+4. Rsync the audited candidate directory from the optional build host to the
+   phone host and hash it again.
 5. Run the read-only `preflight-lineage-userspace` from either the exact
    rooted stock baseline or the audited private Lineage Recovery. It must
    confirm slot A, the exact 15-partition `main` layout, 3,527,249,920

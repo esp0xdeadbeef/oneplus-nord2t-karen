@@ -123,6 +123,7 @@ grep -Fq 'CertificateFactory.getInstance("X.509")' "$vector_owner_patch"
 grep -Fq \
   'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8' \
   "$vector_memory_patch"
+grep -Fq 'pkgs.unzip' "$script_directory/flake.nix"
 if grep -Fq -- '-Dorg.gradle.jvmargs=-Xmx4g ' "$script_directory/flake.nix"; then
   echo "Space-separated Gradle JVM arguments must live in gradle.properties." >&2
   exit 1
@@ -131,6 +132,18 @@ fi
 grep -Fq 'KAREN_VECTOR_SIGNING_CERTIFICATE_FILE="$certificate"' \
   "$vector_owner_build"
 grep -Fq 'vector-module-owner-intermediate' "$vector_owner_build"
+grep -Fq 'repository-root mirror' "$vector_owner_build"
+grep -Fq -- '--vector-module-sha256' "$lineage_root_full"
+grep -Fq -- '--vector-module-sha256' \
+  "$script_directory/scripts/stock-root-full"
+if [[ "$(grep -R -Fch \
+  'b66605a0cf2cdbac9ca9accc9e47edc203791d3374d59fed2fa11f5a654f8333' \
+  "$lineage_root_full" \
+  "$script_directory/scripts/stock-root-full" |
+  awk '{ total += $1 } END { print total + 0 }')" -ne 2 ]]; then
+  echo "Both full-root routes must pin the source-built generic Vector module." >&2
+  exit 1
+fi
 if grep -Eq 'androidStore(File|Password)|androidKeyPassword' \
   "$vector_owner_build"; then
   echo "Remote Vector build helper references private signing attributes." >&2
@@ -171,6 +184,15 @@ grep -Fq 'nwpower_unsl_blacklist_reject(void)' "$script_directory/flake.nix"
 grep -Fq 'oplus_match_modem_wakeup(void)' "$script_directory/flake.nix"
 grep -Fq 'lock_supp_level(unsigned int level)' \
   "$script_directory/nixos/patches/kernel/0004-oplus-fix-control-kernel-warnings.patch"
+grep -Fq -- '-Wno-error=strict-prototypes' \
+  "$script_directory/nixos/patches/kernel/0005-clang-tolerate-legacy-vendor-warnings.patch"
+if grep -Fq -- '-Wno-error=implicit-int' \
+  "$script_directory/nixos/patches/kernel/0005-clang-tolerate-legacy-vendor-warnings.patch"; then
+  echo "Control-kernel implicit integer diagnostics must remain fatal." >&2
+  exit 1
+fi
+grep -Fq 'static int oplus_misc_healthinfo_parse_dt(' \
+  "$script_directory/flake.nix"
 grep -Fq \
   'source.dirs."kernel/oneplus/vendor/mediatek/kernel_modules".src' \
   "$robotnix_device"
@@ -323,5 +345,21 @@ for encrypted_secret in "$script_directory"/secrets/*.age; do
     exit 1
   }
 done
+
+remote_builder_document="$script_directory/docs/remote-builder.md"
+# shellcheck disable=SC2016
+grep -Fq 'Nothing in this repository requires `s-tau`.' \
+  "$remote_builder_document"
+grep -Fq 'full LineageOS builds exhausted the memory' \
+  "$remote_builder_document"
+if grep -R -n -F \
+  --include='*.md' \
+  --exclude='remote-builder.md' \
+  's-tau' \
+  "$script_directory/README.md" \
+  "$script_directory/docs"; then
+  echo "Machine-specific s-tau references must be centralized in remote-builder.md." >&2
+  exit 1
+fi
 
 echo "Package safety checks passed."

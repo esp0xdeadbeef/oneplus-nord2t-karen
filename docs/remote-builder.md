@@ -81,6 +81,13 @@ the recovery-only variant and the exact target-name warning.
 
 ## Optional `s-tau` workflow
 
+The owner uses one shell variable for commands referenced by the resumable
+follow-up:
+
+```sh
+export KAREN_BUILD_HOST=s-tau
+```
+
 Run the source sync from the repository root on `l-esp`. The target must be
 the dedicated repository mirror shown here, never the persistent Android
 checkout or a broader home/build directory:

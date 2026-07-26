@@ -1,0 +1,49 @@
+From b3e2de113366cdf7f44a1365535fab23761f5dbe Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 04:00:00 +0200
+Subject: [PATCH] kernel: tolerate legacy vendor Clang warnings
+
+Keep incompatible pointers, implicit function declarations, return types and
+implicit integers fatal. The published 4.19 vendor tree does, however, contain
+many old-style empty parameter lists and deliberately ignored results, plus
+signed one-bit fields assigned the boolean value one. Newer Lineage Clang
+diagnoses those throughout otherwise unrelated device drivers.
+
+Downgrade only those legacy diagnostic classes after the tree's fatal warning
+selection. Also give the ION allocator-service helper its actual integer
+return type instead of relying on removed implicit-int behavior.
+
+Assisted-by: Codex:gpt-5
+---
+ Makefile                                | 5 +++++
+ drivers/staging/android/mtk_ion/ion.c  | 2 +-
+ drivers/staging/android/mtk_ion/ion_priv.h | 2 +-
+ 3 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 520f32e..ee24d6c 100644
+--- a/Makefile
++++ b/Makefile
+@@ -991 +991,6 @@
+-KBUILD_CFLAGS   += $(call cc-option,-Werror=designated-init)
++KBUILD_CFLAGS   += $(call cc-option,-Werror=designated-init)
++ifeq ($(cc-name),clang)
++KBUILD_CFLAGS   += $(call cc-option,-Wno-error=deprecated-non-prototype)
++KBUILD_CFLAGS   += $(call cc-option,-Wno-error=strict-prototypes)
++KBUILD_CFLAGS   += $(call cc-option,-Wno-error=unused-but-set-variable)
++KBUILD_CFLAGS   += $(call cc-option,-Wno-error=single-bit-bitfield-constant-conversion)
++endif
+diff --git a/drivers/staging/android/mtk_ion/ion.c b/drivers/staging/android/mtk_ion/ion.c
+index b847854..a8ddc72 100644
+--- a/drivers/staging/android/mtk_ion/ion.c
++++ b/drivers/staging/android/mtk_ion/ion.c
+@@ -727 +727 @@
+-inline is_allocator_svc(struct task_struct *tsk)
++inline int is_allocator_svc(struct task_struct *tsk)
+diff --git a/drivers/staging/android/mtk_ion/ion_priv.h b/drivers/staging/android/mtk_ion/ion_priv.h
+index bff7d35..8ec25a8 100644
+--- a/drivers/staging/android/mtk_ion/ion_priv.h
++++ b/drivers/staging/android/mtk_ion/ion_priv.h
+@@ -552 +552 @@
+-inline is_allocator_svc(struct task_struct *tsk);
++inline int is_allocator_svc(struct task_struct *tsk);

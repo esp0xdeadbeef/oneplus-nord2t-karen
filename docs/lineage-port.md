@@ -9,8 +9,8 @@ verified stock kernel and device trees so ramdisk, display and USB assumptions
 can be tested independently. Set `KAREN_BUILD_SOURCE_KERNEL=true` only after
 that baseline boots.
 
-References to `s-tau` in this assessment record historical build provenance
-and the repository owner's current RAM offload. The host is not a dependency;
+Remote-build references in this assessment record historical build provenance
+and the repository owner's current RAM offload. That host is not a dependency;
 the same commands may run locally or on another suitable machine. See the
 [optional remote-build-host guide](remote-builder.md).
 
@@ -73,7 +73,8 @@ nix build .#karen-full-images
 
 The first derivation extracts only `vendor` and `odm` from the pinned full
 OTA, verifies them against the partition manifest and expands only their
-generic filesystem trees. On `s-tau` on 2026-07-25 it produced:
+generic filesystem trees. On the optional remote host on 2026-07-25 it
+produced:
 
 ```text
 OTA SHA-256:    4ca89d77ce64e09f1b061db69e5589be7ad60d2c0403b2e9217e47862352c41f
@@ -91,7 +92,7 @@ mount table so vendor services can see the OPlus logical and hardware-data
 mounts, while Lineage Recovery continues to use the deliberately reduced
 `TARGET_RECOVERY_FSTAB` and cannot offer sensitive partitions as wipe targets.
 
-The corrected full build completed 117,156 actions on `s-tau` in 1:10:10.
+The corrected full build completed 117,156 actions remotely in 1:10:10.
 The first explicit VINTF audit rejected its framework metadata before any
 phone write. Importing the exact optional device framework matrix from the
 pinned stock `system` image resolved the MediaTek/OPlus declarations but
@@ -128,7 +129,7 @@ Lineage attempt still requires a fresh stock property/layout preflight and
 post-boot hardware evidence.
 
 An earlier full-userspace derivation completed all 164,803 Android build tasks
-on `s-tau` in 1 hour 19 minutes. Its `boot`, `system`, `system_ext`, `product`
+remotely in 1 hour 19 minutes. Its `boot`, `system`, `system_ext`, `product`
 and top-level `vbmeta` images were structurally valid, and the boot audit
 confirmed authenticated ADB plus the exact stock kernel and DTB. The result
 was rejected before hardware use: it generated a 16,510,976-byte `vendor`
@@ -221,8 +222,8 @@ that fastbootd can resize and restore them safely.
 
 ### Verified build and structural audit
 
-The pinned derivation completed successfully on `s-tau` on 2026-07-24. After
-the source graph was present in the Nix store, Android built all 10,263
+The pinned derivation completed successfully on the optional build host on
+2026-07-24. After the source graph was present in the Nix store, Android built all 10,263
 required targets and produced:
 
 ```text
@@ -310,7 +311,7 @@ Lineage-built logical partitions and the matching boot/AVB metadata.
 
 ### Successful inactive-slot recovery boot
 
-The corrected build completed on `s-tau` and produced a 64 MiB `boot.img` with
+The corrected build completed remotely and produced a 64 MiB `boot.img` with
 SHA-256
 `76d44168975a309785a7a60e059b9c1ae52248631a311ff315bb9c4eddac3ad2`.
 Its stock kernel and DTB hashes remained unchanged. The structural audit
@@ -420,8 +421,8 @@ Karen now builds only the Lineage-owned `system`, `system_ext` and `product`
 images as sparse ext4 with explicit free space. The public-OTA-derived
 `vendor` and `odm` images remain byte-exact EROFS prebuilts.
 
-The ext4 candidate passed VINTF and the complete image audit on `s-tau`.
-The auditor converts each sparse image to its expanded form, verifies the ext4
+The ext4 candidate passed VINTF and the complete image audit on the optional
+build host. The auditor converts each sparse image to its expanded form, verifies the ext4
 superblock and required free blocks, and applies the live standard-image
 ceiling to expanded sizes rather than misleading sparse-file sizes. The five
 expanded standard images need 4,935,397,376 bytes, safely below the
@@ -476,7 +477,7 @@ As a headless fallback, the product now accepts an opt-in
 `KAREN_DEBUG_ADB_KEYS` path for one local Android public key while retaining
 `ro.adb.secure=1`. The normal audit rejects such a boot image; an explicit
 private bring-up audit validates that the file contains one Android RSA
-public key. A `s-tau` incremental build produced a complete private bundle,
+public key. An incremental remote build produced a complete private bundle,
 and a hybrid using only its changed boot/top-level-vbmeta pair with the
 installed candidate's other seven images passed the complete AVB and stock
 vendor/odm audit. These key-derived artifacts remain outside Git.
@@ -632,8 +633,8 @@ The flake locks both official repositories and exposes a diagnostic build:
 nix build .#karen-source-kernel-bootimage
 ```
 
-On `s-tau` this reaches the pinned Lineage Soong bootstrap, then stops before
-kernel compilation because generated kernel includes resolve through dangling
+On the optional build host this reaches the pinned Lineage Soong bootstrap,
+then stops before kernel compilation because generated kernel includes resolve through dangling
 links. The published kernel checkout has 102 dangling symlinks, including the
 14 include paths Soong requests at this stage. They target missing components
 such as `vendor/oplus/kernel/oplus_performance`, charger, touchpanel, sensor,

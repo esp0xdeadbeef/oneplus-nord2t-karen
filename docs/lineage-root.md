@@ -93,6 +93,22 @@ It first establishes the same minimal pinned Magisk root when needed, then:
 - leaves Magisk denylist enforcement off as required by Shamiko;
 - adds no package to the denylist unless `--denylist` is repeated explicitly.
 
+The default Vector module is built reproducibly from the pinned source and
+Gradle dependency lock. An owner-signed module produced by the split SOPS
+workflow can be selected only with an explicit matching hash:
+
+```bash
+vector_zip=/private/path/Vector-owner-signed.zip
+nix run .#lineage-root-full -- /path/to/lineage-images \
+  --allow-embedded-adb-key \
+  --persist \
+  --vector-module "$vector_zip" \
+  --vector-module-sha256 "$(sha256sum "$vector_zip" | cut -d' ' -f1)"
+```
+
+The same two flags are available on `stock-root-full`. They are deliberately
+absent from minimal-root and unroot helpers.
+
 Shell root must be approved in the Magisk app before the full helper can
 install modules. Use minimal root while debugging Lineage itself; use the full
 profile only when concealment behavior is the thing being tested.
