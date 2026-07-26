@@ -344,6 +344,34 @@
           ln -s ${shamiko-module} "$out"
         '';
 
+        # OnePlus published the MT6893 DWS hardware descriptions but omitted
+        # MediaTek's generated cust.dtsi outputs and DCT generator. The
+        # community Lineage 21 kernel retained the generated GPL-2.0 files.
+        # oneplusControlKernelSource verifies that the four corresponding DWS
+        # inputs are byte-identical before making these outputs available.
+        mtkDctGenerated = {
+          k6893v1_64_k419 = pkgs.fetchurl {
+            name = "k6893v1_64_k419-cust.dtsi";
+            url = "https://raw.githubusercontent.com/mt6893-development/android_kernel_oplus_mt6893/1dfa6bf0946e631d4845570d934323fbd92ad283/arch/arm64/boot/dts/k6893v1_64_k419/cust.dtsi";
+            hash = "sha256-dF+3AIChrFIwiYycTt8yRI2O1ML9hzC49lRVjgIVbQ0=";
+          };
+          oplus6893_21127 = pkgs.fetchurl {
+            name = "oplus6893_21127-cust.dtsi";
+            url = "https://raw.githubusercontent.com/mt6893-development/android_kernel_oplus_mt6893/1dfa6bf0946e631d4845570d934323fbd92ad283/arch/arm64/boot/dts/oplus6893_21127/cust.dtsi";
+            hash = "sha256-W8CoWdRsrzX/QplNaTe/pTDc3XqNfFndZNr6tsEOkVs=";
+          };
+          oplus6893_21881 = pkgs.fetchurl {
+            name = "oplus6893_21881-cust.dtsi";
+            url = "https://raw.githubusercontent.com/mt6893-development/android_kernel_oplus_mt6893/1dfa6bf0946e631d4845570d934323fbd92ad283/arch/arm64/boot/dts/oplus6893_21881/cust.dtsi";
+            hash = "sha256-M3pIpBnt52WO0xjgQKzhG4tej8B8M5h+8/YzRjJO1MU=";
+          };
+          oplus6893_21305 = pkgs.fetchurl {
+            name = "oplus6893_21305-cust.dtsi";
+            url = "https://raw.githubusercontent.com/mt6893-development/android_kernel_oplus_mt6893/1dfa6bf0946e631d4845570d934323fbd92ad283/arch/arm64/boot/dts/oplus6893_21305/cust.dtsi";
+            hash = "sha256-mZO5lhMLInYdJOM78ZMvxpHvQprydNP1VI+WcJmsQdc=";
+          };
+        };
+
         oneplusKernelSource = pkgs.runCommand "oneplus-karen-kernel-source" {} ''
           ln -s ${oneplus-kernel-source} "$out"
         '';
@@ -355,6 +383,29 @@
             cp --no-preserve=ownership --reflink=auto -r \
               ${oneplus-kernel-source} "$out"
             chmod -R u+w "$out"
+            dws_directory="$out/drivers/misc/mediatek/dws/mt6885"
+            printf '%s  %s\n' \
+              a5e55198fe8a90e8046b21f5e984d52e81a5075ff2bf5520fbb3a4ec8674ec61 \
+              "$dws_directory/k6893v1_64_k419.dws" \
+              a54453616389c50f7ea1c6157a3e0726f20934142b544772915f771689ebd4d7 \
+              "$dws_directory/oplus6893_21127.dws" \
+              16299a75f3b0618a6bd63f75269bc8c73013766ca7b1338030c985fcc6bb30ae \
+              "$dws_directory/oplus6893_21881.dws" \
+              fc4f2284f804f92f8bafb619167bf17d9f3b00dd25099394540f6b0435ddf14a \
+              "$dws_directory/oplus6893_21305.dws" |
+              sha256sum --check --strict
+            install -D -m 0644 \
+              ${mtkDctGenerated.k6893v1_64_k419} \
+              "$out/arch/arm64/boot/dts/k6893v1_64_k419/cust.dtsi"
+            install -D -m 0644 \
+              ${mtkDctGenerated.oplus6893_21127} \
+              "$out/arch/arm64/boot/dts/oplus6893_21127/cust.dtsi"
+            install -D -m 0644 \
+              ${mtkDctGenerated.oplus6893_21881} \
+              "$out/arch/arm64/boot/dts/oplus6893_21881/cust.dtsi"
+            install -D -m 0644 \
+              ${mtkDctGenerated.oplus6893_21305} \
+              "$out/arch/arm64/boot/dts/oplus6893_21305/cust.dtsi"
             patch --batch --forward --fuzz=0 -d "$out" -p1 \
               <${./nixos/patches/kernel/0001-clang-fix-control-kernel-errors.patch}
             patch --batch --forward --fuzz=0 -d "$out" -p1 \
