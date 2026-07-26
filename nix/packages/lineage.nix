@@ -347,7 +347,7 @@
         installPhase = ''
           bash \
             ${repositoryRoot + /scripts/audit-lineage-vintf} \
-            "$ANDROID_BUILD_TOP"
+            "$rootDir"
           mkdir -p "$out"
           for image in \
             boot system system_ext product vendor odm \
@@ -424,7 +424,7 @@
       installPhase = ''
         bash \
           ${repositoryRoot + /scripts/audit-lineage-vintf} \
-          "$ANDROID_BUILD_TOP"
+          "$rootDir"
         kernel_object="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ"
         effective_config="$kernel_object/.config"
         grep -Fxq 'CONFIG_KEXEC=y' "$effective_config"

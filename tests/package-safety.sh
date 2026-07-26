@@ -254,6 +254,18 @@ grep -Fxq 'CONFIG_KEXEC=y' \
 grep -Fq "grep -Fxq 'CONFIG_KEXEC=y' \"\$effective_config\"" \
   "$lineage_packages"
 grep -Fq 'kernel.config' "$lineage_packages"
+# shellcheck disable=SC2016
+if grep -Fq '$ANDROID_BUILD_TOP' "$lineage_packages"; then
+  echo "Robotnix install phases must use the exported rootDir." >&2
+  exit 1
+fi
+# shellcheck disable=SC2016
+if [[ "$(grep -Fc '"$rootDir"' "$lineage_packages")" -ne 2 ]]; then
+  echo "Every full-image install phase must audit its exported rootDir." >&2
+  exit 1
+fi
+grep -Fq 'kernel_gate=not-part-of-vintf-audit' \
+  "$script_directory/scripts/audit-lineage-vintf"
 grep -Fq 'nwpower_unsl_blacklist_reject(void)' "$nixos_kernel_packages"
 grep -Fq 'oplus_match_modem_wakeup(void)' "$nixos_kernel_packages"
 grep -Fq 'CONFIG_NC_EXTRA y' "$nixos_kernel_packages"
