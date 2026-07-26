@@ -89,9 +89,10 @@ BOARD_MKBOOTIMG_ARGS += --header_version $(BOARD_BOOT_HEADER_VERSION)
 ifeq ($(KAREN_BUILD_SOURCE_KERNEL),true)
 BOARD_KERNEL_IMAGE_NAME := Image.gz
 TARGET_KERNEL_SOURCE := kernel/oneplus/mt6893
-# This derived defconfig is the pinned OnePlus baseline plus the reviewed
-# Mobile NixOS control-kernel fragment, including classic CONFIG_KEXEC=y.
-TARGET_KERNEL_CONFIG := k6893v1_64_k419_nixos_control_defconfig
+# This derived defconfig is the pinned OnePlus virtual-A/B baseline plus the
+# reviewed Mobile NixOS control-kernel fragment, including classic
+# CONFIG_KEXEC=y.
+TARGET_KERNEL_CONFIG := k6893v1_64_k419_ab_nixos_control_defconfig
 TARGET_KERNEL_CLANG_VERSION := r487747c
 TARGET_KERNEL_ADDITIONAL_FLAGS := LLVM=1 LLVM_IAS=1 DEPMOD=depmod
 else

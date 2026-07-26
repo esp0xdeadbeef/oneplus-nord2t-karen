@@ -202,8 +202,11 @@ grep -Fq 'source.dirs."external/chromium-webview/prebuilt/arm64".src' \
   "$robotnix_device"
 grep -Fq 'lib.mkForce webviewSource;' "$robotnix_device"
 grep -Fq \
-  'TARGET_KERNEL_CONFIG := k6893v1_64_k419_nixos_control_defconfig' \
+  'TARGET_KERNEL_CONFIG := k6893v1_64_k419_ab_nixos_control_defconfig' \
   "$board_config"
+grep -Fq \
+  'k6893v1_64_k419_ab_defconfig' \
+  "$script_directory/flake.nix"
 grep -Fxq 'CONFIG_KEXEC=y' \
   "$script_directory/nixos/families/mt6893/kernel/nixos-control.config"
 grep -Fq "grep -Fxq 'CONFIG_KEXEC=y' \"\$effective_config\"" \

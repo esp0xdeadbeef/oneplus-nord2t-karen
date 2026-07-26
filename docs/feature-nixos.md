@@ -614,8 +614,12 @@ overlay. It supplies userspace tooling only. It does not add the kexec syscall
 or device-specific shutdown support to the running kernel.
 
 The published
-[`k6893v1_64_k419_defconfig`](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6893/blob/a5cdca1a88dc328a44dee724193830254fc551da/arch/arm64/configs/k6893v1_64_k419_defconfig)
+[`k6893v1_64_k419_ab_defconfig`](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6893/blob/a5cdca1a88dc328a44dee724193830254fc551da/arch/arm64/configs/k6893v1_64_k419_ab_defconfig)
 does not list `CONFIG_KEXEC`, `CONFIG_KEXEC_FILE` or `CONFIG_CRASH_DUMP`.
+This is the correct OnePlus virtual-A/B baseline for Karen: unlike the generic
+MT6893 defconfig, it selects the 21127/21881-era DTBO and display feature set.
+Using the generic baseline leaves its OPlus display and battery callers paired
+with the wrong guarded implementations and fails at the final kernel link.
 OnePlus's ARM64
 [Kconfig](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6893/blob/a5cdca1a88dc328a44dee724193830254fc551da/arch/arm64/Kconfig#L930)
 does contain the classic `kexec_load` implementation, but it is an optional

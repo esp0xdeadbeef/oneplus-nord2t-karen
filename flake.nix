@@ -403,9 +403,9 @@
                 'extern Eeprom_DistortionParamsRead(' \
                 'extern void Eeprom_DistortionParamsRead('
             done
-            control_defconfig="$out/arch/arm64/configs/k6893v1_64_k419_nixos_control_defconfig"
+            control_defconfig="$out/arch/arm64/configs/k6893v1_64_k419_ab_nixos_control_defconfig"
             cp \
-              "$out/arch/arm64/configs/k6893v1_64_k419_defconfig" \
+              "$out/arch/arm64/configs/k6893v1_64_k419_ab_defconfig" \
               "$control_defconfig"
             cat ${./nixos/families/mt6893/kernel/nixos-control.config} \
               >>"$control_defconfig"
