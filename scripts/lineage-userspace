@@ -8,6 +8,7 @@ usage() {
 usage:
   nord2t-lineage-userspace install LINEAGE_DIR STOCK_RESTORE_DIR
                                     [--cleanup-stale-cow]
+                                    [--expected-kernel-sha256 SHA256]
                                     [--stay-bootloader] [--yes]
   nord2t-lineage-userspace restore STOCK_RESTORE_DIR [--yes]
 
@@ -55,6 +56,7 @@ shift
 assume_yes=false
 stay_bootloader=false
 cleanup_stale_cow=false
+expected_kernel_sha256=
 
 case "$action" in
   install)
@@ -90,6 +92,14 @@ while [[ $# -gt 0 ]]; do
       cleanup_stale_cow=true
       shift
       ;;
+    --expected-kernel-sha256)
+      [[ $# -ge 2 ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      [[ "$2" =~ ^[0-9a-f]{64}$ ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      expected_kernel_sha256="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown option: $1" >&2
       usage
@@ -103,6 +113,9 @@ if [[ "$action" != install && "$stay_bootloader" == true ]]; then
 fi
 if [[ "$action" != install && "$cleanup_stale_cow" == true ]]; then
   fail "--cleanup-stale-cow is valid only for install"
+fi
+if [[ "$action" != install && -n "$expected_kernel_sha256" ]]; then
+  fail "--expected-kernel-sha256 is valid only for install"
 fi
 
 partition_manifest="${PARTITION_MANIFEST:-@PARTITION_MANIFEST@}"
@@ -157,6 +170,9 @@ if [[ "$action" == install ]]; then
   )
   if [[ "$cleanup_stale_cow" == true ]]; then
     preflight_arguments+=(--allow-stale-cow)
+  fi
+  if [[ -n "$expected_kernel_sha256" ]]; then
+    preflight_arguments+=(--expected-kernel-sha256 "$expected_kernel_sha256")
   fi
   nord2t-preflight-lineage-userspace "${preflight_arguments[@]}"
 else

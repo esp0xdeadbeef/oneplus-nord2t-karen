@@ -7,6 +7,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: nord2t-audit-lineage-images [--allow-embedded-adb-key]
                                    [--allow-permissive-selinux]
+                                   [--expected-kernel-sha256 SHA256]
                                    IMAGE_DIR
 
 Audit a complete Karen full-userspace image directory before any hardware
@@ -25,6 +26,7 @@ fail() {
 
 allow_embedded_adb_key=false
 allow_permissive_selinux=false
+expected_kernel_sha256=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --allow-embedded-adb-key)
@@ -34,6 +36,14 @@ while [[ $# -gt 0 ]]; do
     --allow-permissive-selinux)
       allow_permissive_selinux=true
       shift
+      ;;
+    --expected-kernel-sha256)
+      [[ $# -ge 2 ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      [[ "$2" =~ ^[0-9a-f]{64}$ ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      expected_kernel_sha256="$2"
+      shift 2
       ;;
     -*)
       usage
@@ -180,6 +190,9 @@ if [[ "$allow_embedded_adb_key" == true ]]; then
 fi
 if [[ "$allow_permissive_selinux" == true ]]; then
   boot_audit_arguments+=(--allow-permissive-selinux)
+fi
+if [[ -n "$expected_kernel_sha256" ]]; then
+  boot_audit_arguments+=(--expected-kernel-sha256 "$expected_kernel_sha256")
 fi
 nord2t-audit-boot \
   "${boot_audit_arguments[@]}" \

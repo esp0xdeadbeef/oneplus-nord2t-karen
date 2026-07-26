@@ -32,19 +32,20 @@ routes derive the files from the `stock-firmware-3001` flake input, verify the
 OTA and partition hashes from the manifests, and unpack the kernel and DTB from
 the verified `boot.img`.
 
-For a fully Nix-managed result, build the prepared device tree directly:
+For a fully Nix-managed result, build and export the prepared device tree:
 
 ```sh
-nix build .#karen-device-tree
+nix run .#karen-device-tree
 ```
 
-The resulting tree is immutable in `/nix/store`; build scratch data stays in
-the Nix sandbox. The experimental `.#karen-bootimage` target additionally uses
-Robotnix's locked Lineage 21 source set, builds `bootimage` in a Nix derivation,
-and writes only the resulting `boot.img` to the store:
+The build closure remains immutable in `/nix/store`; the app exports a
+reviewable `result-karen-device-tree` directory and build scratch data stays
+in the Nix sandbox. The experimental `.#karen-bootimage` target additionally
+uses Robotnix's locked Lineage 21 source set, builds `bootimage` in a Nix
+derivation and exports only the resulting `boot.img`:
 
 ```sh
-nix build .#karen-bootimage
+nix run .#karen-bootimage
 ```
 
 Robotnix's upstream Lineage lock includes TheMuppets vendor repositories for
@@ -660,38 +661,57 @@ remove the kernel-maintenance work.
 Both hashes are still the tips of OnePlus's only Android 14 Nord 2T branches
 as checked on 2026-07-25; there is no newer official Karen kernel source to
 select. The published tree itself identifies as 4.19.191. A practical update
-track is therefore: first reconstruct the missing OPlus source layer and boot
-that exact source baseline, then forward-port applicable maintained 4.19
-security fixes with hardware regression tests. Rebasing Karen directly to a
-current 5.10, 6.x or mainline kernel would require porting the MediaTek/OPlus
-display, camera, modem/IMS, audio, charging, touch, sensors and power stack and
-must be treated as a separate platform port.
+track is therefore: first boot the now reproducible combined official kernel
+and module baseline, then forward-port applicable maintained 4.19 security
+fixes with hardware regression tests. Rebasing Karen directly to a current
+5.10, 6.x or mainline kernel would require porting the MediaTek/OPlus display,
+camera, modem/IMS, audio, charging, touch, sensors and power stack and must be
+treated as a separate platform port.
 
 ### Reproducible source-kernel gate
 
-The flake locks both official repositories and exposes a diagnostic build:
+The flake locks both official repositories and exposes a runnable diagnostic
+build:
 
 ```sh
-nix build .#karen-source-kernel-bootimage
+nix run .#karen-source-kernel-bootimage
 ```
 
-On the optional build host this reaches the pinned Lineage Soong bootstrap,
-then stops before kernel compilation because generated kernel includes resolve through dangling
-links. The published kernel checkout has 102 dangling symlinks, including the
-14 include paths Soong requests at this stage. They target missing components
-such as `vendor/oplus/kernel/oplus_performance`, charger, touchpanel, sensor,
-secure, storage and audio sources. The separately published matching module
-repository contains `vendor/mediatek/kernel_modules`; it does not supply the
-referenced `vendor/oplus` tree.
+The earlier source-layout gate is closed. The matching OnePlus module
+repository contains both `vendor/mediatek/kernel_modules` and the required
+`vendor/oplus` charger, touch, sensor, security, storage, audio and performance
+sources. Robotnix now mounts each at the include path expected by the kernel.
 
-This is an upstream source-completeness gate, not a compiler error. Creating
-empty targets would be invalid because the selected defconfig enables the
-corresponding OPlus features. Importing similarly named source from an
-unrelated Oppo product would also lose device and release provenance. Until a
-matching reviewable source layer is available, recovery and initial full
-Lineage bring-up must retain the already verified `.3001` stock kernel, DTB
-and DTBO. Such a build can establish userspace compatibility on this test
-phone, but it cannot satisfy the eventual source-built-kernel requirement.
+OnePlus did omit MediaTek's DCT generator and four generated `cust.dtsi`
+outputs while publishing the corresponding DWS hardware descriptions. The
+flake fetches those GPL-2.0 generated files from the pinned community kernel
+and first verifies that all four OnePlus DWS inputs are byte-identical. It
+then applies ten small reviewed strict-compiler, type and Lineage path fixes;
+it does not create empty OPlus implementations or import a different product
+kernel.
+
+The clean optional-host build completed successfully in 11 minutes. It
+produced a 64 MiB `boot.img`, an 18,821,574-byte kernel and the effective
+configuration. Their SHA-256 values are:
+
+```text
+boot.img      4420a5a503df9d96f8737ab6768b7ac7eb031b60e4d5f406d32aa703610c04ac
+kernel        0ec542e43f759a6d69eb81a1995ef056052b9b2655c6a1a43c6243c117e7b3a6
+kernel.config eb1876edb00b7b1a9d615792ab3f49c9fb1e71e44d76f4ead5df2da27686c673
+```
+
+The effective config contains `CONFIG_KEXEC=y`, `CONFIG_KEXEC_CORE=y`,
+devtmpfs, file handles and the requested cgroup controllers. The boot image
+retains the exact stock DTB and passes the structural audit when its explicit
+kernel hash and temporary `--allow-insecure-adb` exception are supplied.
+Without that exception, the audit correctly rejects `ro.adb.secure=0`.
+
+This diagnostic output is build evidence, not a flash candidate. Its recovery
+ramdisk is insecure, has no owner ADB key and is not the requested
+Magisk/root-full boot. The next image must reuse the successful kernel in the
+normal secure key-bound Lineage ramdisk, produce matching AVB metadata and
+pass the source-kernel form of the image audit documented in
+[LineageOS root and unroot](lineage-root.md).
 
 The verified full Android 14 OTA in this repository's manifest is the preferred
 source for matching proprietary blobs. Rooting the currently installed system

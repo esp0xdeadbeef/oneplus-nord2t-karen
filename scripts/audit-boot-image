@@ -8,6 +8,7 @@ usage() {
 usage: nord2t-audit-boot [--allow-insecure-adb]
                          [--allow-embedded-adb-key]
                          [--allow-permissive-selinux]
+                         [--expected-kernel-sha256 SHA256]
                          CANDIDATE_BOOT_IMG [STOCK_BOOT_IMG]
 
 Audit a Karen recovery-as-boot image against the pinned CPH2399 .3001 stock
@@ -17,6 +18,8 @@ explicit flag is supplied for a temporary, unlocked bring-up image. An
 embedded public ADB host key is independently rejected unless its explicit
 bring-up flag is supplied. A permissive SELinux kernel command line is
 independently rejected unless its private diagnostic flag is supplied.
+The candidate kernel must match pinned stock unless an explicit reviewed
+source-kernel SHA-256 is supplied.
 EOF
 }
 
@@ -28,6 +31,7 @@ fail() {
 allow_insecure_adb=false
 allow_embedded_adb_key=false
 allow_permissive_selinux=false
+expected_kernel_sha256=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --allow-insecure-adb)
@@ -41,6 +45,14 @@ while [[ $# -gt 0 ]]; do
     --allow-permissive-selinux)
       allow_permissive_selinux=true
       shift
+      ;;
+    --expected-kernel-sha256)
+      [[ $# -ge 2 ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      [[ "$2" =~ ^[0-9a-f]{64}$ ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      expected_kernel_sha256="$2"
+      shift 2
       ;;
     -h | --help)
       usage
@@ -174,8 +186,17 @@ fi
 [[ "$(<"$candidate_prefix-cmdline")" == "$expected_cmdline" ]] ||
   fail "unexpected kernel command line"
 
-cmp -s "$candidate_prefix-kernel" "$stock_prefix-kernel" ||
-  fail "candidate kernel is not byte-identical to pinned stock"
+candidate_kernel_sha256="$(
+  sha256sum "$candidate_prefix-kernel" |
+    cut -d' ' -f1
+)"
+if [[ -n "$expected_kernel_sha256" ]]; then
+  [[ "$candidate_kernel_sha256" == "$expected_kernel_sha256" ]] ||
+    fail "candidate kernel does not match the explicit reviewed SHA-256"
+else
+  cmp -s "$candidate_prefix-kernel" "$stock_prefix-kernel" ||
+    fail "candidate kernel is not byte-identical to pinned stock"
+fi
 cmp -s "$candidate_prefix-dtb" "$stock_prefix-dtb" ||
   fail "candidate DTB is not byte-identical to pinned stock"
 
@@ -338,7 +359,7 @@ if grep -Eq \
 fi
 
 candidate_hash="$(sha256sum "$candidate_image" | cut -d' ' -f1)"
-kernel_hash="$(sha256sum "$candidate_prefix-kernel" | cut -d' ' -f1)"
+kernel_hash="$candidate_kernel_sha256"
 dtb_hash="$(sha256sum "$candidate_prefix-dtb" | cut -d' ' -f1)"
 avb_algorithm="$(
   awk -F: '/^Algorithm:/ {

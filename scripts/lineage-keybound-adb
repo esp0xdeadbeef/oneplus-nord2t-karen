@@ -7,8 +7,10 @@ usage() {
   cat >&2 <<'EOF'
 usage:
   nord2t-lineage-keybound-adb install KEYBOUND_DIR BASE_DIR
-    [--allow-permissive-selinux] [--stay-bootloader] [--yes]
-  nord2t-lineage-keybound-adb restore BASE_DIR [--yes]
+    [--allow-permissive-selinux] [--expected-kernel-sha256 SHA256]
+    [--stay-bootloader] [--yes]
+  nord2t-lineage-keybound-adb restore BASE_DIR
+    [--expected-kernel-sha256 SHA256] [--yes]
 
 Install a private, authenticated-ADB boot/vbmeta pair over the already
 installed audited BASE_DIR userspace. Restore writes the original BASE_DIR
@@ -43,6 +45,7 @@ shift
 assume_yes=false
 allow_permissive_selinux=false
 stay_bootloader=false
+expected_kernel_sha256=
 
 case "$action" in
   install)
@@ -73,6 +76,14 @@ while [[ $# -gt 0 ]]; do
     --allow-permissive-selinux)
       allow_permissive_selinux=true
       shift
+      ;;
+    --expected-kernel-sha256)
+      [[ $# -ge 2 ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      [[ "$2" =~ ^[0-9a-f]{64}$ ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      expected_kernel_sha256="$2"
+      shift 2
       ;;
     --stay-bootloader)
       stay_bootloader=true
@@ -118,15 +129,23 @@ audit_bundle() {
   fail "$label image audit did not pass"
 }
 
+base_audit_arguments=()
+if [[ -n "$expected_kernel_sha256" ]]; then
+  base_audit_arguments+=(--expected-kernel-sha256 "$expected_kernel_sha256")
+fi
 audit_bundle \
   base \
   "$temporary_directory/base-audit.txt" \
+  "${base_audit_arguments[@]}" \
   "$base_directory"
 
 if [[ "$action" == install ]]; then
   keybound_audit_arguments=(--allow-embedded-adb-key)
   if [[ "$allow_permissive_selinux" == true ]]; then
     keybound_audit_arguments+=(--allow-permissive-selinux)
+  fi
+  if [[ -n "$expected_kernel_sha256" ]]; then
+    keybound_audit_arguments+=(--expected-kernel-sha256 "$expected_kernel_sha256")
   fi
   audit_bundle \
     key-bound \

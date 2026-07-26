@@ -8,6 +8,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: nord2t-lineage-root-full IMAGE_DIR --persist
        [--allow-embedded-adb-key] [--yes]
+       [--expected-kernel-sha256 SHA256]
        [--vector-module FILE --vector-module-sha256 SHA256]
        [--denylist PACKAGE[:PROCESS]]...
 
@@ -40,6 +41,7 @@ image_directory="$(realpath "$1")"
 shift
 persist=false
 allow_embedded_adb_key=false
+expected_kernel_sha256=
 assume_yes=false
 denylist_targets=()
 vector_module_override=
@@ -54,6 +56,14 @@ while [[ $# -gt 0 ]]; do
     --allow-embedded-adb-key)
       allow_embedded_adb_key=true
       shift
+      ;;
+    --expected-kernel-sha256)
+      [[ $# -ge 2 ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      [[ "$2" =~ ^[0-9a-f]{64}$ ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      expected_kernel_sha256="$2"
+      shift 2
       ;;
     --yes)
       assume_yes=true
@@ -160,6 +170,10 @@ root_arguments=()
 if [[ "$allow_embedded_adb_key" == true ]]; then
   audit_arguments+=(--allow-embedded-adb-key)
   root_arguments+=(--allow-embedded-adb-key)
+fi
+if [[ -n "$expected_kernel_sha256" ]]; then
+  audit_arguments+=(--expected-kernel-sha256 "$expected_kernel_sha256")
+  root_arguments+=(--expected-kernel-sha256 "$expected_kernel_sha256")
 fi
 nord2t-audit-lineage-images \
   "${audit_arguments[@]}" \

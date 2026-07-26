@@ -1267,105 +1267,173 @@
     );
 
     apps = eachSystem (
-      {system, ...}: {
-        default = self.apps.${system}.audit-lineage-runtime;
-        adb-key-generator = {
+      {
+        pkgs,
+        system,
+        ...
+      }: let
+        mkArtifactApp = {
+          artifact,
+          defaultDirectory,
+          name,
+        }: let
+          runner = pkgs.writeShellApplication {
+            name = "nord2t-export-${name}";
+            runtimeInputs = [pkgs.coreutils];
+            text = ''
+              if (( $# > 1 )); then
+                echo "Usage: nord2t-export-${name} [OUTPUT_DIRECTORY]" >&2
+                exit 2
+              fi
+
+              destination="''${1:-$PWD/${defaultDirectory}}"
+              if [[ -e "$destination" || -L "$destination" ]]; then
+                echo "Refusing to overwrite existing output: $destination" >&2
+                exit 1
+              fi
+
+              parent="$(dirname -- "$destination")"
+              basename="$(basename -- "$destination")"
+              mkdir -p -- "$parent"
+              temporary="$(mktemp -d --tmpdir="$parent" ".''${basename}.tmp.XXXXXX")"
+              cleanup() {
+                rm -rf -- "$temporary"
+              }
+              trap cleanup EXIT
+
+              cp -a --reflink=auto ${artifact}/. "$temporary/"
+              chmod -R u+w "$temporary"
+              mv -T -- "$temporary" "$destination"
+              trap - EXIT
+              echo "Exported ${name} to $destination"
+            '';
+          };
+        in {
           type = "app";
-          program = "${self.packages.${system}.adb-key-generator}/bin/nord2t-adb-key-generator";
+          program = "${runner}/bin/nord2t-export-${name}";
         };
-        vector-signing-key-generator = {
-          type = "app";
-          program = "${self.packages.${system}.vector-signing-key-generator}/bin/nord2t-vector-signing-key-generator";
-        };
-        vector-owner-build-intermediate = {
-          type = "app";
-          program = "${self.packages.${system}.vector-owner-build-intermediate}/bin/nord2t-vector-owner-build-intermediate";
-        };
-        vector-owner-sign = {
-          type = "app";
-          program = "${self.packages.${system}.vector-owner-sign}/bin/nord2t-vector-owner-sign";
-        };
-        android-fhs = {
-          type = "app";
-          program = "${self.packages.${system}.android-fhs}/bin/nord2t-android-fhs";
-        };
-        extract-stock = {
-          type = "app";
-          program = "${self.packages.${system}.extract-stock}/bin/nord2t-extract-stock";
-        };
-        install-aurora = {
-          type = "app";
-          program = "${self.packages.${system}.install-aurora}/bin/nord2t-install-aurora";
-        };
-        lineage-userspace = {
-          type = "app";
-          program = "${self.packages.${system}.lineage-userspace}/bin/nord2t-lineage-userspace";
-        };
-        lineage-keybound-adb = {
-          type = "app";
-          program = "${self.packages.${system}.lineage-keybound-adb}/bin/nord2t-lineage-keybound-adb";
-        };
-        lineage-root = {
-          type = "app";
-          program = "${self.packages.${system}.lineage-root}/bin/nord2t-lineage-root";
-        };
-        lineage-root-full = {
-          type = "app";
-          program = "${self.packages.${system}.lineage-root-full}/bin/nord2t-lineage-root-full";
-        };
-        lineage-unroot = {
-          type = "app";
-          program = "${self.packages.${system}.lineage-unroot}/bin/nord2t-lineage-unroot";
-        };
-        audit-boot = {
-          type = "app";
-          program = "${self.packages.${system}.audit-boot}/bin/nord2t-audit-boot";
-        };
-        audit-lineage-images = {
-          type = "app";
-          program = "${self.packages.${system}.audit-lineage-images}/bin/nord2t-audit-lineage-images";
-        };
-        audit-lineage-runtime = {
-          type = "app";
-          program = "${self.packages.${system}.audit-lineage-runtime}/bin/nord2t-audit-lineage-runtime";
-        };
-        preflight-lineage-userspace = {
-          type = "app";
-          program = "${self.packages.${system}.preflight-lineage-userspace}/bin/nord2t-preflight-lineage-userspace";
-        };
-        probe-preloader = {
-          type = "app";
-          program = "${self.packages.${system}.probe-preloader}/bin/nord2t-probe-preloader";
-        };
-        read-gpt = {
-          type = "app";
-          program = "${self.packages.${system}.read-gpt}/bin/nord2t-read-gpt";
-        };
-        snapshot = {
-          type = "app";
-          program = "${self.packages.${system}.snapshot}/bin/nord2t-snapshot";
-        };
-        stock-root = {
-          type = "app";
-          program = "${self.packages.${system}.stock-root}/bin/nord2t-stock-root";
-        };
-        stock-root-full = {
-          type = "app";
-          program = "${self.packages.${system}.stock-root-full}/bin/nord2t-stock-root-full";
-        };
-        stock-unroot = {
-          type = "app";
-          program = "${self.packages.${system}.stock-unroot}/bin/nord2t-stock-unroot";
-        };
-        owner-sign-apk = {
-          type = "app";
-          program = "${self.packages.${system}.owner-sign-apk}/bin/nord2t-owner-sign-apk";
-        };
-        verify-firmware = {
-          type = "app";
-          program = "${self.packages.${system}.verify-firmware}/bin/nord2t-verify-firmware";
-        };
-      }
+      in
+        {
+          default = self.apps.${system}.audit-lineage-runtime;
+          adb-key-generator = {
+            type = "app";
+            program = "${self.packages.${system}.adb-key-generator}/bin/nord2t-adb-key-generator";
+          };
+          vector-signing-key-generator = {
+            type = "app";
+            program = "${self.packages.${system}.vector-signing-key-generator}/bin/nord2t-vector-signing-key-generator";
+          };
+          vector-owner-build-intermediate = {
+            type = "app";
+            program = "${self.packages.${system}.vector-owner-build-intermediate}/bin/nord2t-vector-owner-build-intermediate";
+          };
+          vector-owner-sign = {
+            type = "app";
+            program = "${self.packages.${system}.vector-owner-sign}/bin/nord2t-vector-owner-sign";
+          };
+          android-fhs = {
+            type = "app";
+            program = "${self.packages.${system}.android-fhs}/bin/nord2t-android-fhs";
+          };
+          extract-stock = {
+            type = "app";
+            program = "${self.packages.${system}.extract-stock}/bin/nord2t-extract-stock";
+          };
+          install-aurora = {
+            type = "app";
+            program = "${self.packages.${system}.install-aurora}/bin/nord2t-install-aurora";
+          };
+          lineage-userspace = {
+            type = "app";
+            program = "${self.packages.${system}.lineage-userspace}/bin/nord2t-lineage-userspace";
+          };
+          lineage-keybound-adb = {
+            type = "app";
+            program = "${self.packages.${system}.lineage-keybound-adb}/bin/nord2t-lineage-keybound-adb";
+          };
+          lineage-root = {
+            type = "app";
+            program = "${self.packages.${system}.lineage-root}/bin/nord2t-lineage-root";
+          };
+          lineage-root-full = {
+            type = "app";
+            program = "${self.packages.${system}.lineage-root-full}/bin/nord2t-lineage-root-full";
+          };
+          lineage-unroot = {
+            type = "app";
+            program = "${self.packages.${system}.lineage-unroot}/bin/nord2t-lineage-unroot";
+          };
+          audit-boot = {
+            type = "app";
+            program = "${self.packages.${system}.audit-boot}/bin/nord2t-audit-boot";
+          };
+          audit-lineage-images = {
+            type = "app";
+            program = "${self.packages.${system}.audit-lineage-images}/bin/nord2t-audit-lineage-images";
+          };
+          audit-lineage-runtime = {
+            type = "app";
+            program = "${self.packages.${system}.audit-lineage-runtime}/bin/nord2t-audit-lineage-runtime";
+          };
+          preflight-lineage-userspace = {
+            type = "app";
+            program = "${self.packages.${system}.preflight-lineage-userspace}/bin/nord2t-preflight-lineage-userspace";
+          };
+          probe-preloader = {
+            type = "app";
+            program = "${self.packages.${system}.probe-preloader}/bin/nord2t-probe-preloader";
+          };
+          read-gpt = {
+            type = "app";
+            program = "${self.packages.${system}.read-gpt}/bin/nord2t-read-gpt";
+          };
+          snapshot = {
+            type = "app";
+            program = "${self.packages.${system}.snapshot}/bin/nord2t-snapshot";
+          };
+          stock-root = {
+            type = "app";
+            program = "${self.packages.${system}.stock-root}/bin/nord2t-stock-root";
+          };
+          stock-root-full = {
+            type = "app";
+            program = "${self.packages.${system}.stock-root-full}/bin/nord2t-stock-root-full";
+          };
+          stock-unroot = {
+            type = "app";
+            program = "${self.packages.${system}.stock-unroot}/bin/nord2t-stock-unroot";
+          };
+          owner-sign-apk = {
+            type = "app";
+            program = "${self.packages.${system}.owner-sign-apk}/bin/nord2t-owner-sign-apk";
+          };
+          verify-firmware = {
+            type = "app";
+            program = "${self.packages.${system}.verify-firmware}/bin/nord2t-verify-firmware";
+          };
+        }
+        // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          karen-bootimage = mkArtifactApp {
+            artifact = self.packages.${system}.karen-bootimage;
+            defaultDirectory = "result-karen-bootimage";
+            name = "karen-bootimage";
+          };
+          karen-device-tree = mkArtifactApp {
+            artifact = self.packages.${system}.karen-device-tree;
+            defaultDirectory = "result-karen-device-tree";
+            name = "karen-device-tree";
+          };
+          karen-full-images = mkArtifactApp {
+            artifact = self.packages.${system}.karen-full-images;
+            defaultDirectory = "result-karen-full-images";
+            name = "karen-full-images";
+          };
+          karen-source-kernel-bootimage = mkArtifactApp {
+            artifact = self.packages.${system}.karen-source-kernel-bootimage;
+            defaultDirectory = "result-karen-source-kernel-bootimage";
+            name = "karen-source-kernel-bootimage";
+          };
+        }
     );
 
     checks = eachSystem (

@@ -40,8 +40,10 @@ grep -Fq 'ramdisk enables the OLED-breaking recovery init power-cycle' \
 grep -Fq 'androidboot.slot_suffix=_a' "$boot_audit"
 grep -Fq -- '--allow-embedded-adb-key' "$boot_audit"
 grep -Fq -- '--allow-permissive-selinux' "$boot_audit"
+grep -Fq -- '--expected-kernel-sha256' "$boot_audit"
 grep -Fq -- '--allow-embedded-adb-key' "$image_audit"
 grep -Fq -- '--allow-permissive-selinux' "$image_audit"
+grep -Fq -- '--expected-kernel-sha256' "$image_audit"
 # shellcheck disable=SC2016
 grep -Fq 'simg2img "$image_directory/$partition.img"' "$image_audit"
 grep -Fq 'minimum_free_bytes' "$image_audit"
@@ -138,6 +140,18 @@ grep -Fq 'vector-module-owner-intermediate' "$vector_owner_build"
 grep -Fq 'repository-root mirror' "$vector_owner_build"
 grep -Fq 'nord2t-read-lineage-system-fingerprint' "$lineage_root"
 grep -Fq 'nord2t-read-lineage-system-fingerprint' "$lineage_root_full"
+for source_kernel_helper in \
+  "$lineage_root" \
+  "$lineage_root_full" \
+  "$lineage_unroot" \
+  "$keybound_helper" \
+  "$userspace_preflight" \
+  "$script_directory/scripts/lineage-userspace"; do
+  grep -Fq -- '--expected-kernel-sha256' "$source_kernel_helper"
+done
+grep -Fq \
+  'candidate kernel does not match the explicit reviewed SHA-256' \
+  "$boot_audit"
 grep -Fq 'nord2t-owner-sign-apk' "$lineage_root_full"
 grep -Fq 'nord2t-owner-sign-apk' \
   "$script_directory/scripts/stock-root-full"

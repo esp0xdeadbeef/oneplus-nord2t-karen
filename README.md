@@ -13,6 +13,9 @@ hardware safety gates are documented in the
 [Mobile NixOS feature plan](docs/feature-nixos.md).
 The initial build-only device metadata and structure-aware DTB patch workspace
 live under [`nixos/`](nixos/README.md); they perform no hardware writes.
+The exact public firmware inventory, DTB/X13s comparison and remaining native
+driver gates are tracked separately in the
+[NixOS blocker matrix](docs/nixos-blockers.md).
 The opinionated MT6893 control-kernel configuration MUST set
 `CONFIG_KEXEC=y`: the pinned stock `.3001` kernel has classic kexec disabled,
 and the Magisk kexec module supplies only the userspace loader. Enabling the
@@ -243,24 +246,29 @@ The repository then adds the local `karen` tree without committing proprietary
 or stock-derived binaries. There are three useful build paths:
 
 ```bash
-# Derive the stock kernel, DTB and DTBO and assemble the device tree.
-nix build .#karen-device-tree
+# Derive the stock kernel, DTB and DTBO and export the device tree.
+nix run .#karen-device-tree
 
-# Realize the locked Lineage source graph and build boot.img in a Nix sandbox.
-nix build .#karen-bootimage
+# Realize the locked Lineage source graph and export boot.img.
+nix run .#karen-bootimage
 
-# Build the full bring-up image set with verified stock vendor/odm.
-nix build .#karen-full-images
+# Build and export the full bring-up image set with verified stock vendor/odm.
+nix run .#karen-full-images
 
-# Reproduce the current official-source kernel gate.
-nix build .#karen-source-kernel-bootimage
+# Build and export the current official-source control kernel.
+nix run .#karen-source-kernel-bootimage
 
 # Compare a candidate with the pinned stock boot image and inspect its ramdisk.
-nix run .#audit-boot -- ./result/boot.img
+nix run .#audit-boot -- ./result-karen-bootimage/boot.img
 
 # Enter the FHS environment for faster, mutable Android-tree iteration.
 nix run .#android-fhs
 ```
+
+Each build app accepts an optional output directory and otherwise uses the
+shown `result-karen-*` name in the current directory. It refuses to overwrite
+an existing path. Nix store paths remain internal dependencies and never need
+to be copied from logs or hardcoded in a command.
 
 `android-fhs` is a filesystem-layout compatibility shim, not an unpinned
 package source. Its host tools are selected from the exact nixpkgs revision in
@@ -598,6 +606,7 @@ by Git.
 - [TWRP image audit](docs/twrp-audit.md)
 - [LineageOS port assessment](docs/lineage-port.md)
 - [Mobile NixOS feature plan](docs/feature-nixos.md)
+- [NixOS firmware, DTB and driver blockers](docs/nixos-blockers.md)
 
 Run all repository checks with:
 

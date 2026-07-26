@@ -51,3 +51,21 @@ Example:
 ```text
 Assisted-by: Claude-Code:claude-opus-4.7
 ```
+
+## Nix command entrypoints
+
+Repository workflows and exported build artifacts SHOULD use the flake's
+`nix run .#APP -- ...` entrypoints. Assistants MUST NOT copy, hardcode or
+discover executable `/nix/store/...` paths for a command that Nix can resolve.
+
+For a short ad-hoc check, use `nix run nixpkgs#PACKAGE -- ...` when the wanted
+executable is the package's main program. If a package exposes several
+programs and the wanted one is not its main program, use:
+
+```text
+nix shell nixpkgs#PACKAGE --command PROGRAM ...
+```
+
+For example, `fdtoverlay` is a secondary executable from `dtc`, so invoke it
+as `nix shell nixpkgs#dtc --command fdtoverlay ...` instead of searching the
+Nix store for its path.

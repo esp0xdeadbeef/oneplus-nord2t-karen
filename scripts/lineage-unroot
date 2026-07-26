@@ -7,6 +7,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: nord2t-lineage-unroot IMAGE_DIR --persist
        [--allow-embedded-adb-key] [--from-fastboot] [--keep-app] [--yes]
+       [--expected-kernel-sha256 SHA256]
 
 Restore the audited enforcing Lineage vbmeta_a/boot_a pair from IMAGE_DIR.
 The normal path starts from authorized Lineage ADB. --from-fastboot is the
@@ -35,6 +36,7 @@ image_directory="$(realpath "$1")"
 shift
 persist=false
 allow_embedded_adb_key=false
+expected_kernel_sha256=
 from_fastboot=false
 keep_app=false
 assume_yes=false
@@ -48,6 +50,14 @@ while [[ $# -gt 0 ]]; do
     --allow-embedded-adb-key)
       allow_embedded_adb_key=true
       shift
+      ;;
+    --expected-kernel-sha256)
+      [[ $# -ge 2 ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      [[ "$2" =~ ^[0-9a-f]{64}$ ]] ||
+        fail "--expected-kernel-sha256 requires a lowercase SHA-256"
+      expected_kernel_sha256="$2"
+      shift 2
       ;;
     --from-fastboot)
       from_fastboot=true
@@ -83,6 +93,9 @@ done
 audit_arguments=()
 if [[ "$allow_embedded_adb_key" == true ]]; then
   audit_arguments+=(--allow-embedded-adb-key)
+fi
+if [[ -n "$expected_kernel_sha256" ]]; then
+  audit_arguments+=(--expected-kernel-sha256 "$expected_kernel_sha256")
 fi
 nord2t-audit-lineage-images \
   "${audit_arguments[@]}" \

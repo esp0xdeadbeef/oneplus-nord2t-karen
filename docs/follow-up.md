@@ -47,6 +47,15 @@ along with the host boundary, rsync flow and artifact-return checks.
   reproducibly stalled Launcher/SystemUI; its native library is denied while
   Vector injects it into `system_server`. Do not automate that scope until the
   framework issue and rollback health check are resolved.
+- The pinned OnePlus 4.19 source plus matching MediaTek/OPlus modules now
+  compiles successfully with the control fragment on the optional build host.
+  The 11-minute build produced a 64 MiB boot image and an effective config
+  with `CONFIG_KEXEC=y`, devtmpfs, file handles and the requested cgroup
+  controllers. Its exported kernel SHA-256 is
+  `0ec542e43f759a6d69eb81a1995ef056052b9b2655c6a1a43c6243c117e7b3a6`.
+  The diagnostic ramdisk has insecure ADB and is not flashable; first
+  repackage that kernel in the normal key-bound Magisk/root-full Lineage
+  bootpair and matching AVB.
 - The earlier exact-stock relock and green/rootless boot completed
   successfully. The bootloader was then deliberately unlocked again, with
   the expected wipe, before installing the current Lineage system. The tested

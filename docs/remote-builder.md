@@ -51,8 +51,8 @@ s-tau ccache:
 The reproducible flake targets need no remote-host setup:
 
 ```sh
-nix build .#karen-bootimage
-nix build .#karen-full-images
+nix run .#karen-bootimage
+nix run .#karen-full-images
 ```
 
 For faster mutable Android iteration, prepare a persistent checkout and use

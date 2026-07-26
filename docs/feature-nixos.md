@@ -274,12 +274,14 @@ Classify each requirement as built-in, module, absent or not needed. A module
 needed before mounting the real root must be included in stage 1 together with
 its dependency and firmware closure.
 
-The published OnePlus MT6893 source build remains independently blocked by
-the missing `vendor/oplus` source layer. NixOS bootstrapping must not weaken
-that fail-closed source-kernel assessment or present the prebuilt stock kernel
-as a reproducible source build. The first required kernel delta is tracked as
-`nixos/families/mt6893/kernel/nixos-control.config`; it enables classic kexec,
-devtmpfs, file handles and the missing cgroup controllers through Kconfig.
+The published OnePlus MT6893 source and module trees now compile together.
+The module tree supplies the previously unresolved `vendor/oplus` layer; four
+omitted generated DCT files are restored only after their published DWS
+inputs are verified byte-identical. The first required kernel delta remains
+tracked as `nixos/families/mt6893/kernel/nixos-control.config`; it enables
+classic kexec, devtmpfs, file handles and the missing cgroup controllers
+through Kconfig. Build success closes the compile gate, not the hardware-boot
+or kexec handoff gates.
 
 ## Kernel source map and fork strategy
 
@@ -537,8 +539,8 @@ Use sources in this order and preserve the distinction in commit messages:
    Karen behavior ground truth.
 2. The pinned OnePlus MT6893 4.19 kernel and module trees define the closest
    published source baseline.
-3. The pinned OnePlus 8T 4.19 OPlus tree is the first donor for reconstructing
-   missing `vendor/oplus` dependencies.
+3. The pinned OnePlus 8T 4.19 OPlus tree is the first donor when a genuinely
+   missing or incomplete Karen OPlus implementation needs API history.
 4. The MT6895 and MT6983 5.10 trees explain the intermediate MediaTek API
    conversion.
 5. The MT6897 6.1 and MT6833 6.6 trees show modern MediaTek and OPlus module
@@ -558,7 +560,8 @@ when source-kernel work starts. Base its Karen branch on
 `a5cdca1a88dc328a44dee724193830254fc551da`. This is the primary vendor-kernel
 fork for:
 
-- reconstructing or replacing the missing `vendor/oplus` dependencies;
+- maintaining the combined official kernel/module integration and replacing
+  only demonstrably incomplete vendor components;
 - enabling and testing kexec where the hardware and effective configuration
   permit it;
 - retaining the exact Android 14 UAPI and firmware relationship;
@@ -639,8 +642,8 @@ Establish each gate independently:
 
 1. Preserve the effective `.3001` config audit and its hash as the negative
    stock baseline.
-2. Reconstruct the missing OPlus source layer and build the pinned 4.19 source
-   with `nixos-control.config`.
+2. Reproduce the successful pinned 4.19 build with
+   `nixos-control.config` and its reviewed source/DCT patches.
 3. Package the control kernel with the exact reviewed DTB/DTBO relationship
    and install it to one recoverable boot slot with its matching AVB metadata.
 4. Confirm `CONFIG_KEXEC=y` in that running kernel and distinguish a syscall,
@@ -926,7 +929,15 @@ networking, ext4, F2FS, device mapper, overlayfs, Binder, binderfs and pstore
 are present. Classic kexec, devtmpfs and file handles are disabled; the
 unmodified stock kernel therefore cannot satisfy the intended first boot.
 
+The 4.19 build-only control-kernel gate is now successful. Its effective
+configuration contains classic kexec, devtmpfs, file handles and the requested
+cgroup controllers, and its DTB remains byte-identical to stock. The generated
+diagnostic recovery ramdisk deliberately has insecure ADB and is neither
+Magisk-rooted nor a flash candidate.
+
 No NixOS boot image, rootfs target or hardware write is authorized by this
-scaffold. The next safe deliverable is reconstruction of the 4.19 OPlus source
-layer and a build-only control-kernel result using the tracked configuration
-fragment. Only then can an audited kexec stage-1 bundle proceed.
+scaffold. The next safe deliverable is a secure key-bound Lineage bootpair
+that combines the successful source kernel with matching AVB and the
+root-full control profile, followed by a hardware boot and kexec load/unload
+test. The exact firmware, DTB and native-driver classification is maintained
+in the [NixOS blocker matrix](nixos-blockers.md).

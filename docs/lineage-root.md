@@ -28,10 +28,29 @@ nix run .#lineage-root -- /path/to/lineage-images \
 The helper verifies the complete source bundle, an Android 14 Lineage runtime
 on slot A, an unlocked bootloader, encryption and SELinux enforcing. Magisk
 patching runs in an isolated temporary directory on the phone. The resulting
-image must preserve the stock kernel, DTB, command line, boot layout and
-enforcing mode while changing only the ramdisk. Magisk leaves the boot
-image's own unsigned AVB hash descriptor stale after that change, so the
-helper rebuilds that `Algorithm NONE` footer and verifies it before any write.
+image must preserve the selected reviewed kernel byte-for-byte, plus the DTB,
+command line, boot layout and enforcing mode, while changing only the
+ramdisk. Magisk leaves the boot image's own unsigned AVB hash descriptor stale
+after that change, so the helper rebuilds that `Algorithm NONE` footer and
+verifies it before any write.
+
+By default the image audit still requires the exact pinned stock kernel. A
+source-kernel bundle must instead name its independently reviewed kernel hash:
+
+```bash
+source_kernel_hash=0ec542e43f759a6d69eb81a1995ef056052b9b2655c6a1a43c6243c117e7b3a6
+nix run .#lineage-root -- /path/to/source-kernel-lineage-images \
+  --expected-kernel-sha256 "$source_kernel_hash" \
+  --output /private/path/magisk-source-kernel-lineage.img
+```
+
+The same option must accompany `lineage-root-full`, `lineage-unroot`,
+`audit-lineage-images`, key-bound ADB and userspace install/preflight when
+they operate on that bundle. It replaces only the stock-kernel equality
+check. It does not bypass the exact stock DTB, boot header, secure ramdisk,
+SELinux, AVB, filesystem, vendor/odm or device checks. The hash above belongs
+only to the successful 2026-07-26 control build and must change when its
+source changes.
 
 The persistent path enters ordinary bootloader-fastboot and writes only
 `boot_a`. It does not enable Zygisk, install concealment modules or change
@@ -83,6 +102,11 @@ nix run .#lineage-root-full -- /path/to/lineage-images \
   --allow-embedded-adb-key \
   --persist
 ```
+
+For the reviewed source-kernel variant, add
+`--expected-kernel-sha256 "$source_kernel_hash"` to the same command. Magisk
+still must not modify that kernel; an unexpected kernel delta stops the
+helper.
 
 It first establishes the same minimal pinned Magisk root when needed, then:
 

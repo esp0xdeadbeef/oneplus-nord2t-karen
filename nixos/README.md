@@ -83,8 +83,15 @@ kernel: root can install the userspace loader, but the required syscall was
 compiled out. Kexec-first now means “before a NixOS partition install”, not
 “before every persistent boot write”. The prerequisite is a source-built 4.19
 Lineage control kernel with the tracked `nixos-control.config` fragment,
-installed to one explicitly recoverable boot slot. Its build remains gated on
-the missing OPlus source reconstruction.
+installed to one explicitly recoverable boot slot.
+
+That source build now completes successfully with the official OnePlus kernel
+and module trees, verified generated DCT inputs and the reviewed patchset.
+Its effective config contains `CONFIG_KEXEC=y`, devtmpfs, file handles and the
+requested cgroup controllers. The current build output remains a diagnostic
+insecure-recovery image, so the next gate is secure key-bound Lineage
+packaging, AVB pairing and a hardware boot—not more compiler reconstruction.
+See the [firmware and driver blocker matrix](../docs/nixos-blockers.md).
 
 The result contains:
 
