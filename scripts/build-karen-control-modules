@@ -77,6 +77,7 @@ for required_tool in \
   "$clang_root/bin/clang++" \
   "$clang_root/bin/ld.lld" \
   "$clang_root/bin/llvm-ar" \
+  "$clang_root/bin/llvm-strip" \
   "$build_tools/bison" \
   "$build_tools/flex" \
   "$kernel_tools/lz4" \
@@ -224,6 +225,9 @@ for module in \
   [[ -s "$module_path" ]] ||
     fail "expected module was not built: $module"
   install -m 0644 "$module_path" "$output_directory/$module"
+  "$clang_root/bin/llvm-strip" \
+    --strip-debug \
+    "$output_directory/$module"
   "$sign_file" \
     sha512 \
     "$signing_key" \
