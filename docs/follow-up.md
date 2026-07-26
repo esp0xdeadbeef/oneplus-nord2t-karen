@@ -433,12 +433,21 @@ payload. The ZIP must remain a diagnostic artifact until the installer
 models the preserved OPlus layout or uses a separately audited partial OTA
 strategy.
 
-Do not return to the stock-fastbootd staging route for the active install.
-The phone is now in enforcing ordinary Lineage Recovery awaiting the official
-post-install order: factory reset, optional MindTheGapps sideload, then the
-first Lineage boot. Loose recovery/boot/dtbo/vbmeta/super-empty artifacts
-should be published only when Karen's generated target files and installation
-order require them.
+At that historical checkpoint, the active install was not to return to the
+stock-fastbootd staging route. The phone was in enforcing ordinary Lineage
+Recovery awaiting the official post-install order: factory reset, optional
+MindTheGapps sideload, then the first Lineage boot. Loose
+recovery/boot/dtbo/vbmeta/super-empty artifacts should be published only when
+Karen's generated target files and installation order require them.
+
+That instruction described the historical interrupted-install state only. A
+later exact-stock restore and normal stock boot closed it; stock is the
+current runtime. The next coherent install may therefore use the bounded
+stock-fastbootd staging route implemented by `lineage-userspace`.
+`fastboot devices` commonly labels both bootloader-fastboot and fastbootd as
+`fastboot`, so the helper now distinguishes them only through the attested
+`is-userspace` protocol variable. It never treats the transport label itself
+as mode evidence.
 
 The unlocked bootloader may pause on its Orange State warning while changing
 boot modes. During that pause both ADB and fastboot USB can be absent; wait

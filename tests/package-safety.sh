@@ -60,6 +60,16 @@ grep -Fq 'Phone remains in bootloader-fastboot for the next audited step.' \
   "$script_directory/scripts/lineage-userspace"
 grep -Fq 'fastbootd_slot_a_verified=true' \
   "$script_directory/scripts/lineage-userspace"
+# shellcheck disable=SC2016
+grep -Fq 'is_userspace="$(fastboot_variable is-userspace || true)"' \
+  "$script_directory/scripts/lineage-userspace"
+grep -Fq 'fastboot:no | fastbootd:yes)' \
+  "$script_directory/scripts/lineage-userspace"
+if grep -Fq "awk -v mode=\"\$expected_mode\"" \
+  "$script_directory/scripts/lineage-userspace"; then
+  echo "Fastboot transport labels must not be interpreted as protocol modes." >&2
+  exit 1
+fi
 grep -Fq 'slot A was not active before entering fastbootd' \
   "$script_directory/scripts/lineage-userspace"
 grep -Fq 'fastboot_variable is-logical:system_a' \
