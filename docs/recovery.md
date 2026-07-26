@@ -322,7 +322,7 @@ Behind the Lenovo dock it did not expose a usable ADB or USB fastboot device,
 and no partition had been flashed. A direct laptop port subsequently made this
 same mode usable for the tested unlock above. If the loader is unreachable,
 the recovery procedure that worked, consistent with the
-[OnePlus Nord 2T manual](https://service.oneplus.com/content/dam/support/user-manuals/common/OnePlus_Nord_2T_5G_User_Manual_EN_20220919.pdf),
+[OnePlus Nord 2T 5G manual](https://service.oneplus.com/content/dam/support/user-manuals/common/OnePlus_Nord_2T_5G_User_Manual_EN_20220919.pdf),
 was:
 
 1. Hold Power and Volume Up for at least 10 seconds.

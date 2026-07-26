@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: MIT -->
 
-# OnePlus Nord 2T (`CPH2399` / `karen`)
+# OnePlus Nord 2T 5G (`CPH2399` / `karen`)
 
 Reproducible stock recovery and unofficial LineageOS bring-up tooling for the
 European OnePlus Nord 2T 5G.
@@ -177,10 +177,12 @@ must be backed up separately. The committed `l-esp` secret is decryptable only
 with that host user's age identity.
 
 The private ADB key remains on the phone host. When using the optional remote
-workflow, only its public half may be copied to the build host as
-`KAREN_DEBUG_ADB_KEYS`; vanilla builds require neither file. Other owners get
-their own isolated `secrets/HOST-USER-adb-host-key.age` by running the same
-command on their phone/build host.
+workflow, only its public half may be copied to the build host.
+`KAREN_DEBUG_ADB_PUBLIC_KEY_FILE` points the impure flake evaluation at that
+file; the flake validates it before supplying Android's internal
+`KAREN_DEBUG_ADB_KEYS` value. Vanilla builds require neither file. Other
+owners get their own isolated `secrets/HOST-USER-adb-host-key.age` by running
+the same command on their phone/build host.
 
 ## Owner Android signing
 
@@ -357,11 +359,12 @@ write an OPlus logical partition. The optional install-only
 `--stay-bootloader` mode avoids a first system boot so an audited private boot
 pair can be installed before entering recovery for add-ons.
 
-For a private headless bring-up build, `KAREN_DEBUG_ADB_KEYS` may point to
-exactly one Android public key on the selected build host, including the
-optional remote-build workflow. This keeps `ro.adb.secure=1`; it does not enable
-open or root ADB. Images containing that key are rejected by the normal audit
-and must remain outside Git:
+For a private headless bring-up build,
+`KAREN_DEBUG_ADB_PUBLIC_KEY_FILE` may point to exactly one Android public key
+on the selected build host, including the optional remote-build workflow.
+The flake maps it to Android's internal `KAREN_DEBUG_ADB_KEYS` value. This
+keeps `ro.adb.secure=1`; it does not enable open or root ADB. Images containing
+that key are rejected by the normal audit and must remain outside Git:
 
 ```bash
 nix run .#audit-lineage-images -- \

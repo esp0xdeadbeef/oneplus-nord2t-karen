@@ -16,7 +16,7 @@ lib.mkMerge [
     flavor = "lineageos";
     flavorVersion = "21.0";
     device = "karen";
-    deviceDisplayName = "OnePlus Nord 2T";
+    deviceDisplayName = "OnePlus Nord 2T 5G";
     variant = "userdebug";
     release = "ap2a";
     stateVersion = "3";

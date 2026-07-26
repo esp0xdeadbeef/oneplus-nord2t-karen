@@ -31,6 +31,7 @@ vector_signing_generator="$script_directory/scripts/vector-signing-key-generator
 
 # shellcheck disable=SC2016
 grep -Fq 'PRODUCT_ADB_KEYS := $(strip $(KAREN_DEBUG_ADB_KEYS))' "$device_makefile"
+grep -Fq 'deviceDisplayName = "OnePlus Nord 2T 5G";' "$robotnix_device"
 # shellcheck disable=SC2016
 grep -Fq 'ifeq ($(KAREN_DEBUG_PERMISSIVE),true)' "$board_config"
 grep -Fq 'BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive' "$board_config"

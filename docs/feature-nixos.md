@@ -406,7 +406,7 @@ A bounded reconstruction experiment may:
    device trees.
 
 Any result remains a reconstructed source tree. It must not be labelled an
-exact OnePlus Nord 2T publication, and a successful compile does not authorize
+exact OnePlus Nord 2T 5G publication, and a successful compile does not authorize
 booting or flashing it.
 
 ### MediaTek forward-port bridges

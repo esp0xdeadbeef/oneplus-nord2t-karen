@@ -474,8 +474,9 @@ other. Install and restore now stage that exact public-OTA boot/AVB chain
 before entering fastbootd, so a currently installed private recovery cannot
 silently select the mapping-deficient Lineage fastbootd.
 
-As a headless fallback, the product now accepts an opt-in
-`KAREN_DEBUG_ADB_KEYS` path for one local Android public key while retaining
+As a headless fallback, the flake accepts an opt-in
+`KAREN_DEBUG_ADB_PUBLIC_KEY_FILE` path for one local Android public key and
+maps it to the product's internal `KAREN_DEBUG_ADB_KEYS` value while retaining
 `ro.adb.secure=1`. The normal audit rejects such a boot image; an explicit
 private bring-up audit validates that the file contains one Android RSA
 public key. An incremental remote build produced a complete private bundle,

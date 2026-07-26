@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 {
-  description = "OnePlus Nord 2T (CPH2399/karen) recovery and LineageOS tooling";
+  description = "OnePlus Nord 2T 5G (CPH2399/karen) recovery and LineageOS tooling";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.stock-firmware-3001 = {

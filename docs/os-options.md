@@ -6,7 +6,7 @@ Checked against current project documentation on 2026-07-24.
 
 ## GrapheneOS
 
-GrapheneOS does not provide a production build for the OnePlus Nord 2T. Its
+GrapheneOS does not provide a production build for the OnePlus Nord 2T 5G. Its
 [supported-device list](https://grapheneos.org/faq#supported-devices) contains
 specific Pixel devices. Its
 [build documentation](https://grapheneos.org/build) explains that generic and
