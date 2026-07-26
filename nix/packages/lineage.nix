@@ -400,6 +400,11 @@
         cp --reflink=auto \
           "$kernel_object/include/config/kernel.release" \
           "$out/kernel.release"
+        bash \
+          ${repositoryRoot + /scripts/build-karen-control-modules} \
+          "$rootDir" \
+          "$kernel_object" \
+          "$out/modules"
       '';
     };
 

@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: build-karen-control-modules ANDROID_ROOT KERNEL_OUT OUTPUT_DIRECTORY
+
+Build the eight source-controlled modules that replace ABI-incompatible
+stock-derived Karen modules. The Android kernel itself must already have been
+built in KERNEL_OUT.
+EOF
+}
+
+fail() {
+  echo "Karen control-module build failed: $*" >&2
+  exit 1
+}
+
+if [[ $# -ne 3 ]]; then
+  usage
+  exit 2
+fi
+
+android_root="$(realpath "$1")"
+kernel_out="$(realpath "$2")"
+output_directory="$3"
+kernel_source="$android_root/kernel/oneplus/mt6893"
+module_source="$android_root/kernel/oneplus/vendor/mediatek/kernel_modules"
+
+[[ -s "$kernel_source/Makefile" ]] ||
+  fail "kernel source is not available below $android_root"
+[[ -s "$kernel_out/.config" ]] ||
+  fail "kernel output does not contain an effective config"
+[[ -s "$kernel_out/Module.symvers" ]] ||
+  fail "kernel output does not contain Module.symvers"
+[[ -d "$module_source/connectivity" ]] ||
+  fail "MediaTek module source is not available below $android_root"
+[[ ! -e "$output_directory" ]] ||
+  fail "refusing to overwrite output: $output_directory"
+
+make_binary="$android_root/prebuilts/build-tools/linux-x86/bin/make"
+clang_root="$android_root/prebuilts/clang/host/linux-x86/clang-r487747c"
+gcc64_root="$android_root/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9"
+gcc32_root="$android_root/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9"
+kernel_tools="$android_root/prebuilts/kernel-build-tools/linux-x86/bin"
+build_tools="$android_root/prebuilts/build-tools/linux-x86/bin"
+
+for required_tool in \
+  "$make_binary" \
+  "$clang_root/bin/clang" \
+  "$clang_root/bin/clang++" \
+  "$clang_root/bin/ld.lld" \
+  "$clang_root/bin/llvm-ar" \
+  "$build_tools/bison" \
+  "$build_tools/flex" \
+  "$kernel_tools/lz4" \
+  "$kernel_tools/pahole"; do
+  [[ -x "$required_tool" ]] ||
+    fail "required Android build tool is missing: $required_tool"
+done
+
+export PATH="$android_root/out/host/linux-x86/bin:$clang_root/bin:$gcc64_root/bin:$gcc32_root/bin:$build_tools:$PATH"
+export LD_LIBRARY_PATH="$clang_root/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export PERL5LIB="$android_root/prebuilts/tools-lineage/common/perl-base"
+export BISON_PKGDATADIR="$android_root/prebuilts/build-tools/common/bison"
+
+target_cc="clang --cuda-path=/dev/null --hip-path=/dev/null"
+if [[ -n "${CC_WRAPPER:-}" ]]; then
+  target_cc="$CC_WRAPPER $target_cc"
+fi
+
+build_cores="${NIX_BUILD_CORES:-1}"
+[[ "$build_cores" =~ ^[1-9][0-9]*$ ]] ||
+  fail "NIX_BUILD_CORES is not a positive integer"
+
+common_make_arguments=(
+  "-j$build_cores"
+  -C "$kernel_source"
+  "O=$kernel_out"
+  ARCH=arm64
+  "CROSS_COMPILE=$gcc64_root/bin/aarch64-linux-android-"
+  "CROSS_COMPILE_ARM32=$gcc32_root/bin/arm-linux-androidkernel-"
+  "CROSS_COMPILE_COMPAT=$gcc32_root/bin/arm-linux-androidkernel-"
+  CLANG_TRIPLE=aarch64-linux-gnu-
+  "CC=$target_cc"
+  "HOSTCC=$clang_root/bin/clang"
+  "HOSTCXX=$clang_root/bin/clang++"
+  "LD=$clang_root/bin/ld.lld"
+  "AR=$clang_root/bin/llvm-ar"
+  LLVM=1
+  LLVM_IAS=1
+  "LZ4=$kernel_tools/lz4"
+  "LEX=$build_tools/flex"
+  "YACC=$build_tools/bison"
+  "M4=$build_tools/m4"
+  "PAHOLE=$kernel_tools/pahole"
+  DEPMOD=depmod
+  "KERNEL_OUT=$kernel_out"
+  "TOP=$android_root/kernel/oneplus"
+  TARGET_BUILD_VARIANT=userdebug
+)
+
+build_module() {
+  local module_directory="$1"
+  shift
+
+  echo "Building Karen control module: ${module_directory#"$android_root/"}"
+  "$make_binary" \
+    "${common_make_arguments[@]}" \
+    "M=$module_directory" \
+    "$@" \
+    modules
+}
+
+conninfra="$module_source/connectivity/conninfra"
+connfem="$module_source/connectivity/connfem"
+bt="$module_source/connectivity/bt/mt66xx/btif"
+fm="$module_source/connectivity/fmradio"
+gps="$module_source/connectivity/gps"
+wlan_adaptor="$module_source/connectivity/wlan/adaptor"
+wlan="$module_source/connectivity/wlan/core/gen4m"
+
+build_module "$conninfra"
+build_module "$connfem"
+
+conninfra_symbols="$conninfra/Module.symvers"
+connfem_symbols="$connfem/Module.symvers"
+[[ -s "$conninfra_symbols" && -s "$connfem_symbols" ]] ||
+  fail "base connectivity modules did not export symbol maps"
+base_connectivity_symbols="$conninfra_symbols $connfem_symbols"
+
+build_module \
+  "$wlan_adaptor" \
+  MODULE_NAME=wmt_chrdev_wifi \
+  CONNAC_VER=2_0 \
+  "KBUILD_EXTRA_SYMBOLS=$base_connectivity_symbols"
+build_module \
+  "$bt" \
+  BT_PLATFORM=6893 \
+  "KBUILD_EXTRA_SYMBOLS=$base_connectivity_symbols"
+build_module \
+  "$gps" \
+  "KBUILD_EXTRA_SYMBOLS=$conninfra_symbols"
+build_module \
+  "$fm/Build/connac2x" \
+  CFG_FM_PLAT=connac2x \
+  CFG_BUILD_CONNAC2=true \
+  CFG_FM_CHIP=mt6635 \
+  "KBUILD_EXTRA_SYMBOLS=$conninfra_symbols"
+
+wmt_symbols="$wlan_adaptor/Module.symvers"
+[[ -s "$wmt_symbols" ]] ||
+  fail "Wi-Fi adaptor did not export a symbol map"
+wireless_symbols="$base_connectivity_symbols $wmt_symbols"
+build_module \
+  "$wlan" \
+  CONFIG_MTK_COMBO_WIFI_HIF=axi \
+  MODULE_NAME=wlan_drv_gen4m \
+  MTK_COMBO_CHIP=CONNAC2X2_SOC3_0 \
+  WLAN_CHIP_ID=6893 \
+  MTK_ANDROID_WMT=y \
+  MTK_ANDROID_EMI=y \
+  WIFI_IP_SET=1 \
+  "KBUILD_EXTRA_SYMBOLS=$wireless_symbols"
+
+declare -A module_paths=(
+  [bt_drv_6893.ko]="$bt/bt_drv_6893.ko"
+  [connfem.ko]="$connfem/connfem.ko"
+  [conninfra.ko]="$conninfra/conninfra.ko"
+  [fmradio_drv_connac2x.ko]="$fm/fmradio_drv_connac2x.ko"
+  [gps_drv.ko]="$gps/gps_drv.ko"
+  [trace_mmstat.ko]="$kernel_out/kernel/trace/trace_mmstat.ko"
+  [wlan_drv_gen4m.ko]="$wlan/wlan_drv_gen4m.ko"
+  [wmt_chrdev_wifi.ko]="$wlan_adaptor/wmt_chrdev_wifi.ko"
+)
+
+mkdir -p "$output_directory"
+for module in \
+  bt_drv_6893.ko \
+  connfem.ko \
+  conninfra.ko \
+  fmradio_drv_connac2x.ko \
+  gps_drv.ko \
+  trace_mmstat.ko \
+  wlan_drv_gen4m.ko \
+  wmt_chrdev_wifi.ko; do
+  module_path="${module_paths[$module]}"
+  [[ -s "$module_path" ]] ||
+    fail "expected module was not built: $module"
+  install -m 0644 "$module_path" "$output_directory/$module"
+done
+
+signing_certificate="$kernel_out/certs/signing_key.x509"
+[[ -s "$signing_certificate" ]] ||
+  fail "kernel build did not export its public module-signing certificate"
+install -m 0644 "$signing_certificate" "$output_directory/signing_key.x509"
+
+echo "Built eight Karen source control modules in $output_directory"
