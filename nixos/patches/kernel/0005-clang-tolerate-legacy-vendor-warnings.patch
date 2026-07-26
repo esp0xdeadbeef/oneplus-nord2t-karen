@@ -15,16 +15,16 @@ return type instead of relying on removed implicit-int behavior.
 
 Assisted-by: Codex:gpt-5
 ---
- Makefile                                | 5 +++++
+ Makefile                                | 6 ++++++
  drivers/staging/android/mtk_ion/ion.c  | 2 +-
  drivers/staging/android/mtk_ion/ion_priv.h | 2 +-
- 3 files changed, 7 insertions(+), 2 deletions(-)
+ 3 files changed, 8 insertions(+), 2 deletions(-)
 
 diff --git a/Makefile b/Makefile
 index 520f32e..ee24d6c 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -991 +991,6 @@
+@@ -991 +991,7 @@
 -KBUILD_CFLAGS   += $(call cc-option,-Werror=designated-init)
 +KBUILD_CFLAGS   += $(call cc-option,-Werror=designated-init)
 +ifeq ($(cc-name),clang)
