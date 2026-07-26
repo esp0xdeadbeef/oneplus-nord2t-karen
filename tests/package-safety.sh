@@ -288,6 +288,12 @@ grep -Fq \
   'CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"' \
   "$nixos_kernel_packages"
 grep -Fq \
+  'cp --reflink=auto "$kernel_object/Module.symvers" "$out/Module.symvers"' \
+  "$lineage_packages"
+grep -Fq \
+  '"$kernel_object/include/config/kernel.release"' \
+  "$lineage_packages"
+grep -Fq \
   'path_regex: '"'"'^secrets/vector-signing-shared\.json\.age$'"'"'' \
   "$sops_config"
 grep -Fq \

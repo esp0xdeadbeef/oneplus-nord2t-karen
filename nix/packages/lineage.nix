@@ -329,12 +329,19 @@
       inherit name;
       makeTargets = ["bootimage"];
       installPhase = ''
-        effective_config="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ/.config"
+        kernel_object="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ"
+        effective_config="$kernel_object/.config"
         grep -Fxq 'CONFIG_KEXEC=y' "$effective_config"
+        test -s "$kernel_object/Module.symvers"
+        test -s "$kernel_object/include/config/kernel.release"
         mkdir -p "$out"
         cp --reflink=auto "$ANDROID_PRODUCT_OUT/boot.img" "$out/boot.img"
         cp --reflink=auto "$ANDROID_PRODUCT_OUT/kernel" "$out/kernel"
         cp --reflink=auto "$effective_config" "$out/kernel.config"
+        cp --reflink=auto "$kernel_object/Module.symvers" "$out/Module.symvers"
+        cp --reflink=auto \
+          "$kernel_object/include/config/kernel.release" \
+          "$out/kernel.release"
       '';
     };
 
@@ -378,8 +385,11 @@
         bash \
           ${repositoryRoot + /scripts/audit-lineage-vintf} \
           "$ANDROID_BUILD_TOP"
-        effective_config="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ/.config"
+        kernel_object="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ"
+        effective_config="$kernel_object/.config"
         grep -Fxq 'CONFIG_KEXEC=y' "$effective_config"
+        test -s "$kernel_object/Module.symvers"
+        test -s "$kernel_object/include/config/kernel.release"
         mkdir -p "$out"
         for image in \
           boot system system_ext product vendor odm \
@@ -388,6 +398,10 @@
         done
         cp --reflink=auto "$ANDROID_PRODUCT_OUT/kernel" "$out/kernel"
         cp --reflink=auto "$effective_config" "$out/kernel.config"
+        cp --reflink=auto "$kernel_object/Module.symvers" "$out/Module.symvers"
+        cp --reflink=auto \
+          "$kernel_object/include/config/kernel.release" \
+          "$out/kernel.release"
       '';
     };
 

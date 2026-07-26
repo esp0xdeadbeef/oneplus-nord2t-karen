@@ -138,10 +138,11 @@ systemd user services are conveniences for surviving an SSH disconnect; they
 are not repository or LineageOS requirements.
 
 For a key-bound diagnostic recovery, transfer only the public ADB key to a
-private non-repository path on `s-tau` and point `KAREN_DEBUG_ADB_KEYS` there.
-Do not transfer `~/.android/adbkey` or the SOPS age identity. The normal image
-audit deliberately rejects the resulting private image unless its explicit
-bring-up exception is supplied.
+private non-repository path on `s-tau` and point
+`KAREN_DEBUG_ADB_PUBLIC_KEY_FILE` at that file. Do not transfer
+`~/.android/adbkey` or the SOPS age identity. The normal image audit
+deliberately rejects the resulting private image unless its explicit bring-up
+exception is supplied.
 
 Vector uses a separate split identity. `s-tau` decrypts
 `secrets/vector-signing-shared.json.age` with its normal-user repository age
