@@ -14,6 +14,7 @@
     android-fhs = "nord2t-android-fhs";
     audit-boot = "nord2t-audit-boot";
     audit-kernel-module-abi = "nord2t-audit-kernel-module-abi";
+    compare-kernel-module-payloads = "nord2t-compare-kernel-module-payloads";
     audit-lineage-images = "nord2t-audit-lineage-images";
     audit-lineage-runtime = "nord2t-audit-lineage-runtime";
     extract-stock = "nord2t-extract-stock";

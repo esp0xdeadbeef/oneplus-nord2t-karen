@@ -324,6 +324,14 @@ Bluetooth for 20 and the other affected modules for 30; `fpsgo` and
 the earlier set, so the exact config removed 122 mismatches without
 introducing a new one.
 
+The complementary `compare-kernel-module-payloads` app removes the appended
+Linux module signature from both the exact stock module and its source-built
+counterpart before hashing and byte comparison. It also compares the module
+name, `vermagic`, versioned imports and exports independently. Exact payload
+equality is therefore strong reproducibility evidence, while a byte difference
+on its own is not treated as an ABI failure or confused with the owner
+signature added later on `l-esp` or `l-portal`.
+
 Kconfig still normalizes away stock symbols that do not exist or are no
 longer selectable in the published source, including several touch drivers,
 and the public build uses Clang 17 where `.3001` identifies Clang 11. The

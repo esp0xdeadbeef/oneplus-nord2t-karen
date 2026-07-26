@@ -11,6 +11,7 @@ in {
     adb-key-generator
     audit-boot
     audit-kernel-module-abi
+    compare-kernel-module-payloads
     audit-lineage-images
     audit-lineage-runtime
     extract-stock

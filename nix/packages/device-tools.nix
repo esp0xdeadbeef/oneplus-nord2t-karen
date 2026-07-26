@@ -516,9 +516,30 @@
       );
   };
 
+  compareKernelModulePayloads = pkgs.writeShellApplication {
+    name = "nord2t-compare-kernel-module-payloads";
+    runtimeInputs = with pkgs; [
+      coreutils
+      diffutils
+      erofs-utils
+      findutils
+      jq
+      kmod
+    ];
+    text =
+      builtins.replaceStrings
+      ["@PARTITION_MANIFEST@"]
+      ["${repositoryRoot + /firmware/partitions-3001.json}"]
+      (
+        builtins.readFile
+        (repositoryRoot + /scripts/compare-kernel-module-payloads)
+      );
+  };
+
   repackControlVendor = pkgs.writeShellApplication {
     name = "nord2t-repack-control-vendor";
     runtimeInputs = with pkgs; [
+      android-tools
       attr
       auditKernelModuleAbi
       coreutils
@@ -675,6 +696,7 @@ in {
     adb-key-generator = adbKeyGenerator;
     audit-boot = auditBoot;
     audit-kernel-module-abi = auditKernelModuleAbi;
+    compare-kernel-module-payloads = compareKernelModulePayloads;
     audit-lineage-images = auditLineageImages;
     audit-lineage-runtime = auditLineageRuntime;
     default = auditLineageRuntime;

@@ -321,6 +321,13 @@ nix run .#audit-kernel-module-abi -- \
   ./result-karen-source-kernel-bootimage-cached \
   /private/path/to/vendor.img
 
+# Remove appended signatures logically and compare the eight rebuilt module
+# payloads with the exact pinned stock-derived vendor modules. Differences are
+# reported separately from their imported/exported ABI surface.
+nix run .#compare-kernel-module-payloads -- \
+  /private/path/to/vendor.img \
+  ./result-karen-source-kernel-bootimage-cached/modules
+
 # Compare a candidate with the pinned stock boot image and inspect its ramdisk.
 nix run .#audit-boot -- ./result-karen-bootimage/boot.img
 
