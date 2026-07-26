@@ -2,12 +2,13 @@
 
 # LineageOS port assessment
 
-There is currently no installable LineageOS product in this repository. The
-small tree under `lineage/device/oneplus/karen` is an experimental Lineage 21
-recovery bring-up, not a ROM release. It deliberately starts with the exact
-verified stock kernel and device trees so ramdisk, display and USB assumptions
-can be tested independently. Set `KAREN_BUILD_SOURCE_KERNEL=true` only after
-that baseline boots.
+This repository now builds a hardware-booted experimental LineageOS 21
+recovery and full-system bring-up for `karen`, but not yet a publishable ROM or
+OTA product. The tree under `lineage/device/oneplus/karen` deliberately began
+with the exact verified stock kernel and device trees so ramdisk, display and
+USB assumptions could be tested independently. The source-kernel variant now
+builds as a separate gated path whose complete bundle must retain the stock
+module ABI and trust anchor before installation.
 
 Remote-build references in this assessment record historical build provenance
 and the repository owner's current RAM offload. That host is not a dependency;

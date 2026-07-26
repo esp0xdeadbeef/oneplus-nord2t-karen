@@ -37,9 +37,9 @@ along with the host boundary, rsync flow and artifact-return checks.
   the NixOS repository but was offline during the live decrypt check.
 - The ext4 Lineage userspace, exact stock vendor/odm, pinned MindTheGapps and
   Magisk-patched private boot previously completed encrypted and enforcing
-  normal boots on slot A. The phone is currently back on exact `.3001` stock
-  after the completed rollback test; restore the audited Lineage userspace
-  before writing a Lineage boot image.
+  normal boots on slot A. The current live system was re-attested on
+  2026-07-26 as LineageOS 21 on slot A with root adbd and Magisk; do not infer
+  stock from its deliberately spoofed `.3001` display ID.
 - The compiled recovery policy now gives the tmpfs-created extended `super`
   node its exact `super_block_device` label. Enforcing Lineage fastbootd
   exposes every standard and preserved OPlus logical mapping; the temporary
@@ -76,13 +76,15 @@ along with the host boundary, rsync flow and artifact-return checks.
 - The earlier exact-stock relock and green/rootless boot completed
   successfully. The bootloader was deliberately unlocked again, with the
   expected wipe, and the next Lineage installation also booted successfully.
-  A later restore returned the phone to stock; the tested roundtrip remains
-  rollback evidence and stock is the active OS state.
-- With adbd returned to normal shell mode, the passive runtime audit passed
-  all 37 non-boot-state checks. Its three remaining property checks see
-  `green/locked` because the deliberate full-root concealment stack masks the
-  unlocked/orange runtime; minimal root remains the representative debugging
-  profile.
+  A later restore returned the phone to stock before another successful
+  Lineage installation; the tested roundtrip remains rollback evidence, not a
+  statement about the current OS.
+- The 2026-07-26 passive runtime audit passed 36 checks. Its four failures are
+  the expected root/concealment view: adbd is UID 0 and the full-root stack
+  masks boot state as `green/locked`. The live `4.19.191+` kernel enforces
+  signed modules but still lacks `CONFIG_KEXEC`; minimal root remains the
+  representative debugging profile until the new coherent source-kernel
+  bundle is audited and installed.
 - Vector now builds from its pinned Git revision and generated Gradle
   dependency lock. The generic module built successfully, and the split
   public-certificate intermediate plus trusted-host final signer produced
