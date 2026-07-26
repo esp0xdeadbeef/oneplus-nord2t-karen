@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: kernel-config-audit KERNEL_CONFIG OUTPUT_DIRECTORY
+
+Classify Karen's effective stock-kernel options for the first NixOS, kexec and
+Android-container gates. This command reports evidence; it does not change the
+configuration or decide that an image is safe to boot.
+EOF
+}
+
+fail() {
+  echo "kernel config audit failed: $*" >&2
+  exit 1
+}
+
+if [[ $# -ne 2 ]]; then
+  usage
+  exit 2
+fi
+
+kernel_config="$1"
+output_directory="$2"
+
+[[ -f "$kernel_config" ]] ||
+  fail "kernel config is not a regular file: $kernel_config"
+[[ -r "$kernel_config" ]] ||
+  fail "kernel config is not readable: $kernel_config"
+[[ ! -e "$output_directory" ]] ||
+  fail "output path already exists: $output_directory"
+
+resolved_output="$(realpath -m -- "$output_directory")"
+case "$resolved_output" in
+  /dev | /dev/* | /proc | /proc/* | /sys | /sys/*)
+    fail "refusing special-filesystem output: $resolved_output"
+    ;;
+esac
+
+temporary_directory="$(mktemp -d -t karen-kernel-config.XXXXXXXX)"
+cleanup() {
+  chmod -R u+rwX -- "$temporary_directory" 2>/dev/null || true
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+
+entries_tsv="$temporary_directory/entries.tsv"
+: >"$entries_tsv"
+
+config_value() {
+  local symbol="$1"
+  local line
+
+  line="$(grep -E "^${symbol}=" "$kernel_config" | tail -n 1 || true)"
+  case "$line" in
+    "$symbol=y")
+      printf 'built-in'
+      ;;
+    "$symbol=m")
+      printf 'module'
+      ;;
+    "$symbol="*)
+      printf 'set-other'
+      ;;
+    "")
+      if grep -Fxq "# $symbol is not set" "$kernel_config"; then
+        printf 'disabled'
+      else
+        printf 'unknown'
+      fi
+      ;;
+  esac
+}
+
+record_group() {
+  local group="$1"
+  local expectation="$2"
+  shift 2
+
+  local symbol
+  local value
+  for symbol in "$@"; do
+    value="$(config_value "$symbol")"
+    printf '%s\t%s\t%s\t%s\n' \
+      "$group" \
+      "$expectation" \
+      "$symbol" \
+      "$value" \
+      >>"$entries_tsv"
+  done
+}
+
+record_group stage1 required-built-in \
+  CONFIG_64BIT \
+  CONFIG_BLK_DEV_INITRD \
+  CONFIG_DEVTMPFS \
+  CONFIG_DEVTMPFS_MOUNT \
+  CONFIG_PROC_FS \
+  CONFIG_SYSFS \
+  CONFIG_TMPFS \
+  CONFIG_UNIX
+
+record_group systemd required \
+  CONFIG_CGROUPS \
+  CONFIG_CGROUP_SCHED \
+  CONFIG_EPOLL \
+  CONFIG_FHANDLE \
+  CONFIG_INOTIFY_USER \
+  CONFIG_MEMCG \
+  CONFIG_SIGNALFD \
+  CONFIG_TIMERFD
+
+record_group isolation required-for-lineage-container \
+  CONFIG_CGROUP_DEVICE \
+  CONFIG_CGROUP_FREEZER \
+  CONFIG_CGROUP_PIDS \
+  CONFIG_DEVPTS_MULTIPLE_INSTANCES \
+  CONFIG_IPC_NS \
+  CONFIG_NAMESPACES \
+  CONFIG_NET_NS \
+  CONFIG_PID_NS \
+  CONFIG_SECCOMP \
+  CONFIG_SECCOMP_FILTER \
+  CONFIG_USER_NS \
+  CONFIG_UTS_NS
+
+record_group storage rootfs-dependent \
+  CONFIG_BLK_DEV_LOOP \
+  CONFIG_BLK_DEV_DM \
+  CONFIG_DM_CRYPT \
+  CONFIG_EXT4_FS \
+  CONFIG_F2FS_FS \
+  CONFIG_OVERLAY_FS
+
+record_group usb required-for-headless-access \
+  CONFIG_CONFIGFS_FS \
+  CONFIG_USB_CONFIGFS \
+  CONFIG_USB_CONFIGFS_F_FS \
+  CONFIG_USB_CONFIGFS_NCM \
+  CONFIG_USB_CONFIGFS_RNDIS
+
+record_group network required-for-usb-ssh \
+  CONFIG_INET \
+  CONFIG_NET \
+  CONFIG_VETH
+
+record_group modules stage1-closure \
+  CONFIG_MODULES
+
+record_group kexec experimental-gate \
+  CONFIG_KEXEC \
+  CONFIG_KEXEC_FILE \
+  CONFIG_PM_SLEEP_SMP
+
+record_group android-compat later-gate \
+  CONFIG_ANDROID_BINDERFS \
+  CONFIG_ANDROID_BINDER_IPC \
+  CONFIG_ASHMEM
+
+record_group diagnostics recommended \
+  CONFIG_PSTORE \
+  CONFIG_PSTORE_CONSOLE \
+  CONFIG_PSTORE_RAM \
+  CONFIG_RAMOOPS
+
+jq -Rn '
+  [
+    inputs |
+    split("\t") |
+    {
+      group: .[0],
+      expectation: .[1],
+      symbol: .[2],
+      value: .[3]
+    }
+  ]
+' \
+  <"$entries_tsv" \
+  >"$temporary_directory/entries.json"
+
+config_sha256="$(sha256sum "$kernel_config" | cut -d' ' -f1)"
+jq -n \
+  --arg configSha256 "$config_sha256" \
+  --slurpfile entries "$temporary_directory/entries.json" \
+  '{
+    schemaVersion: 1,
+    configSha256: $configSha256,
+    entries: $entries[0],
+    counts: (
+      $entries[0] |
+      group_by(.value) |
+      map({key: .[0].value, value: length}) |
+      from_entries
+    ),
+    kexec: {
+      classic: (
+        $entries[0][] |
+        select(.symbol == "CONFIG_KEXEC") |
+        .value
+      ),
+      file: (
+        $entries[0][] |
+        select(.symbol == "CONFIG_KEXEC_FILE") |
+        .value
+      )
+    }
+  }' \
+  >"$temporary_directory/report.json"
+
+jq -r '
+  .entries[] |
+  [.group, .expectation, .symbol, .value] |
+  @tsv
+' \
+  "$temporary_directory/report.json" \
+  >"$temporary_directory/report.tsv"
+
+mkdir -p "$output_directory"
+install -m 0644 \
+  "$temporary_directory/report.json" \
+  "$output_directory/report.json"
+install -m 0644 \
+  "$temporary_directory/report.tsv" \
+  "$output_directory/report.tsv"
+
+printf 'config_sha256=%s\n' "$config_sha256"
+jq -r '"kexec_classic=" + .kexec.classic' \
+  "$temporary_directory/report.json"
+jq -r '"kexec_file=" + .kexec.file' \
+  "$temporary_directory/report.json"

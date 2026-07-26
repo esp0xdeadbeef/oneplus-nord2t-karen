@@ -64,9 +64,9 @@ does not bring or boot a second Android kernel.
 The first NixOS result is deliberately headless:
 
 ```text
-rooted LineageOS control system
+rooted LineageOS control system with a kexec-enabled 4.19 kernel
   -> kexec from Magisk
-  -> pinned stock kernel and DTB
+  -> audited NixOS candidate kernel and resolved DTB
   -> Mobile NixOS stage-1 initrd
   -> NixOS root filesystem
   -> systemd
@@ -232,10 +232,12 @@ A/B itself is not forbidden. Full NixOS should ultimately own a deliberate,
 tested A/B installation and update cycle, including both boot slots when that
 design is proven. The progression is:
 
-1. kexec without persistent partition changes;
-2. one explicitly selected boot slot with an exact restore path;
-3. repeatable boot, rollback and slot-failure tests;
-4. a Karen-specific A/B installer and updater that may write both slots and
+1. build-only DTB and effective-kernel-config audits;
+2. a kexec-enabled Lineage control kernel on one explicitly selected boot slot
+   with an exact restore path;
+3. kexec experiments without further persistent partition changes;
+4. repeatable native NixOS boot, rollback and slot-failure tests;
+5. a Karen-specific A/B installer and updater that may write both slots and
    their matching AVB metadata as one audited transaction.
 
 The rule is therefore “no unwrapped generic `--slot=all`”, not “NixOS may
@@ -249,10 +251,11 @@ slot procedure after a complete preflight.
 
 ## Kernel feasibility audit
 
-The initial port reuses the verified `.3001` stock kernel. This is a
-bootstrapping choice, not an upstream-quality endpoint. Before building a
-flash candidate, capture or extract the effective kernel configuration and
-audit at least:
+The exact `.3001` stock kernel remains the behavioral oracle and byte-exact
+baseline, but its embedded effective configuration proves that it cannot be
+the first NixOS or kexec control kernel unchanged. The build-only audit
+currently reports `CONFIG_KEXEC`, `CONFIG_DEVTMPFS` and `CONFIG_FHANDLE`
+disabled. Before building a flash candidate, continue to audit at least:
 
 - `CONFIG_DEVTMPFS` and `CONFIG_DEVTMPFS_MOUNT`;
 - tmpfs and the filesystem required for the selected rootfs;
@@ -274,7 +277,9 @@ its dependency and firmware closure.
 The published OnePlus MT6893 source build remains independently blocked by
 the missing `vendor/oplus` source layer. NixOS bootstrapping must not weaken
 that fail-closed source-kernel assessment or present the prebuilt stock kernel
-as a reproducible source build.
+as a reproducible source build. The first required kernel delta is tracked as
+`nixos/families/mt6893/kernel/nixos-control.config`; it enables classic kexec,
+devtmpfs, file handles and the missing cgroup controllers through Kconfig.
 
 ## Kernel source map and fork strategy
 
@@ -612,28 +617,37 @@ The published
 [`k6893v1_64_k419_defconfig`](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6893/blob/a5cdca1a88dc328a44dee724193830254fc551da/arch/arm64/configs/k6893v1_64_k419_defconfig)
 does not list `CONFIG_KEXEC`, `CONFIG_KEXEC_FILE` or `CONFIG_CRASH_DUMP`.
 OnePlus's ARM64
-[Kconfig](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6893/blob/a5cdca1a88dc328a44dee724193830254fc551da/arch/arm64/Kconfig#L868)
+[Kconfig](https://github.com/OnePlusOSS/android_kernel_oneplus_mt6893/blob/a5cdca1a88dc328a44dee724193830254fc551da/arch/arm64/Kconfig#L930)
 does contain the classic `kexec_load` implementation, but it is an optional
-kernel setting. This makes the effective `.3001` kernel configuration the
-first hard gate. Magisk root and the module cannot compensate if
-`CONFIG_KEXEC` is absent.
+kernel setting.
+
+The initial scaffold has now extracted `IKCONFIG` from the decompressed
+`.3001` `Image.gz` and confirmed `CONFIG_KEXEC` is disabled and
+`CONFIG_KEXEC_FILE` is absent. This closes the first hard gate negatively:
+Magisk root and the module cannot compensate because the syscall
+implementation was compiled out. A source-built, kexec-enabled 4.19 Lineage
+control kernel is required before `evdenis/kexec` can be tested.
 
 ### Kexec gates
 
 Establish each gate independently:
 
-1. Extract the effective config from the running kernel, `/proc/config.gz` or
-   the pinned stock kernel and record whether `CONFIG_KEXEC=y`.
-2. Confirm the syscall exists and distinguish “unsupported” from a Magisk or
-   SELinux denial.
-3. Pin the exact GPL-2.0 `evdenis/kexec` source or release and verify its hash;
+1. Preserve the effective `.3001` config audit and its hash as the negative
+   stock baseline.
+2. Reconstruct the missing OPlus source layer and build the pinned 4.19 source
+   with `nixos-control.config`.
+3. Package the control kernel with the exact reviewed DTB/DTBO relationship
+   and install it to one recoverable boot slot with its matching AVB metadata.
+4. Confirm `CONFIG_KEXEC=y` in that running kernel and distinguish a syscall,
+   SELinux or device-shutdown failure.
+5. Pin the exact GPL-2.0 `evdenis/kexec` source or release and verify its hash;
    do not resolve `latest` during a test.
-4. Verify that the ARM64 tool accepts the intended kernel format, initrd,
+6. Verify that the ARM64 tool accepts the intended kernel format, initrd,
    command line and DTB.
-5. Load and unload a harmless candidate without executing it.
-6. Execute an initrd-only diagnostic candidate with no writable rootfs.
-7. Repeat cold-return recovery to the installed LineageOS control system.
-8. Add the NixOS rootfs and systemd only after the diagnostic initrd is
+7. Load and unload a harmless candidate without executing it.
+8. Execute an initrd-only diagnostic candidate with no writable rootfs.
+9. Repeat cold-return recovery to the installed LineageOS control system.
+10. Add the NixOS rootfs and systemd only after the diagnostic initrd is
    observable.
 
 The load/unload gate should be represented separately from execution. A
@@ -660,11 +674,12 @@ by the 64 MiB boot partition, so this can prove a minimal NixOS/systemd closure
 without first assigning a persistent rootfs partition. Memory use and the
 exact closure size must still be audited.
 
-Kexec is a rapid, recoverable experiment path because it leaves boot, vbmeta
-and logical partitions untouched. It is not risk-free: a device-driver
-shutdown failure can still hang the phone, and the warm hardware state differs
-from a bootloader cold boot. A successful kexec result is therefore necessary
-bring-up evidence, not proof that the final native boot image works.
+Each kexec jump leaves boot, vbmeta and logical partitions untouched. Reaching
+that state now has a separate prerequisite write: installing the
+kexec-enabled Lineage control boot pair. Kexec is not risk-free: a
+device-driver shutdown failure can still hang the phone, and the warm hardware
+state differs from a bootloader cold boot. A successful result is therefore
+necessary bring-up evidence, not proof that the final native boot image works.
 
 ### Kexec test matrix
 
@@ -674,7 +689,7 @@ control-system state and observable result for at least:
 - tool execution and syscall detection without a loaded candidate;
 - load followed by unload, with no jump;
 - the exact stock kernel plus a tiny diagnostic initrd;
-- the exact stock kernel plus the Mobile NixOS stage-1 initrd;
+- the kexec-enabled 4.19 candidate plus the Mobile NixOS stage-1 initrd;
 - a minimal all-in-initrd NixOS/systemd target;
 - the audited live DTB versus any reconstructed DTB candidate;
 - reviewed and reused command-line variants;
@@ -713,20 +728,22 @@ assumptions. Neither action belongs in the first initrd-only experiment.
 ### 0. Build-only feasibility
 
 1. Pin a known-good Mobile NixOS and Nixpkgs revision.
-2. Audit the stock kernel configuration.
-3. Generate a Mobile NixOS stage-1 initrd without a GUI.
-4. Build and audit a kexec bundle without installing it.
-5. Independently assemble a Karen header-v2 boot image for the later native
+2. Preserve the extracted effective stock-kernel audit.
+3. Reconstruct and build the kexec-enabled 4.19 control kernel.
+4. Generate a Mobile NixOS stage-1 initrd without a GUI.
+5. Build and audit a kexec bundle without installing it.
+6. Independently assemble a Karen header-v2 boot image for the later native
    boot phase.
-6. Verify size, header, offsets, kernel, DTB, ramdisk and AVB metadata.
-7. Produce no flash script until the image audit and exact restore set exist.
+7. Verify size, header, offsets, kernel, DTB, ramdisk and AVB metadata.
+8. Produce no flash script until the image audit and exact restore set exist.
 
 ### 1. Kexec load and unload
 
-From explicitly rooted LineageOS with Magisk, prove tool installation, syscall
-availability and SELinux behavior. Load and unload an audited diagnostic
-candidate without executing it. This phase makes no persistent partition
-write.
+Install the audited kexec-enabled 4.19 control boot pair to one selected slot
+only after its exact stock restore pair passes preflight. Boot rooted LineageOS
+with that kernel, then prove tool installation, syscall availability and
+SELinux behavior. Loading and unloading the diagnostic candidate makes no
+additional persistent partition write.
 
 ### 2. Kexec stage-1 USB access
 
@@ -879,7 +896,32 @@ the repository's `AGENTS.md`.
 ## Current status
 
 This document records an approved repository direction, not a completed
-Mobile NixOS port. No NixOS image output, kernel-config result, rootfs target
-or hardware write is authorized by this plan. The next safe deliverable is a
-build-only kernel and kexec feasibility audit followed by an audited kexec
-stage-1 bundle.
+Mobile NixOS port. The initial build-only scaffold under `nixos/` now records
+the MT6893 family, Karen identity and verified boot layout. Its first
+derivation extracts the exact `.3001` DTB, decompiles it to canonical DTS,
+applies an ordered source patchset, recompiles it and records a semantic diff
+and hash manifest.
+
+The boot payload named `dtb` is an Android DT table v0 containing one FDT
+entry, not a raw FDT at offset zero. The scaffold validates and rebuilds that
+wrapper with a format-aware tool rather than baking its currently observed
+entry offset into a byte patch.
+
+The patchset deliberately starts empty. A real device-tree change requires a
+comparison of the base DTB, stock DTBO and live bootloader-resolved tree.
+Direct fixed-offset changes to DTB or compressed kernel images are not a
+forward-port mechanism: structured offsets, phandles, linked machine code,
+kernel-internal APIs and AVB authentication all change independently. Firmware
+compatibility shims remain possible, but must be implemented as source drivers
+against current kernel interfaces.
+
+The effective stock-kernel audit is now implemented and confirms 41 inspected
+options built in, seven disabled and five absent or unresolved. RNDIS configfs,
+networking, ext4, F2FS, device mapper, overlayfs, Binder, binderfs and pstore
+are present. Classic kexec, devtmpfs and file handles are disabled; the
+unmodified stock kernel therefore cannot satisfy the intended first boot.
+
+No NixOS boot image, rootfs target or hardware write is authorized by this
+scaffold. The next safe deliverable is reconstruction of the 4.19 OPlus source
+layer and a build-only control-kernel result using the tracked configuration
+fragment. Only then can an audited kexec stage-1 bundle proceed.

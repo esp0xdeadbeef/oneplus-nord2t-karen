@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: dtb-workspace INPUT_DTB PATCH_DIRECTORY OUTPUT_DIRECTORY
+
+Create a reviewable DTB patch workspace without changing INPUT_DTB.
+PATCH_DIRECTORY may contain ordered *.patch files against a/karen.dts.
+OUTPUT_DIRECTORY must not already exist.
+EOF
+}
+
+fail() {
+  echo "dtb workspace failed: $*" >&2
+  exit 1
+}
+
+if [[ $# -ne 3 ]]; then
+  usage
+  exit 2
+fi
+
+input_dtb="$1"
+patch_directory="$2"
+output_directory="$3"
+
+[[ -f "$input_dtb" ]] || fail "input DTB is not a regular file: $input_dtb"
+[[ -r "$input_dtb" ]] || fail "input DTB is not readable: $input_dtb"
+[[ -d "$patch_directory" ]] ||
+  fail "patch directory does not exist: $patch_directory"
+[[ ! -e "$output_directory" ]] ||
+  fail "output path already exists: $output_directory"
+
+resolved_output="$(realpath -m -- "$output_directory")"
+case "$resolved_output" in
+  /dev | /dev/* | /proc | /proc/* | /sys | /sys/*)
+    fail "refusing special-filesystem output: $resolved_output"
+    ;;
+esac
+
+temporary_directory="$(mktemp -d -t karen-dtb-workspace.XXXXXXXX)"
+cleanup() {
+  chmod -R u+rwX -- "$temporary_directory" 2>/dev/null || true
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT
+
+workspace="$temporary_directory/workspace"
+mkdir -p "$workspace"
+
+input_magic="$(
+  od -An -N4 -tx1 "$input_dtb" |
+    tr -d '[:space:]'
+)"
+input_format=
+input_entry="$temporary_directory/input-entry.dtb"
+case "$input_magic" in
+  d00dfeed)
+    input_format="raw-fdt"
+    cp "$input_dtb" "$input_entry"
+    ;;
+  d7b7ab1e)
+    input_format="android-dt-table-v0"
+    mkdtboimg dump \
+      "$input_dtb" \
+      -o "$temporary_directory/input-table.txt" \
+      -b "$temporary_directory/input-entry" \
+      >/dev/null
+    mapfile -d '' input_entries < <(
+      find "$temporary_directory" \
+        -maxdepth 1 \
+        -type f \
+        -name 'input-entry.*' \
+        -print0 |
+        sort -z
+    )
+    [[ "${#input_entries[@]}" -eq 1 ]] ||
+      fail "Karen bootstrap expects exactly one DT table entry"
+    grep -Eq '^[[:space:]]+page_size = 2048$' \
+      "$temporary_directory/input-table.txt" ||
+      fail "Android DT table does not use the verified 2048-byte page size"
+    grep -Eq '^[[:space:]]+version = 0$' \
+      "$temporary_directory/input-table.txt" ||
+      fail "Android DT table is not version 0"
+    grep -Eq '^[[:space:]]+id = 00000000$' \
+      "$temporary_directory/input-table.txt" ||
+      fail "Android DT table entry has an unexpected id"
+    grep -Eq '^[[:space:]]+rev = 00000000$' \
+      "$temporary_directory/input-table.txt" ||
+      fail "Android DT table entry has an unexpected revision"
+    cp "${input_entries[0]}" "$input_entry"
+    ;;
+  *)
+    fail "unsupported input magic: $input_magic"
+    ;;
+esac
+
+dtc -q -I dtb -O dts -s \
+  -o "$workspace/karen.dts" \
+  "$input_entry"
+cp "$workspace/karen.dts" "$temporary_directory/base.dts"
+
+mapfile -d '' patch_files < <(
+  find "$patch_directory" \
+    -maxdepth 1 \
+    -type f \
+    -name '*.patch' \
+    -print0 |
+    sort -z
+)
+
+for patch_file in "${patch_files[@]}"; do
+  patch \
+    --batch \
+    --forward \
+    --fuzz=0 \
+    --no-backup-if-mismatch \
+    -d "$workspace" \
+    -p1 \
+    <"$patch_file"
+done
+
+dtc -q -I dts -O dtb -s \
+  -o "$temporary_directory/patched-entry.dtb" \
+  "$workspace/karen.dts"
+dtc -q -I dtb -O dts -s \
+  -o "$temporary_directory/compiled.dts" \
+  "$temporary_directory/patched-entry.dtb"
+
+if [[ "${#patch_files[@]}" -eq 0 ]]; then
+  cmp -s \
+    "$temporary_directory/base.dts" \
+    "$temporary_directory/compiled.dts" ||
+    fail "an unpatched DTB did not survive a semantic DTC round trip"
+fi
+
+diff_status=0
+diff -u \
+  --label a/karen.dts \
+  --label b/karen.dts \
+  "$temporary_directory/base.dts" \
+  "$temporary_directory/compiled.dts" \
+  >"$temporary_directory/changes.patch" ||
+  diff_status=$?
+[[ "$diff_status" -le 1 ]] || fail "could not produce the semantic DTB diff"
+
+input_sha256="$(sha256sum "$input_dtb" | cut -d' ' -f1)"
+case "$input_format" in
+  raw-fdt)
+    cp \
+      "$temporary_directory/patched-entry.dtb" \
+      "$temporary_directory/patched.dtb"
+    ;;
+  android-dt-table-v0)
+    mkdtboimg create \
+      "$temporary_directory/patched.dtb" \
+      --page_size=2048 \
+      --version=0 \
+      "$temporary_directory/patched-entry.dtb"
+    mkdtboimg dump \
+      "$temporary_directory/patched.dtb" \
+      -b "$temporary_directory/output-entry" \
+      >/dev/null
+    cmp -s \
+      "$temporary_directory/patched-entry.dtb" \
+      "$temporary_directory/output-entry.0" ||
+      fail "repacked Android DT table did not preserve its compiled entry"
+    ;;
+esac
+output_sha256="$(sha256sum "$temporary_directory/patched.dtb" | cut -d' ' -f1)"
+dtc_version="$(dtc --version)"
+
+patch_manifest="$temporary_directory/patches.json"
+printf '[]\n' >"$patch_manifest"
+for patch_file in "${patch_files[@]}"; do
+  patch_sha256="$(sha256sum "$patch_file" | cut -d' ' -f1)"
+  patch_name="$(basename "$patch_file")"
+  jq \
+    --arg name "$patch_name" \
+    --arg sha256 "$patch_sha256" \
+    '. + [{name: $name, sha256: $sha256}]' \
+    "$patch_manifest" \
+    >"$patch_manifest.next"
+  mv "$patch_manifest.next" "$patch_manifest"
+done
+
+jq -n \
+  --arg schemaVersion "1" \
+  --arg inputSha256 "$input_sha256" \
+  --arg outputSha256 "$output_sha256" \
+  --arg dtcVersion "$dtc_version" \
+  --arg inputFormat "$input_format" \
+  --slurpfile patches "$patch_manifest" \
+  '{
+    schemaVersion: ($schemaVersion | tonumber),
+    transformation: "dtb -> canonical dts -> source patches -> dtb",
+    inputFormat: $inputFormat,
+    entryCount: 1,
+    inputSha256: $inputSha256,
+    outputSha256: $outputSha256,
+    dtcVersion: $dtcVersion,
+    patches: $patches[0],
+    inPlaceBinaryPatch: false
+  }' \
+  >"$temporary_directory/manifest.json"
+
+mkdir -p "$output_directory"
+install -m 0644 \
+  "$temporary_directory/base.dts" \
+  "$output_directory/base.dts"
+install -m 0644 \
+  "$workspace/karen.dts" \
+  "$output_directory/patched-source.dts"
+install -m 0644 \
+  "$temporary_directory/compiled.dts" \
+  "$output_directory/compiled.dts"
+install -m 0644 \
+  "$temporary_directory/patched-entry.dtb" \
+  "$output_directory/patched-entry.dtb"
+install -m 0644 \
+  "$temporary_directory/patched.dtb" \
+  "$output_directory/patched.dtb"
+install -m 0644 \
+  "$temporary_directory/changes.patch" \
+  "$output_directory/changes.patch"
+install -m 0644 \
+  "$temporary_directory/manifest.json" \
+  "$output_directory/manifest.json"
+
+printf 'input_sha256=%s\n' "$input_sha256"
+printf 'output_sha256=%s\n' "$output_sha256"
+printf 'input_format=%s\n' "$input_format"
+printf 'patch_count=%s\n' "${#patch_files[@]}"

@@ -11,6 +11,8 @@ with headless kexec tests from rooted LineageOS through Magisk before any
 persistent NixOS install. Its scope, repository boundary, staged bring-up and
 hardware safety gates are documented in the
 [Mobile NixOS feature plan](docs/feature-nixos.md).
+The initial build-only device metadata and structure-aware DTB patch workspace
+live under [`nixos/`](nixos/README.md); they perform no hardware writes.
 
 This repository does not commit flashable images. As of 2026-07-25, `CPH2399`
 is not officially supported by GrapheneOS or LineageOS. The local port now
