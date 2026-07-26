@@ -13,6 +13,9 @@ hardware safety gates are documented in the
 [Mobile NixOS feature plan](docs/feature-nixos.md).
 The initial build-only device metadata and structure-aware DTB patch workspace
 live under [`nixos/`](nixos/README.md); they perform no hardware writes.
+The root flake is intentionally only wiring; the package, kernel, app and
+check boundaries are documented in the
+[Nix expression layout](nix/README.md).
 The exact public firmware inventory, DTB/X13s comparison and remaining native
 driver gates are tracked separately in the
 [NixOS blocker matrix](docs/nixos-blockers.md).
@@ -607,6 +610,7 @@ by Git.
 - [LineageOS port assessment](docs/lineage-port.md)
 - [Mobile NixOS feature plan](docs/feature-nixos.md)
 - [NixOS firmware, DTB and driver blockers](docs/nixos-blockers.md)
+- [Nix expression layout](nix/README.md)
 
 Run all repository checks with:
 

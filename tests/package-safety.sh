@@ -15,6 +15,9 @@ lineage_system_fingerprint="$script_directory/scripts/read-lineage-system-finger
 lineage_unroot="$script_directory/scripts/lineage-unroot"
 owner_apk_signer="$script_directory/scripts/owner-sign-apk"
 adaway_dependency_lock="$script_directory/gradle/adaway-deps.json"
+artifact_packages="$script_directory/nix/packages/artifacts.nix"
+lineage_packages="$script_directory/nix/packages/lineage.nix"
+nixos_kernel_packages="$script_directory/nix/packages/kernel/nixos.nix"
 robotnix_device="$script_directory/lineage/robotnix-karen.nix"
 runtime_audit="$script_directory/scripts/audit-lineage-runtime"
 sops_config="$script_directory/.sops.yaml"
@@ -128,8 +131,8 @@ grep -Fq 'CertificateFactory.getInstance("X.509")' "$vector_owner_patch"
 grep -Fq \
   'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8' \
   "$vector_memory_patch"
-grep -Fq 'pkgs.unzip' "$script_directory/flake.nix"
-if grep -Fq -- '-Dorg.gradle.jvmargs=-Xmx4g ' "$script_directory/flake.nix"; then
+grep -Fq 'pkgs.unzip' "$artifact_packages"
+if grep -Fq -- '-Dorg.gradle.jvmargs=-Xmx4g ' "$artifact_packages"; then
   echo "Space-separated Gradle JVM arguments must live in gradle.properties." >&2
   exit 1
 fi
@@ -189,26 +192,26 @@ grep -Fq '@APKSIGNER@ verify --print-certs' "$owner_apk_signer"
 grep -Fq \
   'git+https://github.com/AdAway/AdAway.git?rev=89dc7277f5bd539ba108c20a857aae6e93199856' \
   "$script_directory/flake.nix"
-grep -Fq 'data = ./gradle/adaway-deps.json;' \
-  "$script_directory/flake.nix"
-grep -Fq 'version = "8.9";' "$script_directory/flake.nix"
-grep -Fq 'useBwrap = false;' "$script_directory/flake.nix"
+grep -Fq 'data = repositoryRoot + /gradle/adaway-deps.json;' \
+  "$artifact_packages"
+grep -Fq 'version = "8.9";' "$artifact_packages"
+grep -Fq 'useBwrap = false;' "$artifact_packages"
 jq -e 'type == "object" and length > 0' \
   "$adaway_dependency_lock" >/dev/null
-if grep -Fq 'AdAway-6.1.4-20241027.apk' "$script_directory/flake.nix"; then
+if grep -Fq 'AdAway-6.1.4-20241027.apk' "$artifact_packages"; then
   echo "AdAway must be built from its pinned upstream source." >&2
   exit 1
 fi
 grep -Fq \
   'https://github.com/LineageOS/android_external_chromium-webview_prebuilt_arm64.git' \
-  "$script_directory/flake.nix"
+  "$artifact_packages"
 grep -Fq 'rev = "aca8d63899707c568d48c412e2c34a8c11c4dd12";' \
-  "$script_directory/flake.nix"
+  "$artifact_packages"
 grep -Fq 'hash = "sha256-xBjQHGb8+RYzgR08qzA/dEpG0p5G9CnctSGmk5oHMYw=";' \
-  "$script_directory/flake.nix"
-grep -Fq 'fetchLFS = true;' "$script_directory/flake.nix"
+  "$artifact_packages"
+grep -Fq 'fetchLFS = true;' "$artifact_packages"
 if [[ "$(grep -Fc 'webviewSource = lineageWebviewArm64;' \
-  "$script_directory/flake.nix")" -ne 3 ]]; then
+  "$lineage_packages")" -ne 5 ]]; then
   echo "Every Karen Robotnix variant must use the pinned WebView source." >&2
   exit 1
 fi
@@ -220,14 +223,14 @@ grep -Fq \
   "$board_config"
 grep -Fq \
   'k6893v1_64_k419_ab_defconfig' \
-  "$script_directory/flake.nix"
+  "$nixos_kernel_packages"
 grep -Fxq 'CONFIG_KEXEC=y' \
   "$script_directory/nixos/families/mt6893/kernel/nixos-control.config"
 grep -Fq "grep -Fxq 'CONFIG_KEXEC=y' \"\$effective_config\"" \
-  "$script_directory/flake.nix"
-grep -Fq 'kernel.config' "$script_directory/flake.nix"
-grep -Fq 'nwpower_unsl_blacklist_reject(void)' "$script_directory/flake.nix"
-grep -Fq 'oplus_match_modem_wakeup(void)' "$script_directory/flake.nix"
+  "$lineage_packages"
+grep -Fq 'kernel.config' "$lineage_packages"
+grep -Fq 'nwpower_unsl_blacklist_reject(void)' "$nixos_kernel_packages"
+grep -Fq 'oplus_match_modem_wakeup(void)' "$nixos_kernel_packages"
 grep -Fq 'lock_supp_level(unsigned int level)' \
   "$script_directory/nixos/patches/kernel/0004-oplus-fix-control-kernel-warnings.patch"
 grep -Fq -- '-Wno-error=strict-prototypes' \
@@ -238,7 +241,7 @@ if grep -Fq -- '-Wno-error=implicit-int' \
   exit 1
 fi
 grep -Fq 'static int oplus_misc_healthinfo_parse_dt(' \
-  "$script_directory/flake.nix"
+  "$nixos_kernel_packages"
 grep -Fq 'extern int sysctl_sched_impt_tgid;' \
   "$script_directory/nixos/patches/kernel/0006-clang-fix-control-kernel-types.patch"
 grep -Fq 'DPMA_DRB_DATA_INFO("%p(%04d):"' \
@@ -256,9 +259,9 @@ grep -Fq 'static bool ui_to_soc_jump_flag = false;' \
 grep -Fq 'static bool flag = false;' \
   "$script_directory/nixos/patches/kernel/0010-oplus-fix-debug-boolean-types.patch"
 grep -Fq "'static int stm8s_parse_fw_from_array('" \
-  "$script_directory/flake.nix"
+  "$nixos_kernel_packages"
 grep -Fq "'extern void Eeprom_DistortionParamsRead('" \
-  "$script_directory/flake.nix"
+  "$nixos_kernel_packages"
 grep -Fq \
   'source.dirs."kernel/oneplus/vendor/mediatek/kernel_modules".src' \
   "$robotnix_device"
@@ -286,7 +289,7 @@ grep -Fq -- '-storepass:file "$store_password_file"' \
 grep -Fq -- '-keypass:file "$key_password_file"' \
   "$vector_signing_generator"
 if grep -Eq -- '-Pandroid(Store|Key)(File|Password|Alias)' \
-  "$script_directory/flake.nix"; then
+  "$artifact_packages" "$lineage_packages" "$nixos_kernel_packages"; then
   echo "Vector private signing attributes must not enter a Nix derivation." >&2
   exit 1
 fi

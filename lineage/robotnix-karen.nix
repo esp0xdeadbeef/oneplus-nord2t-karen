@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 {
+  adbPublicKey ? null,
   buildSourceKernel ? false,
   deviceTree,
   fullSystem ? false,
@@ -49,6 +50,12 @@ lib.mkMerge [
     # a freshly wiped device can provide bring-up logs. Never set this on an
     # installable system build.
     envVars.WITH_ADB_INSECURE = "true";
+  })
+
+  (lib.mkIf (adbPublicKey != null) {
+    # Owner-only authenticated recovery access. The caller may provide one
+    # public Android host key; private key material never enters this graph.
+    envVars.KAREN_DEBUG_ADB_KEYS = toString adbPublicKey;
   })
 
   (lib.mkIf fullSystem {

@@ -117,6 +117,16 @@ It first establishes the same minimal pinned Magisk root when needed, then:
 - leaves Magisk denylist enforcement off as required by Shamiko;
 - adds no package to the denylist unless `--denylist` is repeated explicitly.
 
+Hide My Applist is not a general root-hiding layer. Its upstream scope is
+intercepting application-list discovery; it does not change Verified Boot,
+hardware-backed attestation, Magisk/Zygisk injection or mount visibility.
+Shamiko also consumes only the explicit Magisk denylist targets. On the
+2026-07-26 test boot it was active with enforcement disabled as intended, but
+the tested banking app had zero denylist rows. Android properties were masked
+as `green/locked` while `/proc/cmdline` still reported
+`androidboot.verifiedbootstate=orange`. Root detection in that state is
+therefore expected even when Hide My Applist is enabled.
+
 The default Vector module and unsigned AdAway APK are built from pinned source
 and independent Gradle dependency locks. Immediately before installation, the
 full helper signs AdAway with the split SOPS owner identity on the trusted
