@@ -41,19 +41,28 @@ proves the complete stock/recovery/lock side of the roundtrip.
 
 The bootloader has since been deliberately unlocked again, performing the
 expected second wipe. The complete ext4 Lineage `system`, `system_ext` and
-`product` images are now installed on slot A alongside the exact pinned stock
-`vendor` and `odm`. All ten existing OPlus logical partitions were preserved.
-The enforcing private Lineage Recovery is active with authenticated root ADB
-and the OLED init fix. At this checkpoint the required Lineage factory reset,
-optional MindTheGapps sideload and first Android boot are still pending; no
-root package is installed.
+`product` images are installed on slot A alongside the exact pinned stock
+`vendor` and `odm`; all ten existing OPlus logical partitions were preserved.
+Lineage Recovery completed its factory reset, the pinned Android 14 arm64
+MindTheGapps add-on completed with status 0, and the phone now boots encrypted,
+SELinux-enforcing Lineage 21 with working display, touch, camera, audio and
+internet.
 
-Lineage fastbootd can report slot A through the added AOSP recovery
-BootControl service, but enforcing mode still labels the concrete extended
-`super` device incorrectly. The successful bounded install therefore used a
-temporary audited permissive Lineage Recovery, then immediately restored the
-enforcing AVB/boot pair before any Android boot. No stock recovery staging was
-used for that install.
+The first bounded install used a temporary audited permissive recovery to
+isolate one fastbootd SELinux-label failure, then restored the enforcing
+AVB/boot pair before Android booted. The source policy now labels the
+tmpfs-created extended `super` node through an exact `genfscon` rule. The
+compiled-policy audit passes and a subsequent enforcing Lineage fastbootd
+hardware test exposed `super`, all five standard mappings and all ten
+preserved OPlus mappings without stock-recovery staging.
+
+The current private test boot also runs pinned Magisk 30.7 with Zygisk,
+Vector, Shamiko, Systemless Hosts and the separately installed kexec module.
+Hide My Applist remains experimental: enabling its `system` scope with Vector
+2.0 caused Launcher/SystemUI to stall because its native hook could not be
+mapped. Removing that scope restored normal operation. The repository's
+future opinionated helper must keep that setting fail-closed until the
+framework compatibility issue is fixed and a boot health check passes.
 
 The earlier Lineage boot exercised display, touch, camera, audio and internet
 successfully. Its passive runtime audit reported the expected framework,

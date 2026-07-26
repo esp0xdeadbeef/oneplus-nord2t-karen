@@ -498,6 +498,21 @@ with 64 MiB sparse chunks. Every chunk succeeded, exact stock `vendor`/`odm`
 and all OPlus mappings remained present, and the enforcing AVB/boot chain was
 restored before the first Android boot.
 
+The durable enforcing fix is an exact recovery-policy rule:
+
+```text
+genfscon tmpfs /block/sdc68 u:object_r:super_block_device:s0
+```
+
+The concrete extended-devt node is created by `tmpfs`, so the existing path
+file-context and recovery `restorecon` were not sufficient across fastbootd's
+separate boot. The boot audit now inspects the compiled policy with
+`seinfo`, rather than accepting only the source rule. A rebuilt candidate
+passed that audit and an enforcing hardware fastbootd test reported slot A,
+exposed `super`, all five standard logical mappings and all ten preserved
+OPlus mappings. No permissive domain or stock recovery staging is required by
+that corrected recovery.
+
 The generated full A/B installation ZIP is correctly signed and contains a
 full ten-partition payload, but is not yet a safe replacement for that
 bounded path. Its dynamic metadata lists only the five standard logical

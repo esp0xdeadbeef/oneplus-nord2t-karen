@@ -381,6 +381,7 @@
             gnugrep
             libarchive
             mkbootimg-osm0sis
+            setools
           ];
           text = builtins.readFile ./scripts/audit-boot-image;
         };

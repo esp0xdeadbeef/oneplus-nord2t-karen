@@ -231,6 +231,7 @@ boot_control_rc="$candidate_ramdisk_directory/system/etc/init/android.hardware.b
 boot_control_manifest="$candidate_ramdisk_directory/system/etc/vintf/manifest/android.hardware.boot-service.default.xml"
 device_recovery_rc="$candidate_ramdisk_directory/init.recovery.mt6893.rc"
 vendor_file_contexts="$candidate_ramdisk_directory/vendor_file_contexts"
+compiled_sepolicy="$candidate_ramdisk_directory/sepolicy"
 
 grep -Fxq "ro.product.system.device=karen" "$properties" ||
   fail "ramdisk product device is not karen"
@@ -252,6 +253,10 @@ grep -Eq \
   '^/dev/block/sdc68[[:space:]]+u:object_r:super_block_device:s0$' \
   "$vendor_file_contexts" ||
   fail "recovery does not label the concrete super block device"
+seinfo --flat --genfscon tmpfs "$compiled_sepolicy" |
+  grep -Eq \
+    '^genfscon tmpfs /block/sdc68[[:space:]]+u:object_r:super_block_device:s0$' ||
+  fail "compiled recovery policy does not label the tmpfs-backed super node"
 grep -Fq "restorecon /dev/block/sdc68" "$device_recovery_rc" ||
   fail "recovery does not apply the concrete super block label before fastbootd"
 boot_label_action="$(

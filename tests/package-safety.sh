@@ -90,6 +90,8 @@ grep -Fq '/dev/block/sdc68' \
   "$script_directory/lineage/device/oneplus/karen/sepolicy/vendor/file_contexts"
 grep -Fq 'u:object_r:super_block_device:s0' \
   "$script_directory/lineage/device/oneplus/karen/sepolicy/vendor/file_contexts"
+grep -Fq 'genfscon tmpfs /block/sdc68 u:object_r:super_block_device:s0' \
+  "$script_directory/lineage/device/oneplus/karen/sepolicy/vendor/genfs_contexts"
 grep -Fq 'system/bin/hw/android.hardware.boot-service.default_recovery' \
   "$script_directory/scripts/audit-boot-image"
 grep -Fq 'interface aidl android.hardware.boot.IBootControl/default' \
@@ -97,6 +99,8 @@ grep -Fq 'interface aidl android.hardware.boot.IBootControl/default' \
 grep -Fq 'recovery does not label the concrete misc block device' \
   "$script_directory/scripts/audit-boot-image"
 grep -Fq 'recovery does not label the concrete super block device' \
+  "$script_directory/scripts/audit-boot-image"
+grep -Fq 'compiled recovery policy does not label the tmpfs-backed super node' \
   "$script_directory/scripts/audit-boot-image"
 grep -Fq 'restorecon /dev/block/sdc68' \
   "$script_directory/lineage/device/oneplus/karen/rootdir/etc/init.recovery.mt6893.rc"

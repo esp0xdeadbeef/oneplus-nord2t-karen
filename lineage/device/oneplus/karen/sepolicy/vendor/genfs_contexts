@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# The MTK extended-devt super node is created directly on recovery's /dev
+# tmpfs and therefore bypasses ueventd's path-based file_contexts relabel.
+genfscon tmpfs /block/sdc68 u:object_r:super_block_device:s0

@@ -1,6 +1,6 @@
 # LineageOS follow-up
 
-Last updated: 2026-07-25
+Last updated: 2026-07-26
 
 This is the resumable handoff for the current Karen LineageOS bring-up. It is
 deliberately operational rather than a second porting guide; durable findings
@@ -27,6 +27,18 @@ rsync flow and artifact-return checks.
   `karen-lineage-oled-fix4.service`.
 - The compiler cache is
   `/home/deadbeef/.cache/nord2t-ccache` on `s-tau`, with a 400 GB limit.
+- The ext4 Lineage userspace, exact stock vendor/odm, pinned MindTheGapps and
+  Magisk-patched private boot are installed on slot A. Lineage 21 completes
+  encrypted and enforcing normal boots.
+- The compiled recovery policy now gives the tmpfs-created extended `super`
+  node its exact `super_block_device` label. Enforcing Lineage fastbootd
+  exposes every standard and preserved OPlus logical mapping; the temporary
+  permissive recovery is no longer needed.
+- The current full-root runtime has Magisk 30.7, Zygisk, Vector, Shamiko,
+  Systemless Hosts and kexec active. HMA's `system` scope is disabled after it
+  reproducibly stalled Launcher/SystemUI; its native library is denied while
+  Vector injects it into `system_server`. Do not automate that scope until the
+  framework issue and rollback health check are resolved.
 - The exact-stock relock and green/rootless boot completed successfully. The
   bootloader was then deliberately unlocked again, with the expected wipe.
   A recovery request currently enters the corrected private Lineage Recovery
