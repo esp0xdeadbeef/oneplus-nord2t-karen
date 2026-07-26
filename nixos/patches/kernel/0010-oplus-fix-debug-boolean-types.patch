@@ -1,0 +1,23 @@
+From 7f47086183ed17509376097215a92e41a52e2263 Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 05:15:00 +0200
+Subject: [PATCH] oplus: type charger debug boolean state
+
+Keep Clang's fatal implicit-integer diagnostic enabled and make the two
+legacy charger-debug boolean declarations explicit.
+
+Assisted-by: Codex:gpt-5
+---
+ vendor/oplus/kernel/charger/oplus_debug_info.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/vendor/oplus/kernel/charger/oplus_debug_info.c b/vendor/oplus/kernel/charger/oplus_debug_info.c
+index 578e78a..e85d1c5 100644
+--- a/vendor/oplus/kernel/charger/oplus_debug_info.c
++++ b/vendor/oplus/kernel/charger/oplus_debug_info.c
+@@ -2155 +2155 @@ static int oplus_chg_chg_batt_capacity_jump_check(struct oplus_chg_chip *chip)
+-	static ui_to_soc_jump_flag = false;
++	static bool ui_to_soc_jump_flag = false;
+@@ -2270 +2270 @@ static int oplus_chg_mcu_update_check(struct oplus_chg_chip *chip) {
+-	static flag = false;
++	static bool flag = false;

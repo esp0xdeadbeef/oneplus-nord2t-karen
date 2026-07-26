@@ -429,6 +429,8 @@
               <${./nixos/patches/kernel/0008-oplus-fix-control-kernel-types.patch}
             patch --batch --forward --fuzz=0 -d "$out" -p1 \
               <${./nixos/patches/kernel/0009-oplus-fix-vooc-upload-type.patch}
+            patch --batch --forward --fuzz=0 -d "$out" -p1 \
+              <${./nixos/patches/kernel/0010-oplus-fix-debug-boolean-types.patch}
             substituteInPlace \
               "$out/vendor/oplus/kernel/charger/charger_ic/oplus_usbtemp.c" \
               --replace-fail \
