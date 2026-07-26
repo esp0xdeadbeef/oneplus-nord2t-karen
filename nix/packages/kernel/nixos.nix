@@ -41,7 +41,10 @@
 
   oneplusControlKernelSource =
     pkgs.runCommand "oneplus-karen-control-kernel-source" {
-      nativeBuildInputs = [pkgs.patch];
+      nativeBuildInputs = [
+        pkgs.openssl
+        pkgs.patch
+      ];
     } ''
       cp --no-preserve=ownership --reflink=auto -r \
         ${oneplus-kernel-source} "$out"
@@ -69,9 +72,14 @@
       install -D -m 0644 \
         ${mtkDctGenerated.oplus6893_21305} \
         "$out/arch/arm64/boot/dts/oplus6893_21305/cust.dtsi"
-      install -m 0444 \
-        ${stockModuleSigningCertificate} \
+      openssl x509 \
+        -inform DER \
+        -in ${stockModuleSigningCertificate} \
+        -out "$out/certs/karen-stock-module-signing.x509"
+      grep -Fxq -- \
+        '-----BEGIN CERTIFICATE-----' \
         "$out/certs/karen-stock-module-signing.x509"
+      chmod 0444 "$out/certs/karen-stock-module-signing.x509"
       patch --batch --forward --fuzz=0 -d "$out" -p1 \
         <${repositoryRoot + /nixos/patches/kernel/0001-clang-fix-control-kernel-errors.patch}
       patch --batch --forward --fuzz=0 -d "$out" -p1 \

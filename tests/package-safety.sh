@@ -302,6 +302,8 @@ grep -Fq \
   '30ee2ffb56cefe69f1c6d0439b7c566fa6121f784ba90d80bfba212404f7000d' \
   "$device_tools_packages"
 grep -Fq 'serial=9DFB3A7B9EEB1555' "$device_tools_packages"
+grep -Fq -- '-inform DER' "$nixos_kernel_packages"
+grep -Fq -- "'-----BEGIN CERTIFICATE-----'" "$nixos_kernel_packages"
 grep -Fq \
   'CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"' \
   "$nixos_kernel_packages"
