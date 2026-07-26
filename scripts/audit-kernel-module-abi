@@ -5,11 +5,16 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: nord2t-audit-kernel-module-abi KERNEL_BUNDLE VENDOR_IMAGE
+usage: nord2t-audit-kernel-module-abi KERNEL_BUNDLE VENDOR_IMAGE [REPLACEMENT_MODULE_DIRECTORY]
 
 Compare a source-built Karen kernel bundle against every versioned symbol
 imported by the exact pinned stock-derived vendor modules. The bundle must
 contain Module.symvers and kernel.release.
+
+When REPLACEMENT_MODULE_DIRECTORY is supplied, use its exact eight-module
+control set instead of the ABI-incompatible stock connectivity and trace
+modules. Every replacement must have a valid PKCS#7 signature from the public
+signing_key.x509 certificate in that directory.
 EOF
 }
 
@@ -18,13 +23,19 @@ fail() {
   exit 1
 }
 
-if [[ $# -ne 2 ]]; then
+if (( $# < 2 || $# > 3 )); then
   usage
   exit 2
 fi
 
 kernel_bundle="$(realpath "$1")"
 vendor_image="$(realpath "$2")"
+replacement_directory=""
+if (( $# == 3 )); then
+  [[ -d "$3" ]] ||
+    fail "replacement module directory is not readable: $3"
+  replacement_directory="$(realpath "$3")"
+fi
 module_symvers="$kernel_bundle/Module.symvers"
 kernel_release_file="$kernel_bundle/kernel.release"
 partition_manifest="${PARTITION_MANIFEST:-@PARTITION_MANIFEST@}"
@@ -89,6 +100,49 @@ vendor_modules=(
   wmt_chrdev_wifi.ko
 )
 
+replacement_modules=(
+  bt_drv_6893.ko
+  connfem.ko
+  conninfra.ko
+  fmradio_drv_connac2x.ko
+  gps_drv.ko
+  trace_mmstat.ko
+  wlan_drv_gen4m.ko
+  wmt_chrdev_wifi.ko
+)
+
+replacement_certificate_pem=""
+declare -A is_replacement=()
+if [[ -n "$replacement_directory" ]]; then
+  expected_replacements="$temporary_directory/expected-replacements.txt"
+  actual_replacements="$temporary_directory/actual-replacements.txt"
+  printf '%s\n' "${replacement_modules[@]}" |
+    sort -u >"$expected_replacements"
+  find \
+    "$replacement_directory" \
+    -mindepth 1 \
+    -maxdepth 1 \
+    -type f \
+    -name '*.ko' \
+    -printf '%f\n' |
+    sort -u >"$actual_replacements"
+  cmp -s "$expected_replacements" "$actual_replacements" ||
+    fail "replacement directory does not contain the exact eight-module set"
+
+  replacement_certificate="$replacement_directory/signing_key.x509"
+  [[ -s "$replacement_certificate" ]] ||
+    fail "replacement directory does not contain signing_key.x509"
+  replacement_certificate_pem="$temporary_directory/signing_key.pem"
+  openssl x509 \
+    -inform DER \
+    -in "$replacement_certificate" \
+    -out "$replacement_certificate_pem" ||
+    fail "replacement signing_key.x509 is not a valid DER certificate"
+  for module in "${replacement_modules[@]}"; do
+    is_replacement["$module"]=1
+  done
+fi
+
 module_directory="$temporary_directory/vendor-modules"
 mkdir "$module_directory"
 for module in "${vendor_modules[@]}"; do
@@ -121,6 +175,82 @@ awk '
 cmp -s "$expected_load" "$actual_load" ||
   fail "exact vendor modules.load differs from the pinned module set"
 
+verify_replacement_signature() {
+  local module="$1"
+  local module_path="$2"
+  local module_size
+  local signature_length
+  local signer_length
+  local key_id_length
+  local payload_size
+  local signature_offset
+  local signature_file
+  local payload_file
+  local -a signature_header
+
+  [[ "$(tail -c 28 "$module_path")" == '~Module signature appended~' ]] ||
+    fail "$module does not have a kernel module signature trailer"
+  read -r -a signature_header <<<"$(
+    tail -c 40 "$module_path" |
+      head -c 12 |
+      od -An -v -t u1
+  )"
+  [[ "${#signature_header[@]}" -eq 12 ]] ||
+    fail "$module has a malformed module signature header"
+  [[ "${signature_header[2]}" -eq 2 ]] ||
+    fail "$module does not use a PKCS#7 module signature"
+  [[
+    "${signature_header[5]}" -eq 0 &&
+      "${signature_header[6]}" -eq 0 &&
+      "${signature_header[7]}" -eq 0
+  ]] || fail "$module has non-zero module signature padding"
+
+  signer_length="${signature_header[3]}"
+  key_id_length="${signature_header[4]}"
+  signature_length=$((
+    signature_header[8] * 16777216 +
+      signature_header[9] * 65536 +
+      signature_header[10] * 256 +
+      signature_header[11]
+  ))
+  (( signature_length > 0 )) ||
+    fail "$module has an empty PKCS#7 signature"
+  module_size="$(stat -c %s "$module_path")"
+  payload_size=$((
+    module_size -
+      40 -
+      signer_length -
+      key_id_length -
+      signature_length
+  ))
+  (( payload_size > 0 )) ||
+    fail "$module has an invalid PKCS#7 signature length"
+  signature_offset=$((payload_size + signer_length + key_id_length))
+
+  payload_file="$temporary_directory/$module.signed-payload"
+  signature_file="$temporary_directory/$module.p7s"
+  head -c "$payload_size" "$module_path" >"$payload_file"
+  dd \
+    if="$module_path" \
+    of="$signature_file" \
+    bs=1M \
+    iflag=skip_bytes,count_bytes \
+    skip="$signature_offset" \
+    count="$signature_length" \
+    status=none
+  openssl cms \
+    -verify \
+    -binary \
+    -inform DER \
+    -in "$signature_file" \
+    -content "$payload_file" \
+    -certfile "$replacement_certificate_pem" \
+    -noverify \
+    -out /dev/null >/dev/null 2>&1 ||
+    fail "$module signature does not verify against signing_key.x509"
+  rm -f -- "$payload_file" "$signature_file"
+}
+
 providers="$temporary_directory/providers.tsv"
 imports="$temporary_directory/imports.tsv"
 module_order="$temporary_directory/module-order.txt"
@@ -137,6 +267,10 @@ done <"$module_symvers"
 
 for module in "${vendor_modules[@]}"; do
   module_path="$module_directory/$module"
+  if [[ -n "${is_replacement[$module]:-}" ]]; then
+    module_path="$replacement_directory/$module"
+    verify_replacement_signature "$module" "$module_path"
+  fi
   module_vermagic="$(modinfo -F vermagic "$module_path")" ||
     fail "could not read vermagic from $module"
   [[ "${module_vermagic%% *}" == "$kernel_release" ]] ||
@@ -165,8 +299,16 @@ done
 [[ -s "$imports" ]] ||
   fail "the pinned vendor modules expose no versioned imports"
 
+replacement_count=0
+if [[ -n "$replacement_directory" ]]; then
+  replacement_count="${#replacement_modules[@]}"
+fi
+
 set +e
-gawk -F '\t' -v release="$kernel_release" '
+gawk \
+  -F '\t' \
+  -v release="$kernel_release" \
+  -v replacement_count="$replacement_count" '
   ARGIND == 1 {
     crc = tolower($1)
     symbol = $2
@@ -216,6 +358,7 @@ gawk -F '\t' -v release="$kernel_release" '
     printf("module_mismatches=%d\n", total_mismatches)
     printf("module_missing=%d\n", total_missing)
     printf("provider_conflicts=%d\n", provider_conflicts)
+    printf("replacement_module_count=%d\n", replacement_count)
 
     if (provider_conflicts != 0 || total_mismatches != 0 || total_missing != 0) {
       exit 1
@@ -226,7 +369,7 @@ audit_status=$?
 set -e
 
 if ((audit_status != 0)); then
-  fail "the source-built kernel is incompatible with the pinned vendor modules"
+  fail "the source-built kernel is incompatible with the selected module set"
 fi
 
 echo "Karen kernel module ABI audit passed."

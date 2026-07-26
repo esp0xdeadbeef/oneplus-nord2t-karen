@@ -35,6 +35,10 @@ module_source="$android_root/kernel/oneplus/vendor/mediatek/kernel_modules"
   fail "kernel output does not contain an effective config"
 [[ -s "$kernel_out/Module.symvers" ]] ||
   fail "kernel output does not contain Module.symvers"
+grep -Fxq 'CONFIG_MODULE_SIG_FORCE=y' "$kernel_out/.config" ||
+  fail "kernel does not require signed modules"
+grep -Fxq 'CONFIG_MODULE_SIG_SHA512=y' "$kernel_out/.config" ||
+  fail "kernel does not use the expected SHA-512 module signatures"
 [[ -d "$module_source/connectivity" ]] ||
   fail "MediaTek module source is not available below $android_root"
 [[ ! -e "$output_directory" ]] ||
@@ -46,6 +50,9 @@ gcc64_root="$android_root/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-
 gcc32_root="$android_root/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9"
 kernel_tools="$android_root/prebuilts/kernel-build-tools/linux-x86/bin"
 build_tools="$android_root/prebuilts/build-tools/linux-x86/bin"
+sign_file="$kernel_out/scripts/sign-file"
+signing_key="$kernel_out/certs/signing_key.pem"
+signing_certificate="$kernel_out/certs/signing_key.x509"
 
 for required_tool in \
   "$make_binary" \
@@ -60,6 +67,12 @@ for required_tool in \
   [[ -x "$required_tool" ]] ||
     fail "required Android build tool is missing: $required_tool"
 done
+[[ -x "$sign_file" ]] ||
+  fail "kernel output does not contain scripts/sign-file"
+[[ -s "$signing_key" ]] ||
+  fail "kernel output does not contain its private ephemeral signing key"
+[[ -s "$signing_certificate" ]] ||
+  fail "kernel output does not contain its public signing certificate"
 
 export PATH="$android_root/out/host/linux-x86/bin:$clang_root/bin:$gcc64_root/bin:$gcc32_root/bin:$build_tools:$PATH"
 export LD_LIBRARY_PATH="$clang_root/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -67,8 +80,9 @@ export PERL5LIB="$android_root/prebuilts/tools-lineage/common/perl-base"
 export BISON_PKGDATADIR="$android_root/prebuilts/build-tools/common/bison"
 
 target_cc="clang --cuda-path=/dev/null --hip-path=/dev/null"
-if [[ -n "${CC_WRAPPER:-}" ]]; then
-  target_cc="$CC_WRAPPER $target_cc"
+compiler_wrapper="${CC_WRAPPER:-${CCACHE_EXEC:-}}"
+if [[ -n "$compiler_wrapper" ]]; then
+  target_cc="$compiler_wrapper $target_cc"
 fi
 
 build_cores="${NIX_BUILD_CORES:-1}"
@@ -121,6 +135,7 @@ fm="$module_source/connectivity/fmradio"
 gps="$module_source/connectivity/gps"
 wlan_adaptor="$module_source/connectivity/wlan/adaptor"
 wlan="$module_source/connectivity/wlan/core/gen4m"
+trace="$kernel_source/kernel/trace"
 
 build_module "$conninfra"
 build_module "$connfem"
@@ -164,6 +179,7 @@ build_module \
   MTK_ANDROID_EMI=y \
   WIFI_IP_SET=1 \
   "KBUILD_EXTRA_SYMBOLS=$wireless_symbols"
+build_module "$trace"
 
 declare -A module_paths=(
   [bt_drv_6893.ko]="$bt/bt_drv_6893.ko"
@@ -171,7 +187,7 @@ declare -A module_paths=(
   [conninfra.ko]="$conninfra/conninfra.ko"
   [fmradio_drv_connac2x.ko]="$fm/fmradio_drv_connac2x.ko"
   [gps_drv.ko]="$gps/gps_drv.ko"
-  [trace_mmstat.ko]="$kernel_out/kernel/trace/trace_mmstat.ko"
+  [trace_mmstat.ko]="$trace/trace_mmstat.ko"
   [wlan_drv_gen4m.ko]="$wlan/wlan_drv_gen4m.ko"
   [wmt_chrdev_wifi.ko]="$wlan_adaptor/wmt_chrdev_wifi.ko"
 )
@@ -190,11 +206,13 @@ for module in \
   [[ -s "$module_path" ]] ||
     fail "expected module was not built: $module"
   install -m 0644 "$module_path" "$output_directory/$module"
+  "$sign_file" \
+    sha512 \
+    "$signing_key" \
+    "$signing_certificate" \
+    "$output_directory/$module"
 done
 
-signing_certificate="$kernel_out/certs/signing_key.x509"
-[[ -s "$signing_certificate" ]] ||
-  fail "kernel build did not export its public module-signing certificate"
 install -m 0644 "$signing_certificate" "$output_directory/signing_key.x509"
 
 echo "Built eight Karen source control modules in $output_directory"

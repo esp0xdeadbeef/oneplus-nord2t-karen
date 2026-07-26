@@ -431,6 +431,7 @@
       gawk
       jq
       kmod
+      openssl
     ];
     text =
       builtins.replaceStrings

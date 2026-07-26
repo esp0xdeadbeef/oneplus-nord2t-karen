@@ -383,6 +383,14 @@
     robotnixSystem.config.build.mkAndroid {
       inherit name;
       makeTargets = ["bootimage"];
+      postBuild = ''
+        kernel_object="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ"
+        bash \
+          ${repositoryRoot + /scripts/build-karen-control-modules} \
+          "$rootDir" \
+          "$kernel_object" \
+          "$ANDROID_PRODUCT_OUT/karen-control-modules"
+      '';
       installPhase = ''
         kernel_object="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ"
         effective_config="$kernel_object/.config"
@@ -400,10 +408,8 @@
         cp --reflink=auto \
           "$kernel_object/include/config/kernel.release" \
           "$out/kernel.release"
-        bash \
-          ${repositoryRoot + /scripts/build-karen-control-modules} \
-          "$rootDir" \
-          "$kernel_object" \
+        cp -a \
+          "$ANDROID_PRODUCT_OUT/karen-control-modules" \
           "$out/modules"
       '';
     };
