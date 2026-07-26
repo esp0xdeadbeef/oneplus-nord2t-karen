@@ -190,6 +190,11 @@ grep -Fq 'KAREN_VECTOR_SIGNING_CERTIFICATE_FILE="$certificate"' \
 grep -Fq 'vector-module-owner-intermediate' "$vector_owner_build"
 grep -Fq 'repository-root mirror' "$vector_owner_build"
 grep -Fq 'nord2t-read-lineage-system-fingerprint' "$lineage_root"
+grep -Fq -- '--boot-image requires --expected-kernel-sha256' "$lineage_root"
+if grep -Fq 'adb_property ro.boot.flash.locked' "$lineage_root"; then
+  echo "Lineage root must not trust concealment-spoofable lock properties." >&2
+  exit 1
+fi
 grep -Fq 'nord2t-read-lineage-system-fingerprint' "$lineage_root_full"
 for source_kernel_helper in \
   "$lineage_root" \

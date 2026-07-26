@@ -8,6 +8,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: nord2t-lineage-root IMAGE_DIR [--allow-embedded-adb-key]
                                     [--expected-kernel-sha256 SHA256]
+                                    [--boot-image FILE]
                                     [--output FILE] [--persist] [--yes]
 
 Patch the audited enforcing Karen Lineage boot image in IMAGE_DIR with the
@@ -18,6 +19,11 @@ bootloader-fastboot. --yes skips only that write confirmation.
 Karen's bootloader rejected temporary `fastboot boot` during bring-up, so this
 helper deliberately has no misleading temporary-boot mode. Use
 nord2t-lineage-unroot with the same IMAGE_DIR for the exact bootpair rollback.
+
+--boot-image selects a separately built control boot over the audited
+IMAGE_DIR userspace. It requires --expected-kernel-sha256; the helper audits
+that boot independently while retaining IMAGE_DIR as the system identity and
+rollback baseline.
 EOF
 }
 
@@ -40,6 +46,7 @@ image_directory="$(realpath "$1")"
 shift
 allow_embedded_adb_key=false
 expected_kernel_sha256=
+boot_image=
 persist=false
 assume_yes=false
 output="$PWD/magisk-patched-lineage-21-karen-v30.7.img"
@@ -56,6 +63,11 @@ while [[ $# -gt 0 ]]; do
       [[ "$2" =~ ^[0-9a-f]{64}$ ]] ||
         fail "--expected-kernel-sha256 requires a lowercase SHA-256"
       expected_kernel_sha256="$2"
+      shift 2
+      ;;
+    --boot-image)
+      [[ $# -ge 2 ]] || fail "--boot-image requires a path"
+      boot_image="$2"
       shift 2
       ;;
     --output)
@@ -90,9 +102,15 @@ done
   fail "Lineage image directory is not readable"
 [[ ! -e "$output" ]] ||
   fail "refusing to overwrite output: $output"
+if [[ -n "$boot_image" ]]; then
+  [[ -n "$expected_kernel_sha256" ]] ||
+    fail "--boot-image requires --expected-kernel-sha256"
+  lineage_boot="$(realpath "$boot_image")"
+else
+  lineage_boot="$image_directory/boot.img"
+fi
 
 magisk_apk="@MAGISK_APK@"
-lineage_boot="$image_directory/boot.img"
 expected_apk_hash=e0d32d2123532860f97123d927b1bb86c4e08e6fd8a48bfc6b5bee0afae9ebd5
 expected_apk_size=11613864
 expected_boot_size=67108864
@@ -124,8 +142,10 @@ if [[ "$allow_embedded_adb_key" == true ]]; then
   boot_audit_arguments+=(--allow-embedded-adb-key)
 fi
 if [[ -n "$expected_kernel_sha256" ]]; then
-  audit_arguments+=(--expected-kernel-sha256 "$expected_kernel_sha256")
   boot_audit_arguments+=(--expected-kernel-sha256 "$expected_kernel_sha256")
+  if [[ -z "$boot_image" ]]; then
+    audit_arguments+=(--expected-kernel-sha256 "$expected_kernel_sha256")
+  fi
 fi
 
 host_work="$(mktemp -d -t nord2t-lineage-root.XXXXXXXX)"
@@ -147,6 +167,17 @@ nord2t-audit-lineage-images \
   fail "source Lineage bundle did not pass its enforcing image audit"
 grep -Fxq "selinux_mode=enforcing-default" "$host_work/image-audit.txt" ||
   fail "source Lineage bundle is not SELinux enforcing"
+if [[ -n "$boot_image" ]]; then
+  nord2t-audit-boot \
+    "${boot_audit_arguments[@]}" \
+    "$lineage_boot" \
+    >"$host_work/control-boot-audit.txt" ||
+    fail "separate control boot did not pass its structural audit"
+  grep -Fxq \
+    "selinux_mode=enforcing-default" \
+    "$host_work/control-boot-audit.txt" ||
+    fail "separate control boot is not SELinux enforcing"
+fi
 
 [[ "$(stat -c %s "$lineage_boot")" == "$expected_boot_size" ]] ||
   fail "Lineage boot image does not fill the 64 MiB boot partition"
@@ -184,10 +215,6 @@ adb_property() {
   fail "running Lineage system does not match the audited image bundle"
 [[ "$(adb_property ro.boot.slot_suffix)" == _a ]] ||
   fail "the audited Lineage slot A is not active"
-[[ "$(adb_property ro.boot.flash.locked)" == 0 ]] ||
-  fail "bootloader is not unlocked"
-[[ "$(adb_property ro.boot.verifiedbootstate)" == orange ]] ||
-  fail "verified boot does not report the expected unlocked state"
 [[ "$(adb -s "$adb_serial" shell getenforce 2>/dev/null | tr -d '\r')" == Enforcing ]] ||
   fail "running Lineage system is not SELinux enforcing"
 [[ "$(adb_property ro.crypto.state)" == encrypted &&

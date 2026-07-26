@@ -15,6 +15,25 @@ nix run .#lineage-root -- /path/to/lineage-images \
   --output /private/path/magisk-lineage.img
 ```
 
+A source-built control kernel can be patched over an already audited and
+matching userspace without pretending that its new boot belongs to the base
+bundle:
+
+```bash
+kernel_hash="$(sha256sum /path/to/control-kernel | cut -d' ' -f1)"
+nix run .#lineage-root -- /path/to/base-lineage-images \
+  --allow-embedded-adb-key \
+  --boot-image /path/to/control-boot.img \
+  --expected-kernel-sha256 "$kernel_hash" \
+  --output /private/path/to/magisk-control-boot.img
+```
+
+The base directory remains the system-fingerprint and rollback authority. The
+separate boot receives its own structural/kernel audit before Magisk patches
+it. Boot-state properties are not trusted during this output-only operation,
+because root-full concealment can spoof them; a persistent write still
+requires the authoritative unlocked state from bootloader-fastboot.
+
 Omit `--allow-embedded-adb-key` for a normal release-style bundle. Add
 `--persist` only after the patch and source audits pass:
 
