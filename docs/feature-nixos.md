@@ -45,7 +45,7 @@ shell or a Nix package environment inside Android:
 NixOS host
 ├── systemd as PID 1
 ├── NixOS networking, storage, updates and user sessions
-├── Wayland and the selected mobile shell
+├── Lomiri mobile shell on Mir / QtMir
 ├── native Nix packages
 └── containerized LineageOS hardware adaptation
     ├── matching vendor libraries and HALs
@@ -120,6 +120,9 @@ nixos/
       kernel.nix
       firmware.nix
       stage-1.nix
+  modules/
+    lomiri-mobile.nix
+    android-graphics.nix
   devices/
     oneplus-karen/
       default.nix
@@ -799,7 +802,67 @@ Determine whether display requires:
 - proprietary Mali userspace;
 - Android Hardware Composer through a compatibility layer.
 
-Only then select Phosh, Plasma Mobile or another compositor.
+Lomiri is the selected mobile UX, but it must not be activated until one of
+those graphics paths has been demonstrated independently.
+
+#### Lomiri without an Ubuntu target
+
+Use [Lomiri](https://lomiri.com/), formerly Unity8, as a native NixOS desktop
+session. Do not build an Ubuntu root filesystem merely to obtain the Ubuntu
+Touch interface. Lomiri is not only a window manager: it includes the shell,
+session integration and Qt/QML components and runs on Mir through QtMir.
+
+The Nixpkgs revision currently pinned by this repository already provides
+Lomiri, Mir, QtMir, the Lomiri session, settings, indicators and applications
+for `aarch64-linux`. Its full
+[NixOS Lomiri module](https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/services/desktop-managers/lomiri.nix)
+can provide a desktop reference configuration:
+
+```nix
+{
+  services.desktopManager.lomiri.enable = true;
+  services.displayManager.defaultSession = "lomiri";
+}
+```
+
+Do not enable that full module unchanged during early phone bring-up. It also
+selects desktop-oriented integration such as LightDM, Xwayland,
+NetworkManager, indicators, applications and telephony components. First
+create a smaller `nixos/modules/lomiri-mobile.nix` boundary that can start
+only Mir, QtMir and the shell against an already proven display and input
+stack. Add the remaining session services declaratively after the minimal
+shell is observable.
+
+The intended rendering paths are:
+
+```text
+NixOS host
+└── Lomiri shell and session
+    └── QtMir / Mir
+        ├── native DRM/KMS plus Mesa
+        └── libhybris / mir-android2-platform
+            └── Android HWC and Mali services in the Lineage container
+```
+
+Prefer native DRM/KMS when the hardware and kernel expose a usable scanout and
+acceleration path. The likely initial Karen route is instead the
+container-backed path because the working display stack currently depends on
+Android vendor components. UBports maintains
+[Hybris support components](https://gitlab.com/ubports/development/core/hybris-support),
+including
+[`mir-android2-platform`](https://gitlab.com/ubports/development/core/hybris-support/mir-android2-platform),
+specifically to let Mir use Android graphics drivers through libhybris.
+Package and pin those sources as Nix derivations rather than importing Ubuntu
+packages or making Ubuntu a build target.
+
+Bring up Lomiri in this order:
+
+1. prove that Mir can open the selected native or Android-backed display;
+2. prove touch and screen geometry without a complete desktop session;
+3. start the minimal Lomiri shell;
+4. add the on-screen keyboard, settings and indicators;
+5. add applications and content integration;
+6. connect telephony UI only after the separate radio milestone succeeds.
 
 ### 6. LineageOS compatibility container
 
