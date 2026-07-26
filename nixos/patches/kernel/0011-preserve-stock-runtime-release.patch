@@ -1,0 +1,31 @@
+From 6f511b1585a812495b91ce8372d89939b35ac377 Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 13:40:00 +0200
+Subject: [PATCH] kernel: preserve the stock runtime release
+
+The pinned stock kernel and its vendor modules use 4.19.191+ as their
+runtime ABI release. Android's BUILD_NUMBER identifies the userspace build;
+letting it alter UTS_RELEASE prevents the otherwise matching stock modules
+from loading into a source-built control kernel.
+
+Assisted-by: Codex:gpt-5
+---
+ Makefile | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 32823c5..dcde680 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1298,11 +1298,7 @@ endif
+ # needs to be updated, so this check is forced on all builds
+ 
+ uts_len := 64
+-ifneq (,$(BUILD_NUMBER))
+-	UTS_RELEASE=$(KERNELRELEASE)-ab$(BUILD_NUMBER)
+-else
+ 	UTS_RELEASE=$(KERNELRELEASE)
+-endif
+ define filechk_utsrelease.h
+ 	if [ `echo -n "$(UTS_RELEASE)" | wc -c ` -gt $(uts_len) ]; then \
+ 		echo '"$(UTS_RELEASE)" exceeds $(uts_len) characters' >&2;    \

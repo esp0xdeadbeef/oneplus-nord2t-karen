@@ -304,7 +304,8 @@ devtmpfs, file-handle and extra cgroup options are still available in the
 separate `nixos-control.config` for the second kernel; they no longer alter
 the first Android control kernel's module ABI.
 
-The cached kernel-only rebuild completed on `s-tau` in 11 minutes 44 seconds.
+The cached kernel-only rebuild completed on the owner's
+[optional remote builder](remote-builder.md) in 11 minutes 44 seconds.
 Its exported artifacts are:
 
 | File | Bytes | SHA-256 |

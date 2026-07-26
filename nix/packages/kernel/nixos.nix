@@ -95,6 +95,8 @@
         <${repositoryRoot + /nixos/patches/kernel/0005-clang-tolerate-legacy-vendor-warnings.patch}
       patch --batch --forward --fuzz=0 -d "$out" -p1 \
         <${repositoryRoot + /nixos/patches/kernel/0006-clang-fix-control-kernel-types.patch}
+      patch --batch --forward --fuzz=0 -d "$out" -p1 \
+        <${repositoryRoot + /nixos/patches/kernel/0011-preserve-stock-runtime-release.patch}
       substituteInPlace "$out/net/oplus_nwpower/oplus_nwpower.c" \
         --replace-fail \
         'static void nwpower_unsl_blacklist_reject() {' \

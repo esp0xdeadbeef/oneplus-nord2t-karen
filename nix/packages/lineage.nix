@@ -394,20 +394,26 @@
       installPhase = ''
         kernel_object="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ"
         effective_config="$kernel_object/.config"
+        base_release_file="$kernel_object/include/config/kernel.release"
+        runtime_release_header="$kernel_object/include/generated/utsrelease.h"
         grep -Fxq 'CONFIG_KEXEC=y' "$effective_config"
         test -s "$kernel_object/Module.symvers"
-        test -s "$kernel_object/include/config/kernel.release"
-        grep -Fxq \
-          '4.19.191+' \
-          "$kernel_object/include/config/kernel.release"
+        grep -Fxq '4.19.191+' "$base_release_file"
+        test -s "$runtime_release_header"
+        runtime_release="$(
+          sed -nE \
+            's/^#define UTS_RELEASE "([^"]+)"$/\1/p' \
+            "$runtime_release_header"
+        )"
+        [[ "$runtime_release" == '4.19.191+' ]]
         mkdir -p "$out"
         cp --reflink=auto "$ANDROID_PRODUCT_OUT/boot.img" "$out/boot.img"
         cp --reflink=auto "$ANDROID_PRODUCT_OUT/kernel" "$out/kernel"
         cp --reflink=auto "$effective_config" "$out/kernel.config"
         cp --reflink=auto "$kernel_object/Module.symvers" "$out/Module.symvers"
-        cp --reflink=auto \
-          "$kernel_object/include/config/kernel.release" \
-          "$out/kernel.release"
+        cp --reflink=auto "$base_release_file" "$out/kernel.base-release"
+        cp --reflink=auto "$runtime_release_header" "$out/kernel.utsrelease.h"
+        printf '%s\n' "$runtime_release" >"$out/kernel.release"
         cp -a \
           "$ANDROID_PRODUCT_OUT/karen-control-modules" \
           "$out/modules"
@@ -474,12 +480,18 @@
           "$rootDir"
         kernel_object="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ"
         effective_config="$kernel_object/.config"
+        base_release_file="$kernel_object/include/config/kernel.release"
+        runtime_release_header="$kernel_object/include/generated/utsrelease.h"
         grep -Fxq 'CONFIG_KEXEC=y' "$effective_config"
         test -s "$kernel_object/Module.symvers"
-        test -s "$kernel_object/include/config/kernel.release"
-        grep -Fxq \
-          '4.19.191+' \
-          "$kernel_object/include/config/kernel.release"
+        grep -Fxq '4.19.191+' "$base_release_file"
+        test -s "$runtime_release_header"
+        runtime_release="$(
+          sed -nE \
+            's/^#define UTS_RELEASE "([^"]+)"$/\1/p' \
+            "$runtime_release_header"
+        )"
+        [[ "$runtime_release" == '4.19.191+' ]]
         mkdir -p "$out"
         for image in \
           boot system system_ext product vendor odm \
@@ -489,9 +501,9 @@
         cp --reflink=auto "$ANDROID_PRODUCT_OUT/kernel" "$out/kernel"
         cp --reflink=auto "$effective_config" "$out/kernel.config"
         cp --reflink=auto "$kernel_object/Module.symvers" "$out/Module.symvers"
-        cp --reflink=auto \
-          "$kernel_object/include/config/kernel.release" \
-          "$out/kernel.release"
+        cp --reflink=auto "$base_release_file" "$out/kernel.base-release"
+        cp --reflink=auto "$runtime_release_header" "$out/kernel.utsrelease.h"
+        printf '%s\n' "$runtime_release" >"$out/kernel.release"
       '';
     };
 

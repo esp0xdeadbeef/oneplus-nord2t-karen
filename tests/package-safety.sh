@@ -257,8 +257,8 @@ if grep -Fq '$ANDROID_BUILD_TOP' "$lineage_packages"; then
   exit 1
 fi
 # shellcheck disable=SC2016
-if [[ "$(grep -Fc '"$rootDir"' "$lineage_packages")" -ne 2 ]]; then
-  echo "Every full-image install phase must audit its exported rootDir." >&2
+if [[ "$(grep -Fc '"$rootDir"' "$lineage_packages")" -ne 3 ]]; then
+  echo "Image audits and the module build must use the exported rootDir." >&2
   exit 1
 fi
 grep -Fq 'kernel_gate=not-part-of-vintf-audit' \
@@ -336,9 +336,12 @@ grep -Fq \
 grep -Fq \
   'karen-source-kernel-keybound-bootimage-cached' \
   "$script_directory/nix/apps.nix"
-grep -Fq "'4.19.191+'" "$lineage_packages"
+grep -Fq "'4.19.191+' \"\$base_release_file\"" "$lineage_packages"
 grep -Fq \
   'CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"' \
+  "$nixos_kernel_packages"
+grep -Fq \
+  '0011-preserve-stock-runtime-release.patch' \
   "$nixos_kernel_packages"
 # shellcheck disable=SC2016
 grep -Fq 'modprobe --show-modversions "$module_path"' "$image_audit"
@@ -351,7 +354,11 @@ grep -Fq \
   "$lineage_packages"
 # shellcheck disable=SC2016
 grep -Fq \
-  '"$kernel_object/include/config/kernel.release"' \
+  '"$kernel_object/include/generated/utsrelease.h"' \
+  "$lineage_packages"
+# shellcheck disable=SC2016
+grep -Fq \
+  'printf '"'"'%s\n'"'"' "$runtime_release" >"$out/kernel.release"' \
   "$lineage_packages"
 grep -Fq \
   'path_regex: '"'"'^secrets/vector-signing-shared\.json\.age$'"'"'' \
