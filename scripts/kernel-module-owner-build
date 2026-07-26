@@ -147,6 +147,7 @@ run_arguments=(
   run
   --accept-flake-config
   --impure
+  --keep-failed
   "path:$repository_root#$package"
 )
 if [[ -n "$output_directory" ]]; then

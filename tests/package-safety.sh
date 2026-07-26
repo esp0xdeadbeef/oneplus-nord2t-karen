@@ -41,6 +41,7 @@ grep -Fq \
 grep -Fq 'KAREN_EXTERNAL_MODULE_SIGNING' \
   "$script_directory/scripts/build-karen-control-modules"
 grep -Fq 'private_key_accessed=false' "$kernel_module_build"
+grep -Fq -- '--keep-failed' "$kernel_module_build"
 grep -Fq 'private_key_exported=false' "$kernel_module_signer"
 grep -Fq 'shared_access=l-esp,l-portal,s-tau' "$kernel_module_generator"
 grep -Fq 'private_access=l-esp,l-portal' "$kernel_module_generator"
