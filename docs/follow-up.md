@@ -27,6 +27,11 @@ rsync flow and artifact-return checks.
   `karen-lineage-oled-fix4.service`.
 - The compiler cache is
   `/home/deadbeef/.cache/nord2t-ccache` on `s-tau`, with a 400 GB limit.
+- Vector owner signing is split into a public SOPS document readable by
+  `l-esp`, `l-portal` and `s-tau`, and a private JKS document readable only by
+  `l-esp` and `l-portal`. The generator passed a local round-trip; `s-tau`
+  decrypted only the shared half. `l-portal` has the recipient recorded from
+  the NixOS repository but was offline during the live decrypt check.
 - The ext4 Lineage userspace, exact stock vendor/odm, pinned MindTheGapps and
   Magisk-patched private boot are installed on slot A. Lineage 21 completes
   encrypted and enforcing normal boots.
@@ -109,6 +114,18 @@ internet. GNSS, calls/SMS/IMS, Bluetooth, fingerprint/NFC, sensors, MTP,
 suspend/resume and broader charging behavior still need explicit manual
 parity checks. The current boot image remains a private authenticated-ADB
 bring-up image; it is not a release image.
+
+Jelly later reproduced two deterministic native crashes while leaving
+`fast.com` open. In both cases the 32-bit renderer from the upstream Lineage
+WebView `147.0.7727.101` exited with `SIGTRAP` after about 46 seconds; Jelly
+then deliberately terminated because its associated renderer crash was
+unhandled. This was not an LMKD or Java crash. The newer upstream arm64
+WebView `150.0.7871.63` has the same signing certificate and survived the same
+hardware test with no renderer restart or crash. The Robotnix configuration
+now overrides only that LFS-backed source directory with exact commit
+`aca8d63899707c568d48c412e2c34a8c11c4dd12` and a fixed Nix content hash.
+The live package-update test passed; the next full image must still prove
+that the pinned APK is present before this gate is considered closed.
 
 Checkpoint work after the first boot adds separate `lineage-root`,
 `lineage-root-full` and `lineage-unroot` interfaces. Minimal root is designed

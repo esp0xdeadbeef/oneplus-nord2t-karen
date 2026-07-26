@@ -1,0 +1,43 @@
+From 374618551a528b6a545c954d604ea2d5a23cb594 Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 00:31:00 +0200
+Subject: [PATCH] build: use pinned release metadata
+
+Nix flake sources intentionally omit the mutable Git database. Pin the
+version values that upstream derived for the selected v2.0 release and
+use its commit timestamp instead of the wall clock in BuildConfig.
+---
+ app/build.gradle.kts | 2 +-
+ build.gradle.kts     | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 7010f3d..296c555 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -46,7 +46,7 @@ android {
+
+     defaultConfig {
+         applicationId = defaultManagerPackageName
+-        buildConfigField("long", "BUILD_TIME", Instant.now().epochSecond.toString())
++        buildConfigField("long", "BUILD_TIME", "1774206304")
+     }
+
+     packaging {
+diff --git a/build.gradle.kts b/build.gradle.kts
+index f68e830..f87d2d2 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -55,8 +55,8 @@ abstract class GitLatestTagValueSource : ValueSource<String, ValueSourceParameter
+ }
+
+ // This defers the execution of the git commands and allows Gradle to cache the results.
+-val versionCodeProvider by extra(providers.of(GitCommitCountValueSource::class.java) {})
+-val versionNameProvider by extra(providers.of(GitLatestTagValueSource::class.java) {})
++val versionCodeProvider by extra(providers.provider { "3021" })
++val versionNameProvider by extra(providers.provider { "2.0" })
+
+ val injectedPackageName by extra("com.android.shell")
+ val injectedPackageUid by extra(2000)
+--
+2.51.0

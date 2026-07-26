@@ -4,9 +4,11 @@
   deviceTree,
   fullSystem ? false,
   insecureRecoveryAdb ? false,
+  kernelModules ? null,
   kernelSource ? null,
   lineageLockfile,
   vendorLineagePatches,
+  webviewSource ? null,
 }: {lib, ...}:
 lib.mkMerge [
   {
@@ -34,6 +36,14 @@ lib.mkMerge [
     source.dirs."vendor/lineage".patches = lib.mkForce vendorLineagePatches;
   }
 
+  (lib.mkIf (webviewSource != null) {
+    # Robotnix's generated Lineage lock is deliberately retained for the
+    # complete source graph. Override only the arm64 prebuilt WebView with an
+    # independently content-pinned, hardware-tested upstream revision.
+    source.dirs."external/chromium-webview/prebuilt/arm64".src =
+      lib.mkForce webviewSource;
+  })
+
   (lib.mkIf insecureRecoveryAdb {
     # Only the temporary recovery-as-boot probe disables ADB authentication so
     # a freshly wiped device can provide bring-up logs. Never set this on an
@@ -51,8 +61,18 @@ lib.mkMerge [
         assertion = kernelSource != null;
         message = "Karen source-kernel builds require the pinned OnePlus kernel source";
       }
+      {
+        assertion = kernelModules != null;
+        message = "Karen source-kernel builds require the pinned OnePlus/MediaTek module source";
+      }
     ];
     envVars.KAREN_BUILD_SOURCE_KERNEL = "true";
     source.dirs."kernel/oneplus/mt6893".src = lib.mkForce kernelSource;
+    # The published kernel contains relative links into both of these trees.
+    # They come from the matching, independently pinned OnePlus module source.
+    source.dirs."kernel/oneplus/vendor/mediatek/kernel_modules".src =
+      lib.mkForce (kernelModules + /vendor/mediatek/kernel_modules);
+    source.dirs."kernel/oneplus/vendor/oplus".src =
+      lib.mkForce (kernelModules + /vendor/oplus);
   })
 ]

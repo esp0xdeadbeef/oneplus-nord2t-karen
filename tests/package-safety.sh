@@ -12,8 +12,14 @@ keybound_helper="$script_directory/scripts/lineage-keybound-adb"
 lineage_root="$script_directory/scripts/lineage-root"
 lineage_root_full="$script_directory/scripts/lineage-root-full"
 lineage_unroot="$script_directory/scripts/lineage-unroot"
+robotnix_device="$script_directory/lineage/robotnix-karen.nix"
 runtime_audit="$script_directory/scripts/audit-lineage-runtime"
+sops_config="$script_directory/.sops.yaml"
 userspace_preflight="$script_directory/scripts/preflight-lineage-userspace"
+vector_owner_build="$script_directory/scripts/vector-owner-build-intermediate"
+vector_owner_patch="$script_directory/patches/vector/0003-build-accept-public-signing-certificate.patch"
+vector_owner_sign="$script_directory/scripts/vector-owner-sign"
+vector_signing_generator="$script_directory/scripts/vector-signing-key-generator"
 
 # shellcheck disable=SC2016
 grep -Fq 'PRODUCT_ADB_KEYS := $(strip $(KAREN_DEBUG_ADB_KEYS))' "$device_makefile"
@@ -102,6 +108,88 @@ grep -Fq 'recovery does not label the concrete super block device' \
   "$script_directory/scripts/audit-boot-image"
 grep -Fq 'compiled recovery policy does not label the tmpfs-backed super node' \
   "$script_directory/scripts/audit-boot-image"
+grep -Fq \
+  'allow system_server apk_data_file file execute' \
+  "$script_directory/patches/vector/0001-sepolicy-allow-system-service-native-modules.patch"
+if grep -Eq \
+  '^[+].*(^|[[:space:]])permissive([[:space:]]|$)' \
+  "$script_directory/patches/vector/0001-sepolicy-allow-system-service-native-modules.patch"; then
+  echo "Vector HMA compatibility patch must not make a domain permissive." >&2
+  exit 1
+fi
+grep -Fq 'androidSigningCertificateFile' "$vector_owner_patch"
+grep -Fq 'CertificateFactory.getInstance("X.509")' "$vector_owner_patch"
+# shellcheck disable=SC2016
+grep -Fq 'KAREN_VECTOR_SIGNING_CERTIFICATE_FILE="$certificate"' \
+  "$vector_owner_build"
+grep -Fq 'vector-module-owner-intermediate' "$vector_owner_build"
+if grep -Eq 'androidStore(File|Password)|androidKeyPassword' \
+  "$vector_owner_build"; then
+  echo "Remote Vector build helper references private signing attributes." >&2
+  exit 1
+fi
+# shellcheck disable=SC2016
+grep -Fq -- '--ks-pass "file:$store_password_file"' "$vector_owner_sign"
+# shellcheck disable=SC2016
+grep -Fq -- '--key-pass "file:$key_password_file"' "$vector_owner_sign"
+grep -Fq '@APKSIGNER@ verify --print-certs' "$vector_owner_sign"
+# shellcheck disable=SC2016
+grep -Fq 'sha256sum "$apk"' "$vector_owner_sign"
+grep -Fq \
+  'https://github.com/LineageOS/android_external_chromium-webview_prebuilt_arm64.git' \
+  "$script_directory/flake.nix"
+grep -Fq 'rev = "aca8d63899707c568d48c412e2c34a8c11c4dd12";' \
+  "$script_directory/flake.nix"
+grep -Fq 'hash = "sha256-xBjQHGb8+RYzgR08qzA/dEpG0p5G9CnctSGmk5oHMYw=";' \
+  "$script_directory/flake.nix"
+grep -Fq 'fetchLFS = true;' "$script_directory/flake.nix"
+if [[ "$(grep -Fc 'webviewSource = lineageWebviewArm64;' \
+  "$script_directory/flake.nix")" -ne 3 ]]; then
+  echo "Every Karen Robotnix variant must use the pinned WebView source." >&2
+  exit 1
+fi
+grep -Fq 'source.dirs."external/chromium-webview/prebuilt/arm64".src' \
+  "$robotnix_device"
+grep -Fq 'lib.mkForce webviewSource;' "$robotnix_device"
+grep -Fq \
+  'TARGET_KERNEL_CONFIG := k6893v1_64_k419_nixos_control_defconfig' \
+  "$board_config"
+grep -Fxq 'CONFIG_KEXEC=y' \
+  "$script_directory/nixos/families/mt6893/kernel/nixos-control.config"
+grep -Fq "grep -Fxq 'CONFIG_KEXEC=y' \"\$effective_config\"" \
+  "$script_directory/flake.nix"
+grep -Fq 'kernel.config' "$script_directory/flake.nix"
+grep -Fq \
+  'source.dirs."kernel/oneplus/vendor/mediatek/kernel_modules".src' \
+  "$robotnix_device"
+grep -Fq 'source.dirs."kernel/oneplus/vendor/oplus".src' "$robotnix_device"
+grep -Fq \
+  'path_regex: '"'"'^secrets/vector-signing-shared\.json\.age$'"'"'' \
+  "$sops_config"
+grep -Fq \
+  'path_regex: '"'"'^secrets/vector-signing-private\.json\.age$'"'"'' \
+  "$sops_config"
+[[ "$(grep -Fc -- '- *l-portal-deadbeef' "$sops_config")" -eq 2 ]]
+[[ "$(grep -Fc -- '- *l-esp-deadbeef' "$sops_config")" -eq 3 ]]
+[[ "$(grep -Fc -- '- *s-tau-deadbeef' "$sops_config")" -eq 1 ]]
+for signing_attribute in \
+  androidStoreFile \
+  androidStorePassword \
+  androidKeyAlias \
+  androidKeyPassword; do
+  grep -Fq "$signing_attribute" "$vector_signing_generator"
+done
+# shellcheck disable=SC2016
+grep -Fq -- '-storepass:file "$store_password_file"' \
+  "$vector_signing_generator"
+# shellcheck disable=SC2016
+grep -Fq -- '-keypass:file "$key_password_file"' \
+  "$vector_signing_generator"
+if grep -Eq -- '-Pandroid(Store|Key)(File|Password|Alias)' \
+  "$script_directory/flake.nix"; then
+  echo "Vector private signing attributes must not enter a Nix derivation." >&2
+  exit 1
+fi
 grep -Fq 'restorecon /dev/block/sdc68' \
   "$script_directory/lineage/device/oneplus/karen/rootdir/etc/init.recovery.mt6893.rc"
 grep -Fq 'on boot' \

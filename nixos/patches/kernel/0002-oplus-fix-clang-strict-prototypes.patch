@@ -1,0 +1,23 @@
+From 1be5dc86526934742221e652739309e11b82444d Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 03:31:00 +0200
+Subject: [PATCH] sched_assist: use an explicit void prototype
+
+Clang treats old-style empty parameter lists as errors in this kernel's
+warning-as-error build. This function takes no arguments; express that
+directly without changing its behavior.
+
+Assisted-by: Codex:gpt-5
+---
+ vendor/oplus/kernel/oplus_performance/sched_assist/sched_assist_common.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/vendor/oplus/kernel/oplus_performance/sched_assist/sched_assist_common.h b/vendor/oplus/kernel/oplus_performance/sched_assist/sched_assist_common.h
+index ce20f90..0ac3bc4 100644
+--- a/vendor/oplus/kernel/oplus_performance/sched_assist/sched_assist_common.h
++++ b/vendor/oplus/kernel/oplus_performance/sched_assist/sched_assist_common.h
+@@ -322 +322 @@
+-static inline bool is_sched_assist_scene() {
++static inline bool is_sched_assist_scene(void) {
+--
+2.51.0

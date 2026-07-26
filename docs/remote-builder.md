@@ -18,13 +18,16 @@ repository.
 
 | Host | Responsibility |
 | --- | --- |
-| `l-esp` | Authoritative Git checkout, SOPS/ADB private identity, phone USB, audits and all flash actions |
-| `s-tau` | Optional compilation, persistent Android checkout, compiler cache and staged non-unique images |
+| `l-esp` | Authoritative Git checkout, phone USB, audits, flash actions and trusted final signing |
+| `l-portal` | Secondary trusted owner host; can decrypt both Vector signing documents and perform final signing |
+| `s-tau` | Optional compilation, public Vector certificate, persistent Android checkout, compiler cache and staged non-unique images |
 
 The phone is never flashed from `s-tau`. Device-unique data, the ADB private
 key, runtime captures and calibration/radio/persistent partitions stay off the
 remote build host. A private authenticated-ADB build needs only the public
-`adbkey.pub`; vanilla builds need no ADB key at all.
+`adbkey.pub`; vanilla builds need no ADB key at all. Owner-signed Vector
+builds give `s-tau` only the SOPS-encrypted shared certificate metadata. Its
+private JKS is decryptable by `l-esp` and `l-portal`, never by `s-tau`.
 
 The paths below document the owner's current layout. They are examples, not
 interfaces that scripts or other installations must reproduce:
@@ -132,6 +135,14 @@ private non-repository path on `s-tau` and point `KAREN_DEBUG_ADB_KEYS` there.
 Do not transfer `~/.android/adbkey` or the SOPS age identity. The normal image
 audit deliberately rejects the resulting private image unless its explicit
 bring-up exception is supplied.
+
+Vector uses a separate split identity. `s-tau` decrypts
+`secrets/vector-signing-shared.json.age` with its normal-user repository age
+identity and runs `vector-owner-build-intermediate`; it cannot decrypt
+`secrets/vector-signing-private.json.age`. Return the intermediate module to
+`l-esp` or `l-portal` and run `vector-owner-sign` there. The private keystore
+and passwords never enter a Nix derivation, the Nix store or the remote
+builder.
 
 ## Return and verify artifacts
 

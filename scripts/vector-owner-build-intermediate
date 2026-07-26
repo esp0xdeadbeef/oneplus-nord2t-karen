@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+umask 077
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-vector-owner-build-intermediate [--output FILE]
+       [--shared-secret-file FILE] [--age-key-file FILE]
+
+Build the pinned Vector module with the owner public certificate embedded in
+its daemon. This step needs only the shared SOPS document and is safe to run
+on the optional compilation host. The APKs remain intermediate-signed until
+nord2t-vector-owner-sign runs on a host with the private SOPS document.
+EOF
+}
+
+fail() {
+  echo "Vector owner intermediate build failed: $*" >&2
+  exit 1
+}
+
+repository_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+  fail "run from a Git checkout"
+shared_secret_file="$repository_root/secrets/vector-signing-shared.json.age"
+age_key_file="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
+output_file=
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output)
+      [[ $# -ge 2 ]] || fail "--output requires a path"
+      output_file="$2"
+      shift 2
+      ;;
+    --shared-secret-file)
+      [[ $# -ge 2 ]] || fail "--shared-secret-file requires a path"
+      shared_secret_file="$2"
+      shift 2
+      ;;
+    --age-key-file)
+      [[ $# -ge 2 ]] || fail "--age-key-file requires a path"
+      age_key_file="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      fail "unknown argument: $1"
+      ;;
+  esac
+done
+
+shared_secret_file="$(realpath "$shared_secret_file")"
+age_key_file="$(realpath "$age_key_file")"
+if [[ -n "$output_file" ]]; then
+  output_file="$(realpath -m "$output_file")"
+  [[ ! -e "$output_file" ]] || fail "output already exists: $output_file"
+  install -d -m 0755 "$(dirname "$output_file")"
+fi
+
+[[ -f "$shared_secret_file" && -s "$shared_secret_file" ]] ||
+  fail "shared SOPS document is missing or empty"
+[[ -f "$age_key_file" && -s "$age_key_file" ]] ||
+  fail "SOPS age identity is missing or empty"
+
+temporary_directory="$(mktemp -d -t nord2t-vector-owner-build.XXXXXXXX)"
+cleanup() {
+  rm -r -- "$temporary_directory"
+}
+trap cleanup EXIT HUP INT TERM
+chmod 700 "$temporary_directory"
+
+shared_json="$temporary_directory/shared.json"
+certificate="$temporary_directory/vector-owner.x509.der"
+
+SOPS_AGE_KEY_FILE="$age_key_file" \
+  sops decrypt \
+    --input-type json \
+    --output-type json \
+    "$shared_secret_file" >"$shared_json" ||
+  fail "could not decrypt the shared SOPS document"
+
+jq -e '
+  .schema == 1 and
+  (.androidSigningCertificate | type == "string" and length > 0) and
+  (.androidSigningCertificateSha256 |
+    type == "string" and test("^[0-9a-f]{64}$")) and
+  (.androidKeyAlias |
+    type == "string" and test("^[A-Za-z0-9._-]+$"))
+' "$shared_json" >/dev/null ||
+  fail "shared SOPS document has an invalid schema"
+
+jq -er '.androidSigningCertificate' "$shared_json" |
+  base64 --decode >"$certificate" ||
+  fail "shared signing certificate is not valid base64"
+expected_fingerprint="$(
+  jq -er '.androidSigningCertificateSha256' "$shared_json"
+)"
+actual_fingerprint="$(sha256sum "$certificate" | cut -d' ' -f1)"
+[[ "$actual_fingerprint" == "$expected_fingerprint" ]] ||
+  fail "shared signing-certificate fingerprint does not match"
+
+mapfile -t build_outputs < <(
+  KAREN_VECTOR_SIGNING_CERTIFICATE_FILE="$certificate" \
+    nix build \
+      --impure \
+      --no-link \
+      --print-out-paths \
+      "path:$repository_root#vector-module-owner-intermediate"
+)
+[[ "${#build_outputs[@]}" -eq 1 ]] ||
+  fail "owner intermediate build returned an unexpected output count"
+intermediate="${build_outputs[0]}"
+[[ -f "$intermediate" && -s "$intermediate" ]] ||
+  fail "owner intermediate build did not produce a module ZIP"
+
+if [[ -n "$output_file" ]]; then
+  install -m 0644 "$intermediate" "$output_file"
+  echo "output=$output_file"
+else
+  echo "output=$intermediate"
+fi
+echo "signing_state=public-certificate-embedded-private-signing-pending"

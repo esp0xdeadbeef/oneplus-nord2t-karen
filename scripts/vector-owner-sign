@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+umask 077
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-vector-owner-sign INTERMEDIATE_ZIP --output FILE
+       [--shared-secret-file FILE] [--private-secret-file FILE]
+       [--age-key-file FILE]
+
+Sign the manager and daemon APKs in an owner-certificate Vector intermediate.
+This step decrypts the private JKS and must run only on l-esp, l-portal or
+another explicitly trusted host. It never passes a password on a command line.
+EOF
+}
+
+fail() {
+  echo "Vector owner signing failed: $*" >&2
+  exit 1
+}
+
+[[ $# -ge 1 ]] || {
+  usage
+  exit 2
+}
+case "$1" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+esac
+
+repository_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+  fail "run from a Git checkout"
+intermediate="$(realpath "$1")"
+shift
+shared_secret_file="$repository_root/secrets/vector-signing-shared.json.age"
+private_secret_file="$repository_root/secrets/vector-signing-private.json.age"
+age_key_file="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
+output_file=
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output)
+      [[ $# -ge 2 ]] || fail "--output requires a path"
+      output_file="$2"
+      shift 2
+      ;;
+    --shared-secret-file)
+      [[ $# -ge 2 ]] || fail "--shared-secret-file requires a path"
+      shared_secret_file="$2"
+      shift 2
+      ;;
+    --private-secret-file)
+      [[ $# -ge 2 ]] || fail "--private-secret-file requires a path"
+      private_secret_file="$2"
+      shift 2
+      ;;
+    --age-key-file)
+      [[ $# -ge 2 ]] || fail "--age-key-file requires a path"
+      age_key_file="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      fail "unknown argument: $1"
+      ;;
+  esac
+done
+
+[[ -n "$output_file" ]] || fail "--output is required"
+output_file="$(realpath -m "$output_file")"
+shared_secret_file="$(realpath "$shared_secret_file")"
+private_secret_file="$(realpath "$private_secret_file")"
+age_key_file="$(realpath "$age_key_file")"
+
+[[ -f "$intermediate" && -s "$intermediate" ]] ||
+  fail "intermediate module is missing or empty"
+[[ ! -e "$output_file" ]] || fail "output already exists: $output_file"
+[[ -f "$shared_secret_file" && -s "$shared_secret_file" ]] ||
+  fail "shared SOPS document is missing or empty"
+[[ -f "$private_secret_file" && -s "$private_secret_file" ]] ||
+  fail "private SOPS document is missing or empty"
+[[ -f "$age_key_file" && -s "$age_key_file" ]] ||
+  fail "SOPS age identity is missing or empty"
+install -d -m 0755 "$(dirname "$output_file")"
+
+temporary_directory="$(mktemp -d -t nord2t-vector-owner-sign.XXXXXXXX)"
+cleanup() {
+  rm -r -- "$temporary_directory"
+}
+trap cleanup EXIT HUP INT TERM
+chmod 700 "$temporary_directory"
+
+shared_json="$temporary_directory/shared.json"
+private_json="$temporary_directory/private.json"
+keystore="$temporary_directory/vector-owner.jks"
+store_password_file="$temporary_directory/store-password"
+key_password_file="$temporary_directory/key-password"
+shared_certificate="$temporary_directory/shared-certificate.x509.der"
+private_certificate="$temporary_directory/private-certificate.x509.der"
+module_directory="$temporary_directory/module"
+
+SOPS_AGE_KEY_FILE="$age_key_file" \
+  sops decrypt --input-type json --output-type json \
+    "$shared_secret_file" >"$shared_json" ||
+  fail "could not decrypt the shared SOPS document"
+SOPS_AGE_KEY_FILE="$age_key_file" \
+  sops decrypt --input-type json --output-type json \
+    "$private_secret_file" >"$private_json" ||
+  fail "could not decrypt the private SOPS document"
+
+shared_alias="$(jq -er '.androidKeyAlias' "$shared_json")"
+private_alias="$(jq -er '.androidKeyAlias' "$private_json")"
+[[ "$shared_alias" == "$private_alias" ]] ||
+  fail "shared and private key aliases differ"
+jq -er '.androidSigningCertificate' "$shared_json" |
+  base64 --decode >"$shared_certificate" ||
+  fail "shared signing certificate is not valid base64"
+jq -er '.androidStoreFile' "$private_json" |
+  base64 --decode >"$keystore" ||
+  fail "private androidStoreFile is not valid base64"
+jq -j '.androidStorePassword' "$private_json" >"$store_password_file"
+jq -j '.androidKeyPassword' "$private_json" >"$key_password_file"
+chmod 600 "$keystore" "$store_password_file" "$key_password_file"
+
+keytool \
+  -exportcert \
+  -keystore "$keystore" \
+  -storetype JKS \
+  -storepass:file "$store_password_file" \
+  -alias "$private_alias" \
+  -file "$private_certificate" >/dev/null 2>&1 ||
+  fail "private Android signing attributes are invalid"
+cmp -s "$shared_certificate" "$private_certificate" ||
+  fail "private keystore does not match the shared certificate"
+expected_fingerprint="$(
+  jq -er '.androidSigningCertificateSha256' "$shared_json"
+)"
+[[ "$(sha256sum "$private_certificate" | cut -d' ' -f1)" == \
+  "$expected_fingerprint" ]] ||
+  fail "signing certificate fingerprint does not match the shared metadata"
+
+mkdir "$module_directory"
+unzip -q "$intermediate" -d "$module_directory" ||
+  fail "intermediate module is not a valid ZIP"
+for apk_name in manager.apk daemon.apk; do
+  apk="$module_directory/$apk_name"
+  checksum="$module_directory/$apk_name.sha256"
+  [[ -f "$apk" && -f "$checksum" ]] ||
+    fail "intermediate module lacks $apk_name or its checksum"
+  signed_apk="$temporary_directory/$apk_name"
+  @APKSIGNER@ sign \
+    --ks "$keystore" \
+    --ks-type JKS \
+    --ks-key-alias "$private_alias" \
+    --ks-pass "file:$store_password_file" \
+    --key-pass "file:$key_password_file" \
+    --out "$signed_apk" \
+    "$apk" ||
+    fail "could not owner-sign $apk_name"
+  @APKSIGNER@ verify "$signed_apk" ||
+    fail "owner-signed $apk_name did not verify"
+  signer_fingerprint="$(
+    @APKSIGNER@ verify --print-certs "$signed_apk" |
+      sed -n 's/^Signer #1 certificate SHA-256 digest: //p' |
+      tr '[:upper:]' '[:lower:]'
+  )"
+  [[ "$signer_fingerprint" == "$expected_fingerprint" ]] ||
+    fail "$apk_name has an unexpected signing certificate"
+  mv "$signed_apk" "$apk"
+  sha256sum "$apk" | cut -d' ' -f1 >"$checksum"
+done
+
+find "$module_directory" -exec touch -h -d '@1774206304' {} +
+(
+  cd "$module_directory"
+  LC_ALL=C find . -mindepth 1 -print |
+    LC_ALL=C sort |
+    zip -X -q "$temporary_directory/vector-owner.zip" -@
+)
+zip -T "$temporary_directory/vector-owner.zip" >/dev/null ||
+  fail "owner-signed module ZIP did not verify"
+install -m 0644 "$temporary_directory/vector-owner.zip" "$output_file"
+
+echo "Vector owner signing passed."
+echo "output=$output_file"
+echo "signing_state=owner-private-key-applied"

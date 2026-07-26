@@ -15,8 +15,8 @@
     url = "file+https://github.com/MindTheGapps/14.0.0-arm64/releases/download/MindTheGapps-14.0.0-arm64-20250203_200051/MindTheGapps-14.0.0-arm64-20250203_200051.zip";
     flake = false;
   };
-  inputs.vector-module = {
-    url = "file+https://github.com/JingMatrix/Vector/releases/download/v2.0/Vector-v2.0-3021-Release.zip";
+  inputs.vector-source = {
+    url = "git+https://github.com/JingMatrix/Vector.git?rev=76141fed151f49b818144d54f2ebb6ab9a2df11c&submodules=1";
     flake = false;
   };
   inputs.adaway-apk = {
@@ -56,7 +56,7 @@
     robotnix,
     shamiko-module,
     stock-firmware-3001,
-    vector-module,
+    vector-source,
   }: let
     eachSystem = function:
       nixpkgs.lib.genAttrs
@@ -100,13 +100,142 @@
           ln -s ${stock-firmware-3001} "$out"
         '';
 
+        # Robotnix's Lineage lock predates three upstream WebView updates.
+        # The older 147 arm renderer reproducibly SIGTRAPs on fast.com; 150
+        # survives the same hardware test and retains the upstream certificate.
+        lineageWebviewArm64 = pkgs.fetchgit {
+          url = "https://github.com/LineageOS/android_external_chromium-webview_prebuilt_arm64.git";
+          rev = "aca8d63899707c568d48c412e2c34a8c11c4dd12";
+          hash = "sha256-xBjQHGb8+RYzgR08qzA/dEpG0p5G9CnctSGmk5oHMYw=";
+          fetchLFS = true;
+        };
+
         magiskApk = pkgs.runCommand "Magisk-v30.7.apk" {} ''
           ln -s ${magisk-apk} "$out"
         '';
 
-        vectorModule = pkgs.runCommand "Vector-v2.0-3021-Release.zip" {} ''
-          ln -s ${vector-module} "$out"
-        '';
+        vectorGradleUnwrapped = pkgs.gradle-packages.mkGradle {
+          version = "9.3.1";
+          hash = "sha256-smbV/2uQ6tptw7IMsJDjcxMC5VOifF0+TfHw12vq/wY=";
+          defaultJava = pkgs.jdk21;
+        };
+
+        vectorGradle = vectorGradleUnwrapped.wrapped;
+
+        vectorAndroidPkgs = import nixpkgs {
+          inherit system;
+          config = {
+            allowUnfree = true;
+            android_sdk.accept_license = true;
+          };
+        };
+
+        vectorAndroid = vectorAndroidPkgs.androidenv.composeAndroidPackages {
+          platformVersions = ["36"];
+          buildToolsVersions = ["36.0.0"];
+          includeNDK = true;
+          # Upstream requests the NDK 29 rc1 path 29.0.13113456.
+          ndkVersions = ["29.0.13113456-rc1"];
+          includeCmake = false;
+          includeSources = false;
+          includeSystemImages = false;
+        };
+
+        vectorSigningAndroid =
+          vectorAndroidPkgs.androidenv.composeAndroidPackages {
+            platformVersions = [];
+            buildToolsVersions = ["36.0.0"];
+            includeNDK = false;
+            includeCmake = false;
+            includeSources = false;
+            includeSystemImages = false;
+          };
+
+        vectorOwnerCertificateEnvironment =
+          builtins.getEnv "KAREN_VECTOR_SIGNING_CERTIFICATE_FILE";
+        vectorOwnerCertificate =
+          if vectorOwnerCertificateEnvironment == ""
+          then null
+          else
+            builtins.path {
+              path = vectorOwnerCertificateEnvironment;
+              name = "vector-owner-signing-certificate.x509.der";
+            };
+
+        mkVectorModule = {
+          pname,
+          signingCertificate ? null,
+        }:
+          pkgs.stdenv.mkDerivation (finalAttrs: {
+          inherit pname;
+          version = "2.0-3021";
+
+          src = vector-source;
+          patches = [
+            ./patches/vector/0001-sepolicy-allow-system-service-native-modules.patch
+            ./patches/vector/0002-build-use-pinned-release-metadata.patch
+            ./patches/vector/0003-build-accept-public-signing-certificate.patch
+          ];
+
+          nativeBuildInputs = [
+            vectorGradle
+            pkgs.cmake
+            pkgs.gitMinimal
+            pkgs.jdk21
+            pkgs.ninja
+            vectorAndroid.androidsdk
+          ];
+
+          mitmCache = vectorGradle.fetchDeps {
+            pkg = finalAttrs.finalPackage;
+            data = ./gradle/vector-deps.json;
+          };
+
+          ANDROID_HOME = "${vectorAndroid.androidsdk}/libexec/android-sdk";
+          ANDROID_SDK_ROOT = "${vectorAndroid.androidsdk}/libexec/android-sdk";
+          JAVA_HOME = pkgs.jdk21.home;
+          gradleBuildTask = ":zygisk:zipRelease";
+          gradleUpdateTask = ":zygisk:zipRelease";
+          gradleFlags = [
+            "--no-daemon"
+            "-Dorg.gradle.java.home=${pkgs.jdk21.home}"
+            "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+            "-Pandroid.aapt2FromMavenOverride=${vectorAndroid.androidsdk}/libexec/android-sdk/build-tools/36.0.0/aapt2"
+          ]
+          ++ pkgs.lib.optional (signingCertificate != null)
+          "-PandroidSigningCertificateFile=${signingCertificate}";
+          dontUseCmakeConfigure = true;
+          doCheck = false;
+
+          installPhase = ''
+            runHook preInstall
+            mapfile -t modules < <(
+              find zygisk/release \
+                -maxdepth 1 \
+                -type f \
+                -name 'Vector-v2.0-3021-Release.zip' \
+                -print
+            )
+            test "''${#modules[@]}" = 1
+            unzip -p "''${modules[0]}" sepolicy.rule |
+              grep -Fxq 'allow system_server apk_data_file file execute'
+            cp "''${modules[0]}" "$out"
+            runHook postInstall
+          '';
+        });
+
+        vectorModule = mkVectorModule {
+          pname = "vector-karen-generic";
+        };
+
+        vectorOwnerModuleIntermediate =
+          if vectorOwnerCertificate == null
+          then null
+          else
+            mkVectorModule {
+              pname = "vector-karen-owner-intermediate";
+              signingCertificate = vectorOwnerCertificate;
+            };
 
         adawayApk = pkgs.runCommand "AdAway-6.1.4-20241027.apk" {} ''
           ln -s ${adaway-apk} "$out"
@@ -124,6 +253,40 @@
           ln -s ${oneplus-kernel-source} "$out"
         '';
 
+        oneplusControlKernelSource =
+          pkgs.runCommand "oneplus-karen-control-kernel-source" {
+            nativeBuildInputs = [pkgs.patch];
+          } ''
+            cp --no-preserve=ownership --reflink=auto -r \
+              ${oneplus-kernel-source} "$out"
+            chmod -R u+w "$out"
+            patch --batch --forward --fuzz=0 -d "$out" -p1 \
+              <${./nixos/patches/kernel/0001-clang-fix-control-kernel-errors.patch}
+            control_defconfig="$out/arch/arm64/configs/k6893v1_64_k419_nixos_control_defconfig"
+            cp \
+              "$out/arch/arm64/configs/k6893v1_64_k419_defconfig" \
+              "$control_defconfig"
+            cat ${./nixos/families/mt6893/kernel/nixos-control.config} \
+              >>"$control_defconfig"
+            grep -Fxq 'CONFIG_KEXEC=y' "$control_defconfig"
+          '';
+
+        oneplusControlKernelModules =
+          pkgs.runCommand "oneplus-karen-control-kernel-modules" {
+            nativeBuildInputs = [pkgs.patch];
+          } ''
+            cp --no-preserve=ownership --reflink=auto -r \
+              ${oneplus-kernel-modules} "$out"
+            chmod -R u+w "$out"
+            patch --batch --forward --fuzz=0 -d "$out" -p1 \
+              <${./nixos/patches/kernel/0002-oplus-fix-clang-strict-prototypes.patch}
+            substituteInPlace \
+              "$out/vendor/oplus/kernel/secureguard/rootguard/oplus_guard_general.c" \
+              --replace-fail \
+              'static void __exit boot_state_exit()' \
+              'static void __exit boot_state_exit(void)'
+          '';
+
         oneplusKernelModules = pkgs.runCommand "oneplus-karen-kernel-modules" {} ''
           ln -s ${oneplus-kernel-modules}/vendor/mediatek/kernel_modules "$out"
         '';
@@ -139,6 +302,51 @@
             sops
           ];
           text = builtins.readFile ./scripts/adb-key-generator;
+        };
+
+        vectorSigningKeyGenerator = pkgs.writeShellApplication {
+          name = "nord2t-vector-signing-key-generator";
+          runtimeInputs = with pkgs; [
+            coreutils
+            gitMinimal
+            jdk21
+            jq
+            openssl
+            sops
+          ];
+          text = builtins.readFile ./scripts/vector-signing-key-generator;
+        };
+
+        vectorOwnerBuildIntermediate = pkgs.writeShellApplication {
+          name = "nord2t-vector-owner-build-intermediate";
+          runtimeInputs = with pkgs; [
+            coreutils
+            gitMinimal
+            jq
+            nix
+            sops
+          ];
+          text = builtins.readFile ./scripts/vector-owner-build-intermediate;
+        };
+
+        vectorOwnerSign = pkgs.writeShellApplication {
+          name = "nord2t-vector-owner-sign";
+          runtimeInputs = with pkgs; [
+            coreutils
+            findutils
+            gitMinimal
+            jdk21
+            jq
+            gnused
+            sops
+            unzip
+            zip
+          ];
+          text =
+            builtins.replaceStrings
+            ["@APKSIGNER@"]
+            ["${vectorSigningAndroid.androidsdk}/libexec/android-sdk/build-tools/36.0.0/apksigner"]
+            (builtins.readFile ./scripts/vector-owner-sign);
         };
 
         installAurora = pkgs.writeShellApplication {
@@ -664,6 +872,7 @@
                 insecureRecoveryAdb = true;
                 lineageLockfile = robotnixLineage21Lock;
                 vendorLineagePatches = robotnixVendorLineagePatches;
+                webviewSource = lineageWebviewArm64;
               }
             )
           else null;
@@ -676,9 +885,11 @@
                 buildSourceKernel = true;
                 deviceTree = karenDeviceTree;
                 insecureRecoveryAdb = true;
-                kernelSource = oneplusKernelSource;
+                kernelModules = oneplusControlKernelModules;
+                kernelSource = oneplusControlKernelSource;
                 lineageLockfile = robotnixLineage21Lock;
                 vendorLineagePatches = robotnixVendorLineagePatches;
+                webviewSource = lineageWebviewArm64;
               }
             )
           else null;
@@ -692,6 +903,7 @@
                 fullSystem = true;
                 lineageLockfile = robotnixLineage21Lock;
                 vendorLineagePatches = robotnixVendorLineagePatches;
+                webviewSource = lineageWebviewArm64;
               }
             )
           else null;
@@ -745,9 +957,12 @@
               name = "lineage-21-karen-source-kernel-bootimage";
               makeTargets = ["bootimage"];
               installPhase = ''
+                effective_config="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ/.config"
+                grep -Fxq 'CONFIG_KEXEC=y' "$effective_config"
                 mkdir -p "$out"
                 cp --reflink=auto "$ANDROID_PRODUCT_OUT/boot.img" "$out/boot.img"
                 cp --reflink=auto "$ANDROID_PRODUCT_OUT/kernel" "$out/kernel"
+                cp --reflink=auto "$effective_config" "$out/kernel.config"
               '';
             }
           else null;
@@ -787,6 +1002,9 @@
           stock-root-full = stockRootFull;
           stock-unroot = stockUnroot;
           vector-module = vectorModule;
+          vector-owner-build-intermediate = vectorOwnerBuildIntermediate;
+          vector-owner-sign = vectorOwnerSign;
+          vector-signing-key-generator = vectorSigningKeyGenerator;
           verify-firmware = verifyFirmware;
         }
         // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
@@ -794,6 +1012,9 @@
           karen-device-tree = karenDeviceTree;
           karen-full-images = karenFullImages;
           karen-source-kernel-bootimage = karenSourceKernelBootimage;
+        }
+        // pkgs.lib.optionalAttrs (vectorOwnerModuleIntermediate != null) {
+          vector-module-owner-intermediate = vectorOwnerModuleIntermediate;
         }
     );
 
@@ -803,6 +1024,18 @@
         adb-key-generator = {
           type = "app";
           program = "${self.packages.${system}.adb-key-generator}/bin/nord2t-adb-key-generator";
+        };
+        vector-signing-key-generator = {
+          type = "app";
+          program = "${self.packages.${system}.vector-signing-key-generator}/bin/nord2t-vector-signing-key-generator";
+        };
+        vector-owner-build-intermediate = {
+          type = "app";
+          program = "${self.packages.${system}.vector-owner-build-intermediate}/bin/nord2t-vector-owner-build-intermediate";
+        };
+        vector-owner-sign = {
+          type = "app";
+          program = "${self.packages.${system}.vector-owner-sign}/bin/nord2t-vector-owner-sign";
         };
         android-fhs = {
           type = "app";
@@ -905,6 +1138,9 @@
           probe-preloader
           read-gpt
           snapshot
+          vector-owner-build-intermediate
+          vector-owner-sign
+          vector-signing-key-generator
           verify-firmware
           ;
 

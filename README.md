@@ -163,6 +163,45 @@ workflow, only its public half may be copied to the build host as
 their own isolated `secrets/HOST-USER-adb-host-key.age` by running the same
 command on their phone/build host.
 
+## Owner Vector signing
+
+The opinionated root-full profile needs a stable Vector manager identity so an
+update cannot silently change the certificate trusted by Vector's daemon.
+Create or verify that identity from `l-esp` or `l-portal`:
+
+```bash
+nix run .#vector-signing-key-generator
+```
+
+The command creates two committed, SOPS-encrypted JSON documents. The shared
+document contains only the public X.509 certificate, its digest and the key
+alias; `l-esp`, `l-portal` and the optional `s-tau` builder can decrypt it.
+The private document contains the JKS and the four Android signing attributes
+`androidStoreFile`, `androidStorePassword`, `androidKeyAlias` and
+`androidKeyPassword`; only `l-esp` and `l-portal` can decrypt it. Passwords
+are generated randomly and are passed to `keytool` and `apksigner` through
+mode-0600 files, never as Gradle properties or command-line values.
+
+This split keeps compilation offload possible without copying the private key
+to the builder:
+
+```bash
+# On the compilation host: embeds only the public certificate.
+nix run .#vector-owner-build-intermediate -- \
+  --output ./Vector-owner-intermediate.zip
+
+# After returning that artifact to l-esp or l-portal: applies the private key.
+nix run .#vector-owner-sign -- \
+  ./Vector-owner-intermediate.zip \
+  --output ./Vector-owner-signed.zip
+```
+
+The final signing helper verifies that both encrypted documents describe the
+same certificate, signs both embedded APKs, checks their signer digest,
+refreshes the module checksums and creates a new ZIP. Generic users may keep
+using `vector-module`; neither SOPS identity nor `s-tau` is required for the
+non-owner build.
+
 The repository then adds the local `karen` tree without committing proprietary
 or stock-derived binaries. There are three useful build paths:
 

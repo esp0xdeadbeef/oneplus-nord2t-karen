@@ -1,0 +1,32 @@
+From b4ce01b03e0462619f5bb278a7ce52f5a0749486 Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 03:30:00 +0200
+Subject: [PATCH] kernel: fix control build type errors
+
+Give the OPlus foreground-boost declaration its actual void return type.
+Also restore the node deferred-split pointer assignment described by the
+adjacent source comment; the published line assigned an integer address to a
+different pointer field and does not compile with the pinned Lineage clang.
+
+Assisted-by: Codex:gpt-5
+---
+ kernel/sched/extension/eas_plus.c | 2 +-
+ mm/page_alloc.c                   | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/kernel/sched/extension/eas_plus.c b/kernel/sched/extension/eas_plus.c
+index 7fd48dc..8307566 100644
+--- a/kernel/sched/extension/eas_plus.c
++++ b/kernel/sched/extension/eas_plus.c
+@@ -295 +295 @@
+-extern oplus_task_sched_boost(struct task_struct *p, int *task_prefer);
++extern void oplus_task_sched_boost(struct task_struct *p, int *task_prefer);
+diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+index 133135c..00996f4 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -7074 +7074 @@
+-	chp_lruvec->ds = (unsigned long)chp_lruvec; // pgdat->split_queue_len;
++	pgdat->split_queue_len = (unsigned long)chp_lruvec;
+--
+2.51.0

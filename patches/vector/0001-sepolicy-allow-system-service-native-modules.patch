@@ -1,0 +1,30 @@
+From 3d5f33ea6fe4828a9124620d1cb1858374a77e57 Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 00:30:00 +0200
+Subject: [PATCH] sepolicy: allow native modules in system services
+
+Hide My Applist 3.8 loads its native hook from the installed APK when
+scoped to System Framework. Vector already gives system_server read,
+open and map access to apk_data_file through the platform policy, but
+an executable mapping additionally requires execute.
+
+Keep the exception in Vector's explicit root module policy. This avoids
+weakening the Lineage device policy or modifying HMA, and matches HMA
+3.8's documented framework requirement.
+---
+ zygisk/module/sepolicy.rule | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/zygisk/module/sepolicy.rule b/zygisk/module/sepolicy.rule
+index 576529d..8d80e12 100644
+--- a/zygisk/module/sepolicy.rule
++++ b/zygisk/module/sepolicy.rule
+@@ -1,3 +1,6 @@
++# HMA 3.8 requires executable native-library mappings in system services.
++allow system_server apk_data_file file execute
++
+ allow dex2oat dex2oat_exec file execute_no_trans
+ allow dex2oat system_linker_exec file execute_no_trans
+
+--
+2.51.0

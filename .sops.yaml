@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: MIT
 
 keys:
+  - &l-portal-deadbeef age19xpat8fwf97nkrxcgatny48sz0chrhml5j5ksrqvkyqkpnzp6qjssf0zzs
   - &l-esp-deadbeef age1vfresmphe0ahyn9vdtsqzzz72kt2lyd8nya376yk7yxjpc5p298qya76kz
+  - &s-tau-deadbeef age1vttz6y6c3qax7p74qw68a75rcvjfumjq2mn6jqpsexz29hcxysms9qsyd5
 
 creation_rules:
   - path_regex: '^secrets/l-esp-deadbeef-adb-host-key\.age$'
@@ -9,4 +11,19 @@ creation_rules:
     output_type: binary
     key_groups:
       - age:
+          - *l-esp-deadbeef
+  - path_regex: '^secrets/vector-signing-shared\.json\.age$'
+    input_type: json
+    output_type: json
+    key_groups:
+      - age:
+          - *l-portal-deadbeef
+          - *l-esp-deadbeef
+          - *s-tau-deadbeef
+  - path_regex: '^secrets/vector-signing-private\.json\.age$'
+    input_type: json
+    output_type: json
+    key_groups:
+      - age:
+          - *l-portal-deadbeef
           - *l-esp-deadbeef

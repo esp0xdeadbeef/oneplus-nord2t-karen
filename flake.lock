@@ -242,7 +242,7 @@
         "robotnix": "robotnix",
         "shamiko-module": "shamiko-module",
         "stock-firmware-3001": "stock-firmware-3001",
-        "vector-module": "vector-module"
+        "vector-source": "vector-source"
       }
     },
     "shamiko-module": {
@@ -305,16 +305,23 @@
         "type": "github"
       }
     },
-    "vector-module": {
+    "vector-source": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-LXe9SdowTCq71dxA+jBp1hKlHprrCndUWrU5YFeSaE4=",
-        "type": "file",
-        "url": "https://github.com/JingMatrix/Vector/releases/download/v2.0/Vector-v2.0-3021-Release.zip"
+        "lastModified": 1774207587,
+        "narHash": "sha256-/TcdI6zqgebRjr3LbliMLbQU34JTMrpubbfFi/F7h4U=",
+        "ref": "refs/heads/master",
+        "rev": "76141fed151f49b818144d54f2ebb6ab9a2df11c",
+        "revCount": 3021,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/JingMatrix/Vector.git"
       },
       "original": {
-        "type": "file",
-        "url": "https://github.com/JingMatrix/Vector/releases/download/v2.0/Vector-v2.0-3021-Release.zip"
+        "rev": "76141fed151f49b818144d54f2ebb6ab9a2df11c",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/JingMatrix/Vector.git"
       }
     }
   },

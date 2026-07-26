@@ -1,0 +1,290 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+umask 077
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-vector-signing-key-generator
+       [--shared-secret-file FILE]
+       [--private-secret-file FILE]
+       [--age-key-file FILE]
+
+Create or verify the split SOPS identity used for owner-signed Vector builds.
+
+The shared secret contains only the public signing certificate and metadata.
+It is intended for the Android build host. The private secret contains the
+JKS keystore and its Gradle signing attributes and must remain unavailable to
+the remote builder.
+
+Both files are idempotently verified when they already exist. A missing half
+is never regenerated independently.
+EOF
+}
+
+fail() {
+  echo "Vector signing-key setup failed: $*" >&2
+  exit 1
+}
+
+repository_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+  fail "run from a Git checkout"
+shared_secret_file="$repository_root/secrets/vector-signing-shared.json.age"
+private_secret_file="$repository_root/secrets/vector-signing-private.json.age"
+age_key_file="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --shared-secret-file)
+      [[ $# -ge 2 ]] || fail "--shared-secret-file requires a path"
+      shared_secret_file="$2"
+      shift 2
+      ;;
+    --private-secret-file)
+      [[ $# -ge 2 ]] || fail "--private-secret-file requires a path"
+      private_secret_file="$2"
+      shift 2
+      ;;
+    --age-key-file)
+      [[ $# -ge 2 ]] || fail "--age-key-file requires a path"
+      age_key_file="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      fail "unknown argument: $1"
+      ;;
+  esac
+done
+
+shared_secret_file="$(realpath -m "$shared_secret_file")"
+private_secret_file="$(realpath -m "$private_secret_file")"
+age_key_file="$(realpath -m "$age_key_file")"
+sops_config="$repository_root/.sops.yaml"
+
+[[ -f "$sops_config" ]] || fail "repository SOPS configuration is missing"
+[[ -f "$age_key_file" && -s "$age_key_file" ]] ||
+  fail "SOPS age identity is missing or empty"
+age_key_mode="$(stat -c %a "$age_key_file")"
+(((8#$age_key_mode & 077) == 0)) ||
+  fail "SOPS age identity must not be group/world accessible"
+
+temporary_directory="$(mktemp -d -t nord2t-vector-signing.XXXXXXXX)"
+cleanup() {
+  rm -r -- "$temporary_directory"
+}
+trap cleanup EXIT HUP INT TERM
+chmod 700 "$temporary_directory"
+
+shared_json="$temporary_directory/shared.json"
+private_json="$temporary_directory/private.json"
+keystore="$temporary_directory/vector-signing.jks"
+store_password_file="$temporary_directory/store-password"
+key_password_file="$temporary_directory/key-password"
+certificate="$temporary_directory/vector-signing.x509.der"
+shared_certificate="$temporary_directory/shared-vector-signing.x509.der"
+
+validate_pair() {
+  jq -e '
+    .schema == 1 and
+    (.androidSigningCertificate | type == "string" and length > 0) and
+    (.androidSigningCertificateSha256 |
+      type == "string" and test("^[0-9a-f]{64}$")) and
+    (.androidKeyAlias |
+      type == "string" and test("^[A-Za-z0-9._-]+$"))
+  ' "$shared_json" >/dev/null ||
+    fail "shared SOPS document has an invalid schema"
+  jq -e '
+    .schema == 1 and
+    (.androidStoreFile | type == "string" and length > 0) and
+    (.androidStorePassword | type == "string" and length >= 16) and
+    (.androidKeyAlias |
+      type == "string" and test("^[A-Za-z0-9._-]+$")) and
+    (.androidKeyPassword | type == "string" and length >= 16)
+  ' "$private_json" >/dev/null ||
+    fail "private SOPS document has an invalid schema"
+
+  shared_alias="$(jq -er '.androidKeyAlias' "$shared_json")"
+  private_alias="$(jq -er '.androidKeyAlias' "$private_json")"
+  [[ "$shared_alias" == "$private_alias" ]] ||
+    fail "shared and private key aliases differ"
+
+  jq -er '.androidStoreFile' "$private_json" |
+    base64 --decode >"$keystore" ||
+    fail "private androidStoreFile is not valid base64"
+  jq -j '.androidStorePassword' "$private_json" >"$store_password_file"
+  jq -j '.androidKeyPassword' "$private_json" >"$key_password_file"
+  chmod 600 "$keystore" "$store_password_file" "$key_password_file"
+
+  keytool \
+    -list \
+    -keystore "$keystore" \
+    -storetype JKS \
+    -storepass:file "$store_password_file" \
+    -alias "$private_alias" >/dev/null 2>&1 ||
+    fail "private androidStoreFile or signing attributes are invalid"
+  keytool \
+    -exportcert \
+    -keystore "$keystore" \
+    -storetype JKS \
+    -storepass:file "$store_password_file" \
+    -alias "$private_alias" \
+    -file "$certificate" >/dev/null 2>&1 ||
+    fail "could not export the private signing certificate"
+
+  jq -er '.androidSigningCertificate' "$shared_json" |
+    base64 --decode >"$shared_certificate" ||
+    fail "shared androidSigningCertificate is not valid base64"
+  cmp -s "$certificate" "$shared_certificate" ||
+    fail "shared certificate does not match the private keystore"
+
+  actual_fingerprint="$(sha256sum "$certificate" | cut -d' ' -f1)"
+  expected_fingerprint="$(
+    jq -er '.androidSigningCertificateSha256' "$shared_json"
+  )"
+  [[ "$actual_fingerprint" == "$expected_fingerprint" ]] ||
+    fail "shared certificate fingerprint does not match the private keystore"
+}
+
+shared_exists=false
+private_exists=false
+[[ -e "$shared_secret_file" ]] && shared_exists=true
+[[ -e "$private_secret_file" ]] && private_exists=true
+
+if [[ "$shared_exists" != "$private_exists" ]]; then
+  fail "shared and private SOPS files must either both exist or both be absent"
+fi
+
+if [[ "$shared_exists" == true ]]; then
+  [[ -f "$shared_secret_file" && -s "$shared_secret_file" ]] ||
+    fail "shared SOPS file is not a non-empty regular file"
+  [[ -f "$private_secret_file" && -s "$private_secret_file" ]] ||
+    fail "private SOPS file is not a non-empty regular file"
+
+  SOPS_AGE_KEY_FILE="$age_key_file" \
+    sops decrypt \
+      --input-type json \
+      --output-type json \
+      "$shared_secret_file" >"$shared_json" ||
+    fail "could not decrypt the shared SOPS file"
+  SOPS_AGE_KEY_FILE="$age_key_file" \
+    sops decrypt \
+      --input-type json \
+      --output-type json \
+      "$private_secret_file" >"$private_json" ||
+    fail "could not decrypt the private SOPS file"
+  validate_pair
+  action="verified-existing"
+else
+  install -d -m 0755 "$(dirname "$shared_secret_file")"
+  [[ "$(dirname "$shared_secret_file")" == \
+    "$(dirname "$private_secret_file")" ]] ||
+    install -d -m 0755 "$(dirname "$private_secret_file")"
+
+  openssl rand -base64 48 | tr -d '\n' >"$store_password_file"
+  openssl rand -base64 48 | tr -d '\n' >"$key_password_file"
+  key_alias="vector-owner"
+
+  keytool \
+    -genkeypair \
+    -keystore "$keystore" \
+    -storetype JKS \
+    -storepass:file "$store_password_file" \
+    -keypass:file "$key_password_file" \
+    -alias "$key_alias" \
+    -dname "CN=Karen Vector Owner,O=Local Android Build" \
+    -keyalg RSA \
+    -keysize 4096 \
+    -sigalg SHA256withRSA \
+    -validity 10000 \
+    -noprompt >/dev/null 2>&1 ||
+    fail "could not generate the owner signing keystore"
+  keytool \
+    -exportcert \
+    -keystore "$keystore" \
+    -storetype JKS \
+    -storepass:file "$store_password_file" \
+    -alias "$key_alias" \
+    -file "$certificate" >/dev/null 2>&1 ||
+    fail "could not export the new signing certificate"
+
+  base64 -w 0 "$keystore" >"$temporary_directory/keystore.b64"
+  base64 -w 0 "$certificate" >"$temporary_directory/certificate.b64"
+  sha256sum "$certificate" | cut -d' ' -f1 \
+    >"$temporary_directory/certificate.sha256"
+
+  jq -n \
+    --argjson schema 1 \
+    --rawfile androidStoreFile "$temporary_directory/keystore.b64" \
+    --rawfile androidStorePassword "$store_password_file" \
+    --arg androidKeyAlias "$key_alias" \
+    --rawfile androidKeyPassword "$key_password_file" \
+    '{
+      schema: $schema,
+      androidStoreFile: $androidStoreFile,
+      androidStorePassword: $androidStorePassword,
+      androidKeyAlias: $androidKeyAlias,
+      androidKeyPassword: $androidKeyPassword
+    }' >"$private_json"
+  jq -n \
+    --argjson schema 1 \
+    --rawfile androidSigningCertificate "$temporary_directory/certificate.b64" \
+    --rawfile androidSigningCertificateSha256 \
+      "$temporary_directory/certificate.sha256" \
+    --arg androidKeyAlias "$key_alias" \
+    '{
+      schema: $schema,
+      androidSigningCertificate: $androidSigningCertificate,
+      androidSigningCertificateSha256: $androidSigningCertificateSha256,
+      androidKeyAlias: $androidKeyAlias
+    }' >"$shared_json"
+  validate_pair
+
+  sops \
+    --config "$sops_config" \
+    encrypt \
+    --filename-override "$shared_secret_file" \
+    --input-type json \
+    --output-type json \
+    "$shared_json" >"$temporary_directory/shared.json.age" ||
+    fail "could not encrypt the shared SOPS document"
+  sops \
+    --config "$sops_config" \
+    encrypt \
+    --filename-override "$private_secret_file" \
+    --input-type json \
+    --output-type json \
+    "$private_json" >"$temporary_directory/private.json.age" ||
+    fail "could not encrypt the private SOPS document"
+
+  install -m 0644 \
+    "$temporary_directory/shared.json.age" \
+    "$shared_secret_file"
+  install -m 0644 \
+    "$temporary_directory/private.json.age" \
+    "$private_secret_file"
+
+  SOPS_AGE_KEY_FILE="$age_key_file" \
+    sops decrypt \
+      --input-type json \
+      --output-type json \
+      "$shared_secret_file" >"$shared_json"
+  SOPS_AGE_KEY_FILE="$age_key_file" \
+    sops decrypt \
+      --input-type json \
+      --output-type json \
+      "$private_secret_file" >"$private_json"
+  validate_pair
+  action="generated-new"
+fi
+
+echo "Vector signing-key setup passed."
+echo "action=$action"
+echo "shared_access=l-esp,l-portal,s-tau"
+echo "private_access=l-esp,l-portal"
+echo "secret_encryption=sops-age"

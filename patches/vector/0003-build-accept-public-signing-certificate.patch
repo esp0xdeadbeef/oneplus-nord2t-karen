@@ -1,0 +1,94 @@
+From 7e784767be34ba66d5baa7638211412778045d31 Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 03:20:00 +0200
+Subject: [PATCH] build: accept a public manager signing certificate
+
+Allow an untrusted compilation host to embed the intended manager
+certificate in the daemon without receiving the private signing key. The
+manager and daemon APKs can then be signed on a trusted host as a separate
+post-build step.
+
+The existing keystore-derived behavior remains the default for upstream and
+generic builds.
+
+Assisted-by: Codex:gpt-5
+---
+ daemon/build.gradle.kts | 33 ++++++++++++++++++++++++---------
+ 1 file changed, 24 insertions(+), 9 deletions(-)
+
+diff --git a/daemon/build.gradle.kts b/daemon/build.gradle.kts
+index ed59543..25da4fc 100644
+--- a/daemon/build.gradle.kts
++++ b/daemon/build.gradle.kts
+@@ -21,6 +21,7 @@
+ import com.android.build.api.dsl.ApplicationExtension
+ import com.android.ide.common.signing.KeystoreHelper
+ import java.io.PrintStream
++import java.security.cert.CertificateFactory
+
+ plugins {
+     alias(libs.plugins.agp.app)
+@@ -34,6 +35,8 @@ val agpVersion: String by project
+
+ val defaultManagerPackageName: String by rootProject.extra
+
++val signingCertificateFile = providers.gradleProperty("androidSigningCertificateFile")
++
+ android {
+     buildFeatures {
+         prefab = true
+@@ -72,7 +75,12 @@ android.applicationVariants.all {
+     val outSrcDir = layout.buildDirectory.dir("generated/source/signInfo/${variantLowered}").get()
+     val signInfoTask =
+         tasks.register("generate${variantCapped}SignInfo") {
+-            dependsOn(":app:validateSigning${variantCapped}")
++            if (signingCertificateFile.isPresent) {
++                inputs.file(signingCertificateFile)
++            } else {
++                dependsOn(":app:validateSigning${variantCapped}")
++            }
++
+             val sign =
+                 rootProject
+                     .project(":app")
+@@ -85,14 +93,21 @@ android.applicationVariants.all {
+             outputs.file(outSrc)
+             doLast {
+                 outSrc.parentFile.mkdirs()
+-                val certificateInfo =
+-                    KeystoreHelper.getCertificateInfo(
+-                        sign?.storeType,
+-                        sign?.storeFile,
+-                        sign?.storePassword,
+-                        sign?.keyPassword,
+-                        sign?.keyAlias,
+-                    )
++                val certificate =
++                    if (signingCertificateFile.isPresent) {
++                        file(signingCertificateFile.get()).inputStream().use {
++                            CertificateFactory.getInstance("X.509").generateCertificate(it)
++                        }
++                    } else {
++                        KeystoreHelper.getCertificateInfo(
++                                sign?.storeType,
++                                sign?.storeFile,
++                                sign?.storePassword,
++                                sign?.keyPassword,
++                                sign?.keyAlias,
++                            )
++                            .certificate
++                    }
+                 PrintStream(outSrc)
+                     .print(
+                         """
+@@ -100,7 +115,7 @@ android.applicationVariants.all {
+                 |package org.lsposed.lspd.util;
+                 |public final class SignInfo {
+                 |    public static final byte[] CERTIFICATE = {${
+-                    certificateInfo.certificate.encoded.joinToString(",")
++                    certificate.encoded.joinToString(",")
+                 }};
+                 |}"""
+                             .trimMargin()
+--
+2.51.0

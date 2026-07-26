@@ -51,7 +51,7 @@ grep -Fq 'fastboot_variable hw-revision)" == ca00' "$unroot_script"
 grep -Fq "[[ \"\$from_fastboot\" == true ]]" "$unroot_script"
 
 for input in \
-  'JingMatrix/Vector/releases/download/v2.0/Vector-v2.0-3021-Release.zip' \
+  'JingMatrix/Vector.git?rev=76141fed151f49b818144d54f2ebb6ab9a2df11c&submodules=1' \
   'AdAway/AdAway/releases/download/v6.1.4/AdAway-6.1.4-20241027.apk' \
   'HMA-V3.8.r499.3a346c0-release.apk' \
   'Shamiko-v1.2.5-414-release.zip'; do
