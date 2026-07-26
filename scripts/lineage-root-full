@@ -170,13 +170,7 @@ nord2t-audit-lineage-images \
   >/dev/null ||
   fail "source Lineage bundle did not pass its enforcing image audit"
 source_system_fingerprint="$(
-  dump.erofs \
-    --cat \
-    --path=/system/build.prop \
-    "$image_directory/system.img" \
-    2>/dev/null |
-    sed -n 's/^ro\.system\.build\.fingerprint=//p' |
-    head -n 1
+  nord2t-read-lineage-system-fingerprint "$image_directory/system.img"
 )"
 [[ -n "$source_system_fingerprint" ]] ||
   fail "source Lineage system image has no build fingerprint"

@@ -138,13 +138,7 @@ grep -Fxq "selinux_mode=enforcing-default" "$host_work/image-audit.txt" ||
   fail "Lineage boot image does not fill the 64 MiB boot partition"
 original_boot_hash="$(sha256sum "$lineage_boot" | cut -d' ' -f1)"
 source_system_fingerprint="$(
-  dump.erofs \
-    --cat \
-    --path=/system/build.prop \
-    "$image_directory/system.img" \
-    2>/dev/null |
-    sed -n 's/^ro\.system\.build\.fingerprint=//p' |
-    head -n 1
+  nord2t-read-lineage-system-fingerprint "$image_directory/system.img"
 )"
 [[ -n "$source_system_fingerprint" ]] ||
   fail "source Lineage system image has no build fingerprint"

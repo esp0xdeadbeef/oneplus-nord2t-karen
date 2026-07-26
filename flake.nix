@@ -549,6 +549,19 @@
             (builtins.readFile ./scripts/stock-root-full);
         };
 
+        readLineageSystemFingerprint = pkgs.writeShellApplication {
+          name = "nord2t-read-lineage-system-fingerprint";
+          runtimeInputs = with pkgs; [
+            android-tools
+            coreutils
+            e2fsprogs
+            erofs-utils
+            gnugrep
+            gnused
+          ];
+          text = builtins.readFile ./scripts/read-lineage-system-fingerprint;
+        };
+
         lineageRoot = pkgs.writeShellApplication {
           name = "nord2t-lineage-root";
           runtimeInputs = with pkgs; [
@@ -561,6 +574,7 @@
             gnugrep
             gnused
             mkbootimg-osm0sis
+            readLineageSystemFingerprint
             unzip
           ];
           text = builtins.replaceStrings ["@MAGISK_APK@"] ["${magiskApk}"] (
@@ -593,6 +607,7 @@
             gnugrep
             gnused
             lineageRoot
+            readLineageSystemFingerprint
           ];
           text =
             builtins.replaceStrings
@@ -1025,6 +1040,7 @@
           oneplus-kernel-source = oneplusKernelSource;
           preflight-lineage-userspace = preflightLineageUserspace;
           probe-preloader = probePreloader;
+          read-lineage-system-fingerprint = readLineageSystemFingerprint;
           read-gpt = readGpt;
           shamiko-module = shamikoModule;
           snapshot = snapshotDevice;

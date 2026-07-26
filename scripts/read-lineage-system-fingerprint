@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+fail() {
+  echo "Lineage system fingerprint read failed: $*" >&2
+  exit 1
+}
+
+[[ $# -eq 1 ]] ||
+  fail "usage: nord2t-read-lineage-system-fingerprint SYSTEM_IMG"
+system_image="$(realpath "$1")"
+[[ -f "$system_image" && -r "$system_image" ]] ||
+  fail "system image is not a readable regular file"
+
+temporary_directory="$(mktemp -d -t nord2t-system-fingerprint.XXXXXXXX)"
+cleanup() {
+  rm -rf -- "$temporary_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+build_properties="$temporary_directory/build.prop"
+raw_image="$temporary_directory/system.raw.img"
+
+if simg2img "$system_image" "$raw_image" >/dev/null 2>&1 &&
+  tune2fs -l "$raw_image" 2>/dev/null |
+    grep -Fq 'Filesystem magic number:  0xEF53'; then
+  debugfs \
+    -R 'cat /system/build.prop' \
+    "$raw_image" \
+    >"$build_properties" 2>/dev/null ||
+    fail "could not read build.prop from the sparse ext4 system image"
+elif dump.erofs \
+  --cat \
+  --path=/system/build.prop \
+  "$system_image" \
+  >"$build_properties" 2>/dev/null; then
+  :
+else
+  fail "system image is neither supported sparse ext4 nor EROFS"
+fi
+
+mapfile -t fingerprints < <(
+  sed -n 's/^ro\.system\.build\.fingerprint=//p' "$build_properties"
+)
+[[ "${#fingerprints[@]}" -eq 1 && -n "${fingerprints[0]}" ]] ||
+  fail "system image does not contain exactly one build fingerprint"
+printf '%s\n' "${fingerprints[0]}"
