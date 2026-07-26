@@ -599,6 +599,48 @@ the same path in the extracted `.3001` partitions; IMS libraries have moved
 and several old 32-bit entries no longer exist. It is useful for partition and
 init hints, not as a tree to build or flash unchanged.
 
+### Active MT6893 community device family
+
+The actively maintained
+[`mt6893-development/android_device_oplus_op6893`](https://github.com/mt6893-development/android_device_oplus_op6893)
+tree is the richest public MT6893 userspace reference found so far. Research
+is pinned to its `lineage-23.2` branch at
+[`3e5d76cb40b327b563784316b2eb1c96363b5c5d`](https://github.com/mt6893-development/android_device_oplus_op6893/tree/3e5d76cb40b327b563784316b2eb1c96363b5c5d).
+It contains working examples for:
+
+- first-stage and recovery `fstab`, init, modem, connectivity, power and USB;
+- framework compatibility matrices and device manifests;
+- audio, power-hint and thermal configuration;
+- vendor and system SELinux policy;
+- `libinit`, compatibility shims, USB HAL integration and device overlays;
+- proprietary-file extraction and the related MT6893 source-repository map.
+
+Its `lineage.dependencies` provides a particularly useful Lineage 21 source
+constellation. Pin these exact heads when comparing that Android 14 generation:
+
+| Repository | Lineage 21 commit |
+| --- | --- |
+| [`android_kernel_oplus_mt6893`](https://github.com/mt6893-development/android_kernel_oplus_mt6893/tree/1dfa6bf0946e631d4845570d934323fbd92ad283) | `1dfa6bf0946e631d4845570d934323fbd92ad283` |
+| [`proprietary_vendor_oplus_mt6893-common`](https://github.com/mt6893-development/proprietary_vendor_oplus_mt6893-common/tree/8fe449a1b6aad2b3c6db675c2131b590a7584cf3) | `8fe449a1b6aad2b3c6db675c2131b590a7584cf3` |
+| [`android_hardware_mediatek`](https://github.com/mt6893-development/android_hardware_mediatek/tree/0e006d334edcdc21819a09bed0dd83b9d6adb618) | `0e006d334edcdc21819a09bed0dd83b9d6adb618` |
+| [`android_hardware_mediatek_wlan`](https://github.com/mt6893-development/android_hardware_mediatek_wlan/tree/0e293213a9197cf8c8b9116027a09679fc1248f7) | `0e293213a9197cf8c8b9116027a09679fc1248f7` |
+| [`android_device_mediatek_sepolicy_vndr`](https://github.com/mt6893-development/android_device_mediatek_sepolicy_vndr/tree/53c2fdca28dbb88dc42245412a24b6e13120aabb) | `53c2fdca28dbb88dc42245412a24b6e13120aabb` |
+| [`android_packages_apps_OneplusParts`](https://github.com/mt6893-development/android_packages_apps_OneplusParts/tree/a38c7668ec7f04e35c30b8779121d532c089e4e1) | `a38c7668ec7f04e35c30b8779121d532c089e4e1` |
+
+This is a donor and behavior map, not a Karen tree to copy. Its target aliases
+are `denniz`, `OP515BL1`, `cupida`, `RMX3031` and `RMX3033`, not CPH2399. Its
+BoardConfig describes a 32 MiB boot partition, a separate 128 MiB recovery,
+non-A/B OTA and the generic `mt6893_defconfig`. Audited Karen instead has a
+64 MiB recovery-as-boot partition, virtual A/B and requires
+`k6893v1_64_k419_ab_defconfig`. Copying its partition, AVB or recovery settings
+would therefore be unsafe. Reconcile each useful init, VINTF, policy and blob
+fact against the `.3001` images and live Karen evidence.
+
+The repository has no repository-level licence declaration. Individual files
+with explicit licence headers can be studied or imported under those terms,
+with their notices and history preserved; files without clear provenance
+remain reference material only.
+
 The useful modern source is OnePlus's MT6893 Android 14 kernel branch:
 
 ```text

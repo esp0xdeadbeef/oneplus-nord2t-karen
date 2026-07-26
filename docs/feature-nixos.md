@@ -335,6 +335,7 @@ Use the four sources with distinct authority:
 | --- | --- | --- |
 | Stock `.3001` kernel, resolved DTB and traces | Shipped Karen behavior | Ground truth for addresses, enabled hardware, protocols and sequencing |
 | OnePlus Android 14 kernel 4.19 | Newest published Nord 2T source | Device-specific delta and first source-kernel reconstruction target |
+| [MT6893 community device family](lineage-port.md#active-mt6893-community-device-family) | Maintained Android userspace and source map for related devices | Init, VINTF, SELinux, HAL, blob and generated-DCT archaeology; never Karen partition geometry |
 | Pinned MediaTek/OPlus 4.14 donor | Older but more complete BSP evidence | Recover missing implementations and understand hardware contracts |
 | Upstream Linux 6.x and adjacent MediaTek SoCs | Current kernel interfaces | Native subsystem design and forward-port destination |
 
