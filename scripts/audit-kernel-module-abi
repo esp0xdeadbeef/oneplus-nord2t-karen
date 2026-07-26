@@ -271,6 +271,10 @@ for module in "${vendor_modules[@]}"; do
     module_path="$replacement_directory/$module"
     verify_replacement_signature "$module" "$module_path"
   fi
+  module_name="$(modinfo -F name "$module_path")" ||
+    fail "could not read module name from $module"
+  [[ "$module_name" == "${module%.ko}" ]] ||
+    fail "$module declares unexpected module name: $module_name"
   module_vermagic="$(modinfo -F vermagic "$module_path")" ||
     fail "could not read vermagic from $module"
   [[ "${module_vermagic%% *}" == "$kernel_release" ]] ||

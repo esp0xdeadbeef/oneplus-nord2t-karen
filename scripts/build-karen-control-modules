@@ -44,6 +44,23 @@ grep -Fxq 'CONFIG_MODULE_SIG_SHA512=y' "$kernel_out/.config" ||
 [[ ! -e "$output_directory" ]] ||
   fail "refusing to overwrite output: $output_directory"
 
+working_top="$kernel_out/karen-control-module-work"
+working_module_source="$working_top/vendor/mediatek/kernel_modules"
+working_trace_source="$working_top/kernel/trace"
+[[ ! -e "$working_top" ]] ||
+  fail "refusing to reuse stale module work tree: $working_top"
+mkdir -p \
+  "$working_module_source" \
+  "$(dirname "$working_trace_source")"
+cp -a --reflink=auto \
+  "$module_source/connectivity" \
+  "$working_module_source/connectivity"
+cp -a --reflink=auto \
+  "$kernel_source/kernel/trace" \
+  "$working_trace_source"
+chmod -R u+w "$working_top"
+module_source="$working_module_source"
+
 make_binary="$android_root/prebuilts/build-tools/linux-x86/bin/make"
 clang_root="$android_root/prebuilts/clang/host/linux-x86/clang-r487747c"
 gcc64_root="$android_root/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9"
@@ -112,7 +129,7 @@ common_make_arguments=(
   "PAHOLE=$kernel_tools/pahole"
   DEPMOD=depmod
   "KERNEL_OUT=$kernel_out"
-  "TOP=$android_root/kernel/oneplus"
+  "TOP=$working_top"
   TARGET_BUILD_VARIANT=userdebug
 )
 
@@ -135,7 +152,7 @@ fm="$module_source/connectivity/fmradio"
 gps="$module_source/connectivity/gps"
 wlan_adaptor="$module_source/connectivity/wlan/adaptor"
 wlan="$module_source/connectivity/wlan/core/gen4m"
-trace="$kernel_source/kernel/trace"
+trace="$working_trace_source"
 
 build_module "$conninfra"
 build_module "$connfem"
