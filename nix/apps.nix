@@ -104,6 +104,11 @@
         defaultDirectory = "result-karen-source-kernel-full-images";
         name = "karen-source-kernel-full-images";
       };
+      nixos-kexec-initramfs = mkArtifactApp {
+        artifact = self.packages.${system}.nixos-kexec-initramfs;
+        defaultDirectory = "result-nixos-kexec-initramfs";
+        name = "nixos-kexec-initramfs";
+      };
     }
     // pkgs.lib.optionalAttrs (
       system

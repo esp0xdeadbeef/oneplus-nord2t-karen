@@ -231,6 +231,16 @@ grep -Fq "grep -Fxq 'CONFIG_KEXEC=y' \"\$effective_config\"" \
 grep -Fq 'kernel.config' "$lineage_packages"
 grep -Fq 'nwpower_unsl_blacklist_reject(void)' "$nixos_kernel_packages"
 grep -Fq 'oplus_match_modem_wakeup(void)' "$nixos_kernel_packages"
+grep -Fq 'CONFIG_NC_EXTRA y' "$nixos_kernel_packages"
+grep -Fq 'karen.nixos.callback=1' "$nixos_kernel_packages"
+grep -Fq 'transport: "USB RNDIS only"' "$nixos_kernel_packages"
+grep -Fq 'persistent_writes: false' "$nixos_kernel_packages"
+grep -Fq '02:4b:41:52:45:4e' "$nixos_kernel_packages"
+if grep -Eiq 'wpa_supplicant|wifi_password|wifi_ssid' \
+  "$nixos_kernel_packages"; then
+  echo "The stage-1 initramfs must not contain Wi-Fi credentials or setup." >&2
+  exit 1
+fi
 grep -Fq 'lock_supp_level(unsigned int level)' \
   "$script_directory/nixos/patches/kernel/0004-oplus-fix-control-kernel-warnings.patch"
 grep -Fq -- '-Wno-error=strict-prototypes' \

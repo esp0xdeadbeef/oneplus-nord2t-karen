@@ -3,6 +3,7 @@
   oneplus-kernel-modules,
   oneplus-kernel-source,
   pkgs,
+  system,
   ...
 }: let
   repositoryRoot = ../../..;
@@ -158,8 +159,224 @@
         'static void __exit boot_state_exit()' \
         'static void __exit boot_state_exit(void)'
     '';
+
+  nixosKexecInitramfs =
+    if system == "x86_64-linux"
+    then let
+      callbackAddress = "192.168.97.1";
+      callbackPort = 9001;
+      deviceAddress = "192.168.97.2";
+      targetBusybox = pkgs.pkgsCross.aarch64-multiplatform.pkgsStatic.busybox.override {
+        extraConfig = ''
+          CONFIG_NC y
+          CONFIG_NC_SERVER y
+          CONFIG_NC_EXTRA y
+          CONFIG_NC_110_COMPAT y
+        '';
+      };
+      osRelease = pkgs.writeText "karen-nixos-kexec-os-release" ''
+        NAME="NixOS"
+        ID=nixos
+        PRETTY_NAME="NixOS Karen kexec stage 1"
+        VARIANT_ID=karen-kexec-stage1
+      '';
+      callbackShell = pkgs.writeTextFile {
+        name = "karen-nixos-callback-shell";
+        executable = true;
+        text = ''
+          #!/bin/sh
+          printf 'NIXOS_KEXEC_READY\n'
+          cat /etc/os-release
+          uname -a
+          exec /bin/sh -i
+        '';
+      };
+      init = pkgs.writeTextFile {
+        name = "karen-nixos-kexec-init";
+        executable = true;
+        text = ''
+          #!/bin/sh
+
+          export PATH=/bin:/sbin
+
+          mkdir -p /dev /proc /run /sys /tmp
+          if [ ! -c /dev/null ]; then
+            mount -t devtmpfs devtmpfs /dev
+          fi
+          mount -t proc proc /proc
+          mount -t sysfs sysfs /sys
+          mount -t tmpfs tmpfs /run
+          mount -t tmpfs tmpfs /tmp
+          hostname karen-nixos-kexec
+
+          log() {
+            printf 'karen-nixos: %s\n' "$*" >/dev/kmsg
+            printf 'karen-nixos: %s\n' "$*"
+          }
+
+          log 'entered NixOS kexec stage 1'
+
+          callback_enabled=false
+          for argument in $(cat /proc/cmdline); do
+            if [ "$argument" = karen.nixos.callback=1 ]; then
+              callback_enabled=true
+              break
+            fi
+          done
+
+          if [ "$callback_enabled" != true ]; then
+            log 'callback disabled; add karen.nixos.callback=1 explicitly'
+            exec /bin/sh -i
+          fi
+
+          mkdir -p /sys/kernel/config
+          mount -t configfs configfs /sys/kernel/config
+          gadget=/sys/kernel/config/usb_gadget/karen-nixos
+          mkdir -p \
+            "$gadget/configs/c.1/strings/0x409" \
+            "$gadget/functions/rndis.usb0" \
+            "$gadget/strings/0x409"
+          printf 0x18d1 >"$gadget/idVendor"
+          printf 0x4ee7 >"$gadget/idProduct"
+          printf 0x0200 >"$gadget/bcdUSB"
+          printf 0x0100 >"$gadget/bcdDevice"
+          printf 'NixOS' >"$gadget/strings/0x409/manufacturer"
+          printf 'Karen kexec stage 1' >"$gadget/strings/0x409/product"
+          printf 'karen-nixos-kexec' >"$gadget/strings/0x409/serialnumber"
+          printf 'RNDIS callback' >"$gadget/configs/c.1/strings/0x409/configuration"
+          printf 250 >"$gadget/configs/c.1/MaxPower"
+          printf '02:4b:41:52:45:4e' \
+            >"$gadget/functions/rndis.usb0/host_addr"
+          printf '02:4b:41:52:45:4f' \
+            >"$gadget/functions/rndis.usb0/dev_addr"
+          ln -s \
+            "$gadget/functions/rndis.usb0" \
+            "$gadget/configs/c.1/rndis.usb0"
+
+          udc=
+          attempts=0
+          while [ "$attempts" -lt 100 ]; do
+            for candidate in /sys/class/udc/*; do
+              if [ -e "$candidate" ]; then
+                udc="''${candidate##*/}"
+                break
+              fi
+            done
+            [ -n "$udc" ] && break
+            attempts=$((attempts + 1))
+            sleep 0.1
+          done
+          if [ -z "$udc" ]; then
+            log 'no USB device controller appeared'
+            exec /bin/sh -i
+          fi
+          printf '%s' "$udc" >"$gadget/UDC"
+          log "bound RNDIS gadget to $udc"
+
+          interface=
+          attempts=0
+          while [ "$attempts" -lt 100 ]; do
+            for candidate in usb0 rndis0; do
+              if ip link show "$candidate" >/dev/null 2>&1; then
+                interface="$candidate"
+                break
+              fi
+            done
+            [ -n "$interface" ] && break
+            attempts=$((attempts + 1))
+            sleep 0.1
+          done
+          if [ -z "$interface" ]; then
+            log 'RNDIS network interface did not appear'
+            exec /bin/sh -i
+          fi
+
+          ifconfig "$interface" ${deviceAddress} netmask 255.255.255.252 up
+          log "configured $interface as ${deviceAddress}/30"
+
+          while :; do
+            log 'attempting the USB-only callback'
+            nc -w 30 \
+              ${callbackAddress} \
+              ${toString callbackPort} \
+              -e /karen-nixos-callback-shell
+            sleep 2
+          done
+        '';
+      };
+      rawInitramfs = pkgs.makeInitrd {
+        name = "karen-nixos-kexec-stage1-initramfs";
+        compressor = "gzip";
+        contents = [
+          {
+            object = init;
+            symlink = "/init";
+          }
+          {
+            object = callbackShell;
+            symlink = "/karen-nixos-callback-shell";
+          }
+          {
+            object = "${targetBusybox}/bin";
+            symlink = "/bin";
+          }
+          {
+            object = "${targetBusybox}/sbin";
+            symlink = "/sbin";
+          }
+          {
+            object = osRelease;
+            symlink = "/etc/os-release";
+          }
+        ];
+      };
+    in
+      pkgs.runCommand "karen-nixos-kexec-stage1" {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.cpio
+          pkgs.file
+          pkgs.gzip
+          pkgs.jq
+        ];
+      } ''
+        mkdir -p "$out"
+        install -m 0644 ${rawInitramfs}/initrd "$out/initrd.gz"
+        file "$out/initrd.gz" | grep -Fq 'gzip compressed data'
+        gzip -dc "$out/initrd.gz" >initrd.cpio
+        cpio -it <initrd.cpio >contents
+        grep -Fxq init contents
+        grep -Fxq karen-nixos-callback-shell contents
+        grep -Fxq etc/os-release contents
+        jq -n \
+          --arg architecture aarch64-linux \
+          --arg callback_address ${callbackAddress} \
+          --argjson callback_port ${toString callbackPort} \
+          --arg device_address ${deviceAddress} \
+          --arg sha256 "$(sha256sum "$out/initrd.gz" | cut -d' ' -f1)" \
+          --argjson size "$(stat -c %s "$out/initrd.gz")" \
+          '{
+            architecture: $architecture,
+            callback: {
+              activation: "karen.nixos.callback=1",
+              address: $callback_address,
+              port: $callback_port,
+              transport: "USB RNDIS only"
+            },
+            device_address: $device_address,
+            initramfs: {
+              file: "initrd.gz",
+              sha256: $sha256,
+              size: $size
+            },
+            persistent_writes: false,
+            stage: "NixOS kexec stage 1"
+          }' >"$out/manifest.json"
+      ''
+    else null;
 in {
   inherit
+    nixosKexecInitramfs
     oneplusControlKernelModules
     oneplusControlKernelSource
     ;
@@ -167,5 +384,7 @@ in {
   # A native NixOS kernel package is deliberately absent until the upstream
   # MT6893 port exists. These are only the KEXEC-capable Android bootstrap
   # trees used to reach that future kernel.
-  public = {};
+  public = pkgs.lib.optionalAttrs (nixosKexecInitramfs != null) {
+    nixos-kexec-initramfs = nixosKexecInitramfs;
+  };
 }

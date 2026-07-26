@@ -14,8 +14,9 @@ top-level output wiring. Implementations live here:
 - `packages/kernel/lineage.nix` exposes the pinned OnePlus Android kernel and
   module trees;
 - `packages/kernel/nixos.nix` applies the control-kernel patchset and
-  KEXEC/NixOS bootstrap config. It does not claim to provide a native NixOS
-  kernel;
+  KEXEC/NixOS bootstrap config and builds the experimental cross-compiled
+  NixOS stage-1 initramfs. It does not claim to provide a native mainline
+  NixOS kernel;
 - `apps.nix`, `checks.nix` and `dev-shell.nix` expose the corresponding flake
   outputs.
 

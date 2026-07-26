@@ -93,6 +93,55 @@ insecure-recovery image, so the next gate is secure key-bound Lineage
 packaging, AVB pairing and a hardware boot—not more compiler reconstruction.
 See the [firmware and driver blocker matrix](../docs/nixos-blockers.md).
 
+## Non-persistent kexec stage 1
+
+The root flake exposes an experimental cross-compiled ARM64 initramfs for the
+first real kexec proof:
+
+```bash
+nix run .#nixos-kexec-initramfs -- ./result-nixos-kexec-initramfs
+```
+
+The build is rootless and can run on an x86_64 remote builder. It does not
+contain device-unique data, Wi-Fi setup, a persistent root filesystem or
+partition-writing tools. Its callback is disabled unless the kexec command
+line explicitly includes `karen.nixos.callback=1`.
+
+When enabled, stage 1 creates only a USB RNDIS link. The phone uses
+`192.168.97.2/30` and calls back to l-esp at `192.168.97.1:9001`; this is a
+dedicated USB subnet and is independent of the normal LAN address. Assigning
+the host address to the newly created USB interface needs root on l-esp, but
+building either artifact does not. The returned shell prints
+`NIXOS_KEXEC_READY`, `/etc/os-release` and `uname -a` before becoming
+interactive.
+
+The host can be prepared before the interface exists by adding a
+NetworkManager profile that matches only the fixed RNDIS host MAC:
+
+```bash
+nmcli connection add \
+  type ethernet \
+  con-name nord2t-nixos-kexec \
+  ifname '*' \
+  802-3-ethernet.mac-address 02:4B:41:52:45:4E \
+  ipv4.method manual \
+  ipv4.addresses 192.168.97.1/30 \
+  ipv4.never-default yes \
+  ipv4.dns '' \
+  ipv6.method disabled \
+  connection.autoconnect yes
+```
+
+On l-esp this is already installed. NetworkManager may request root or
+PolicyKit authorization on another host. Remove it after testing with
+`nmcli connection delete nord2t-nixos-kexec`.
+
+The live bootloader-applied FDT is captured only immediately before the test
+and stays on l-esp and the phone. It can contain device-unique values and MUST
+NOT enter Git, the Nix store or s-tau. Loading and executing the candidate are
+separate operations; a hard reboot returns to the installed Lineage boot
+slot because stage 1 performs no persistent writes.
+
 The result contains:
 
 ```text
