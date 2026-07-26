@@ -159,6 +159,16 @@ successfully installed on Lineage without F-Droid. Android 14 arm64
 MindTheGapps is pinned as an explicit optional input for the planned
 opinionated profile; vanilla and root-only variants remain separate.
 
+On 2026-07-26 the live Lineage installation was checked again after the
+source-build migration. Android correctly rejected an in-place AdAway update
+because the installed upstream APK and the new owner build have different
+certificates. The existing APK and appdata were backed up privately outside
+Git, only `org.adaway` was replaced, and the source-built, SOPS-owner-signed
+AdAway 6.1.4 (`versionCode 60104`) installed successfully. The separately
+pinned Aurora Store 4.8.3 (`versionCode 75`) was also reinstalled directly
+for user 0. HMA 3.8 and Magisk 30.7 were already present and were not
+needlessly reinstalled.
+
 The first standard MindTheGapps sideload correctly reached Lineage Recovery
 but aborted before copying files because the three Lineage-owned images were
 EROFS and `/mnt/system` could not be mounted read-write. No wipe followed that
