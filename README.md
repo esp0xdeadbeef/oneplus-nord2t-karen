@@ -262,6 +262,15 @@ nix run .#audit-boot -- ./result/boot.img
 nix run .#android-fhs
 ```
 
+`android-fhs` is a filesystem-layout compatibility shim, not an unpinned
+package source. Its host tools are selected from the exact nixpkgs revision in
+`flake.lock`; the Android/Lineage sources and their prebuilts are selected from
+robotnix's locked source graph. Robotnix also uses a pinned FHS environment
+inside the reproducible `karen-*` derivations because modern Soong still
+expects conventional loader, `/usr/lib{,32}` and default-shell paths. Removing
+that namespace would require a broader Soong/robotnix host-layout port without
+improving source or tool version pinning.
+
 The first clean build of `karen-bootimage` must fetch and realize the complete
 LineageOS/AOSP source graph. Those repositories become ordinary immutable Nix
 store paths and are reused by later builds. A sufficiently large local machine

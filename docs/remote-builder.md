@@ -176,6 +176,10 @@ The repository's `android-fhs` environment enables `ccache` and currently
 sets its maximum size to 400 GB. That limit does not preallocate 400 GB, but a
 long-lived checkout can eventually consume that much. Preserving Android's
 `out` directory usually saves more rebuild time than compiler cache alone.
+The FHS namespace only supplies the conventional host filesystem layout Soong
+expects. Every package it exposes still comes from the nixpkgs revision pinned
+by this repository's `flake.lock`; it is not an alternate or floating package
+source.
 
 > Owner reminder (review by 2027-07-25): reassess the 400 GB `s-tau` ccache
 > limit and the lingering build-user setup. Reduce or remove them when this
