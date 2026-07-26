@@ -232,6 +232,8 @@ grep -Fq 'static int last_recharging_vol = 0;' \
   "$script_directory/nixos/patches/kernel/0008-oplus-fix-control-kernel-types.patch"
 grep -Fq '#define Ptr2UINT32(p)   ((uint32_t)(uintptr_t)(p))' \
   "$script_directory/nixos/patches/kernel/0008-oplus-fix-control-kernel-types.patch"
+grep -Fq 'static bool need_upload = true;' \
+  "$script_directory/nixos/patches/kernel/0009-oplus-fix-vooc-upload-type.patch"
 grep -Fq "'static int stm8s_parse_fw_from_array('" \
   "$script_directory/flake.nix"
 grep -Fq "'extern void Eeprom_DistortionParamsRead('" \

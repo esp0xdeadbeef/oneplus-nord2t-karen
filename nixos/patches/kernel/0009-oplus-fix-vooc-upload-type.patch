@@ -1,0 +1,20 @@
+From 2ac4ae45aa4ddf25bb2bd6ba6068974a09ca4aec Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 05:10:00 +0200
+Subject: [PATCH] oplus: give VOOC upload state an explicit type
+
+Keep Clang's fatal implicit-integer diagnostic enabled and make the legacy
+VOOC upload state declaration explicit.
+
+Assisted-by: Codex:gpt-5
+---
+ vendor/oplus/kernel/charger/oplus_vooc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/vendor/oplus/kernel/charger/oplus_vooc.c b/vendor/oplus/kernel/charger/oplus_vooc.c
+index fda4185..60a197e 100644
+--- a/vendor/oplus/kernel/charger/oplus_vooc.c
++++ b/vendor/oplus/kernel/charger/oplus_vooc.c
+@@ -1265 +1265 @@ static void oplus_vooc_fastchg_func(struct work_struct *work)
+-	static need_upload = true;
++	static bool need_upload = true;
