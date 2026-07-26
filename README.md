@@ -13,6 +13,11 @@ hardware safety gates are documented in the
 [Mobile NixOS feature plan](docs/feature-nixos.md).
 The initial build-only device metadata and structure-aware DTB patch workspace
 live under [`nixos/`](nixos/README.md); they perform no hardware writes.
+The opinionated MT6893 control-kernel configuration MUST set
+`CONFIG_KEXEC=y`: the pinned stock `.3001` kernel has classic kexec disabled,
+and the Magisk kexec module supplies only the userspace loader. Enabling the
+flag is a prerequisite for the staged kexec tests, not proof that MediaTek
+driver shutdown or the second-kernel handoff will succeed.
 
 This repository does not commit flashable images. As of 2026-07-25, `CPH2399`
 is not officially supported by GrapheneOS or LineageOS. The local port now
