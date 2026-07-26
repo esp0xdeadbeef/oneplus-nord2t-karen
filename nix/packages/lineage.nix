@@ -245,6 +245,24 @@
       )
     else null;
 
+  karenSourceKernelFullCachedRobotnix =
+    if system == "x86_64-linux"
+    then
+      robotnix.lib.robotnixSystem (
+        import (repositoryRoot + /lineage/robotnix-karen.nix) {
+          buildSourceKernel = true;
+          deviceTree = karenFullDeviceTree;
+          enableCcache = true;
+          fullSystem = true;
+          kernelModules = oneplusControlKernelModules;
+          kernelSource = oneplusControlKernelSource;
+          lineageLockfile = robotnixLineage21Lock;
+          vendorLineagePatches = robotnixVendorLineagePatches;
+          webviewSource = lineageWebviewArm64;
+        }
+      )
+    else null;
+
   karenSourceKernelKeyboundFullRobotnix =
     if system == "x86_64-linux" && adbPublicKey != null
     then
@@ -253,6 +271,25 @@
           inherit adbPublicKey;
           buildSourceKernel = true;
           deviceTree = karenFullDeviceTree;
+          fullSystem = true;
+          kernelModules = oneplusControlKernelModules;
+          kernelSource = oneplusControlKernelSource;
+          lineageLockfile = robotnixLineage21Lock;
+          vendorLineagePatches = robotnixVendorLineagePatches;
+          webviewSource = lineageWebviewArm64;
+        }
+      )
+    else null;
+
+  karenSourceKernelKeyboundFullCachedRobotnix =
+    if system == "x86_64-linux" && adbPublicKey != null
+    then
+      robotnix.lib.robotnixSystem (
+        import (repositoryRoot + /lineage/robotnix-karen.nix) {
+          inherit adbPublicKey;
+          buildSourceKernel = true;
+          deviceTree = karenFullDeviceTree;
+          enableCcache = true;
           fullSystem = true;
           kernelModules = oneplusControlKernelModules;
           kernelSource = oneplusControlKernelSource;
@@ -420,12 +457,30 @@
       }
     else null;
 
+  karenSourceKernelFullImagesCached =
+    if system == "x86_64-linux"
+    then
+      mkKarenSourceKernelFullImages {
+        name = "lineage-21-karen-source-kernel-full-images-cached";
+        robotnixSystem = karenSourceKernelFullCachedRobotnix;
+      }
+    else null;
+
   karenSourceKernelKeyboundFullImages =
     if system == "x86_64-linux" && adbPublicKey != null
     then
       mkKarenSourceKernelFullImages {
         name = "lineage-21-karen-source-kernel-keybound-full-images";
         robotnixSystem = karenSourceKernelKeyboundFullRobotnix;
+      }
+    else null;
+
+  karenSourceKernelKeyboundFullImagesCached =
+    if system == "x86_64-linux" && adbPublicKey != null
+    then
+      mkKarenSourceKernelFullImages {
+        name = "lineage-21-karen-source-kernel-keybound-full-images-cached";
+        robotnixSystem = karenSourceKernelKeyboundFullCachedRobotnix;
       }
     else null;
 in {
@@ -439,11 +494,15 @@ in {
       karen-full-images = karenFullImages;
       karen-source-kernel-bootimage = karenSourceKernelBootimage;
       karen-source-kernel-full-images = karenSourceKernelFullImages;
+      karen-source-kernel-full-images-cached =
+        karenSourceKernelFullImagesCached;
     }
     // pkgs.lib.optionalAttrs (karenSourceKernelKeyboundFullImages != null) {
       karen-source-kernel-keybound-bootimage =
         karenSourceKernelKeyboundBootimage;
       karen-source-kernel-keybound-full-images =
         karenSourceKernelKeyboundFullImages;
+      karen-source-kernel-keybound-full-images-cached =
+        karenSourceKernelKeyboundFullImagesCached;
     };
 }

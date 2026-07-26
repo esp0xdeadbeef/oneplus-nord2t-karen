@@ -52,7 +52,7 @@ grep -Fq "[[ \"\$from_fastboot\" == true ]]" "$unroot_script"
 
 for input in \
   'JingMatrix/Vector.git?rev=76141fed151f49b818144d54f2ebb6ab9a2df11c&submodules=1' \
-  'AdAway/AdAway/releases/download/v6.1.4/AdAway-6.1.4-20241027.apk' \
+  'AdAway/AdAway.git?rev=89dc7277f5bd539ba108c20a857aae6e93199856' \
   'HMA-V3.8.r499.3a346c0-release.apk' \
   'Shamiko-v1.2.5-414-release.zip'; do
   grep -Fq "$input" "$flake"

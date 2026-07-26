@@ -25,8 +25,10 @@ along with the host boundary, rsync flow and artifact-return checks.
   transient build units otherwise stop when the final SSH session closes.
 - The successful forced OLED-fix rebuild unit was
   `karen-lineage-oled-fix4.service`.
-- The compiler cache is
-  `/home/deadbeef/.cache/nord2t-ccache` on that host, with a 400 GB limit.
+- The persistent-checkout/FHS compiler cache is
+  `/home/deadbeef/.cache/nord2t-ccache`; explicit Robotnix `-cached` targets
+  use the separate sandbox-visible `/var/cache/ccache`. Both have a 400 GB
+  limit. The host evaluates a removal warning dated 2027-07-25.
 - Vector owner signing is split into a public SOPS document readable by
   `l-esp`, `l-portal` and the optional build host, and a private JKS document
   readable only by `l-esp` and `l-portal`. The generator passed a local

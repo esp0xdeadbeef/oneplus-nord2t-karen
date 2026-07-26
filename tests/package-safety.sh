@@ -231,8 +231,13 @@ grep -Fq 'hash = "sha256-xBjQHGb8+RYzgR08qzA/dEpG0p5G9CnctSGmk5oHMYw=";' \
   "$artifact_packages"
 grep -Fq 'fetchLFS = true;' "$artifact_packages"
 if [[ "$(grep -Fc 'webviewSource = lineageWebviewArm64;' \
-  "$lineage_packages")" -ne 5 ]]; then
+  "$lineage_packages")" -ne 7 ]]; then
   echo "Every Karen Robotnix variant must use the pinned WebView source." >&2
+  exit 1
+fi
+grep -Fq 'ccache.enable = enableCcache;' "$robotnix_device"
+if [[ "$(grep -Fc 'enableCcache = true;' "$lineage_packages")" -ne 2 ]]; then
+  echo "Only the explicit cached full-image variants may enable ccache." >&2
   exit 1
 fi
 grep -Fq 'source.dirs."external/chromium-webview/prebuilt/arm64".src' \

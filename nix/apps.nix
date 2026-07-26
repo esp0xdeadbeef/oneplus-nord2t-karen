@@ -104,6 +104,12 @@
         defaultDirectory = "result-karen-source-kernel-full-images";
         name = "karen-source-kernel-full-images";
       };
+      karen-source-kernel-full-images-cached = mkArtifactApp {
+        artifact =
+          self.packages.${system}.karen-source-kernel-full-images-cached;
+        defaultDirectory = "result-karen-source-kernel-full-images-cached";
+        name = "karen-source-kernel-full-images-cached";
+      };
       nixos-kexec-initramfs = mkArtifactApp {
         artifact = self.packages.${system}.nixos-kexec-initramfs;
         defaultDirectory = "result-nixos-kexec-initramfs";
@@ -126,6 +132,12 @@
           self.packages.${system}.karen-source-kernel-keybound-full-images;
         defaultDirectory = "result-karen-source-kernel-keybound-full-images";
         name = "karen-source-kernel-keybound-full-images";
+      };
+      karen-source-kernel-keybound-full-images-cached = mkArtifactApp {
+        artifact =
+          self.packages.${system}.karen-source-kernel-keybound-full-images-cached;
+        defaultDirectory = "result-karen-source-kernel-keybound-full-images-cached";
+        name = "karen-source-kernel-keybound-full-images-cached";
       };
     };
 in

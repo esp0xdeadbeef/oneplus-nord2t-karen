@@ -42,8 +42,11 @@ s-tau repository mirror:
 s-tau persistent Android checkout:
   /home/deadbeef/build/lineage-21-karen-incremental
 
-s-tau ccache:
+s-tau interactive/FHS ccache:
   /home/deadbeef/.cache/nord2t-ccache
+
+s-tau Robotnix sandbox ccache:
+  /var/cache/ccache
 ```
 
 ## Local build remains the default
@@ -173,18 +176,53 @@ flash helpers. A successful remote compile is not flash authorization.
 
 ## Cache policy and reminder
 
-The repository's `android-fhs` environment enables `ccache` and currently
-sets its maximum size to 400 GB. That limit does not preallocate 400 GB, but a
-long-lived checkout can eventually consume that much. Preserving Android's
-`out` directory usually saves more rebuild time than compiler cache alone.
-The FHS namespace only supplies the conventional host filesystem layout Soong
-expects. Every package it exposes still comes from the nixpkgs revision pinned
-by this repository's `flake.lock`; it is not an alternate or floating package
-source.
+There are three distinct caches:
+
+1. Nix's immutable store reuses the pinned Android source graph and host tools.
+2. The explicit Robotnix `-cached` image targets use
+   `/var/cache/ccache` through a Nix sandbox exception.
+3. `android-fhs` uses `$HOME/.cache/nord2t-ccache` and a persistent Android
+   checkout whose `out` directory usually saves more time than compiler cache
+   alone.
+
+The normal image targets keep Robotnix ccache disabled and therefore remain
+portable without host configuration. On this owner's NixOS build host,
+`nixos/server/s-tau/default.nix` creates `/var/cache/ccache` as
+`root:nixbld`, grants it to build sandboxes and enforces a 400 GB maximum.
+Other NixOS hosts can opt in with the equivalent settings:
+
+```nix
+{
+  nix.settings.extra-sandbox-paths = [ "/var/cache/ccache" ];
+  systemd.tmpfiles.rules = [
+    "d /var/cache/ccache 2770 root nixbld -"
+    "f+ /var/cache/ccache/ccache.conf 0660 root nixbld - max_size = 400G"
+  ];
+}
+```
+
+After applying that host configuration, the owner-key-free and private
+full-image builds are respectively:
+
+```sh
+nix run --keep-failed --accept-flake-config \
+  .#karen-source-kernel-full-images-cached
+
+KAREN_DEBUG_ADB_PUBLIC_KEY_FILE=/private/path/adbkey.pub \
+  nix run --keep-failed --accept-flake-config --impure \
+  .#karen-source-kernel-keybound-full-images-cached
+```
+
+The 400 GB limits do not preallocate that space, but long-lived caches can
+eventually consume it. The FHS namespace only supplies the conventional host
+filesystem layout Soong expects. Every package it exposes still comes from the
+nixpkgs revision pinned by this repository's `flake.lock`; it is not an
+alternate or floating package source.
 
 > Owner reminder (review by 2027-07-25): reassess the 400 GB `s-tau` ccache
-> limit and the lingering build-user setup. Reduce or remove them when this
-> port is no longer under active development.
+> limits, the `/var/cache/ccache` sandbox exception and the lingering
+> build-user setup. Reduce or remove them when this port is no longer under
+> active development.
 
 Other builders should select a cache limit appropriate to their storage and
 need not reproduce the owner's `s-tau` retention policy.

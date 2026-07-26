@@ -263,6 +263,10 @@ nix run .#karen-full-images
 # Build and export the current official-source control kernel.
 nix run .#karen-source-kernel-bootimage
 
+# Build the complete source-kernel bundle with an explicitly configured
+# persistent Robotnix compiler cache.
+nix run .#karen-source-kernel-full-images-cached
+
 # Compare a candidate with the pinned stock boot image and inspect its ramdisk.
 nix run .#audit-boot -- ./result-karen-bootimage/boot.img
 
@@ -274,6 +278,16 @@ Each build app accepts an optional output directory and otherwise uses the
 shown `result-karen-*` name in the current directory. It refuses to overwrite
 an existing path. Nix store paths remain internal dependencies and never need
 to be copied from logs or hardcoded in a command.
+
+The normal image targets remain host-independent and use only Nix's immutable
+store cache. The explicit `-cached` full-image variants additionally use
+Robotnix's persistent `/var/cache/ccache`; they fail early unless the host has
+granted that path to Nix build sandboxes with `root:nixbld` group-write
+access. This mutable compiler cache does not enter the result or store, does
+not contain device keys, and does not replace the persistent `out` directory
+used by the optional interactive workflow. The exact 400 GB owner-host setup
+and its expiry warning are documented in the
+[remote-builder guide](docs/remote-builder.md).
 
 `android-fhs` is a filesystem-layout compatibility shim, not an unpinned
 package source. Its host tools are selected from the exact nixpkgs revision in
@@ -293,12 +307,11 @@ or machine-specific builder configuration is part of this repository. See the
 [optional remote-build-host workflow](docs/remote-builder.md).
 
 The source-kernel target pins OnePlus's corresponding MT6893 kernel and
-MediaTek module repositories exactly. It currently fails closed because the
-published kernel contains links to a substantial `vendor/oplus` source layer
-that OnePlus did not include. The reproducible failure is documented in the
-[LineageOS port assessment](docs/lineage-port.md); the working recovery and
-initial full-system bring-up therefore retain the verified `.3001` stock
-kernel while that source gate remains unresolved.
+MediaTek module repositories exactly. The combined source layout and control
+kernel now compile; installable full-image builds additionally require the
+source kernel to retain the exact stock module release and public trust anchor.
+Those ABI and signature gates are documented in the
+[LineageOS port assessment](docs/lineage-port.md).
 
 `karen-full-images` is a bring-up bundle, not yet a flashable release. Unlike
 the recovery probe it does not enable insecure ADB. It builds Lineage `boot`,

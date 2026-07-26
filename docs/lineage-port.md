@@ -568,7 +568,11 @@ Omit `--full` and `KAREN_FULL_SYSTEM` when rebuilding only the recovery probe.
 The FHS shell creates its cache directory before Soong starts and caps
 `ccache` at 400 GB. Keep the checkout's `out` directory between runs as well;
 its Ninja and Soong state avoids substantially more work than compiler cache
-alone.
+alone. Reproducible Robotnix builds use only Nix's immutable store by default;
+the explicit `karen-source-kernel-*-full-images-cached` targets instead use
+Robotnix's separate sandbox-visible `/var/cache/ccache`. See the
+[remote-builder cache policy](remote-builder.md#cache-policy-and-reminder) for
+the required host configuration and expiry warning.
 
 Do not flash the result until bootloader USB communication and exact stock
 slot restoration have both been proven. The rest of this document records what

@@ -3,6 +3,7 @@
   adbPublicKey ? null,
   buildSourceKernel ? false,
   deviceTree,
+  enableCcache ? false,
   fullSystem ? false,
   insecureRecoveryAdb ? false,
   kernelModules ? null,
@@ -21,9 +22,10 @@ lib.mkMerge [
     release = "ap2a";
     stateVersion = "3";
 
-    # Build scratch space is already isolated by Nix. Keeping ccache disabled
-    # makes the result independent from mutable host state.
-    ccache.enable = false;
+    # Reproducible targets remain host-independent by default. Explicit
+    # `-cached` targets opt into Robotnix's persistent /var/cache/ccache
+    # sandbox exception for faster repeated Android userspace compilation.
+    ccache.enable = enableCcache;
 
     # Robotnix's generated Lineage lock also contains TheMuppets vendor trees
     # for every supported phone. Karen has no matching entry and derives its
