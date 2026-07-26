@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 
-set -euo pipefail
+set -Eeuo pipefail
 umask 022
+
+report_error() {
+  local error_line="$1"
+  local error_command="$2"
+  local error_status="$3"
+
+  trap - ERR
+  printf "Karen control vendor repack failed at line %d (status %d): %s\n" \
+    "$error_line" "$error_status" "$error_command" >&2
+  exit "$error_status"
+}
+trap 'report_error "$LINENO" "$BASH_COMMAND" "$?"' ERR
 
 usage() {
   cat >&2 <<'EOF'
@@ -83,10 +95,17 @@ install -d -m 0755 "$output_parent"
 temporary_directory="$(
   mktemp -d --tmpdir="$output_parent" .nord2t-vendor-repack.XXXXXXXX
 )"
+completed=false
 cleanup() {
-  rm -r -- "$temporary_directory"
+  if [[ "$completed" == true ]]; then
+    rm -r -- "$temporary_directory"
+  else
+    echo "failed_work_directory=$temporary_directory" >&2
+    echo "warning=remove this failed repack directory after debugging" >&2
+  fi
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'exit 130' HUP INT TERM
 chmod 0700 "$temporary_directory"
 
 stock_tree="$temporary_directory/stock-tree"
@@ -104,12 +123,14 @@ fsck.erofs \
 metadata_snapshot() {
   local path="$1"
   stat -c '%u:%g:%a' "$path"
-  getfattr \
-    --absolute-names \
-    --dump \
-    --encoding=hex \
-    --match=- \
-    "$path" 2>/dev/null |
+  {
+    getfattr \
+      --absolute-names \
+      --dump \
+      --encoding=hex \
+      --match=- \
+      "$path" 2>/dev/null || true
+  } |
     sed -e '/^# file:/d' -e '/^$/d' |
     sort
 }
@@ -210,15 +231,17 @@ tree_manifest() {
   while IFS= read -r -d '' relative; do
     path="$tree/$relative"
     stat \
-      --printf='path=%n type=%F uid=%u gid=%g mode=%a size=%s mtime=%Y\n' \
+      --printf='path=%n type=%F uid=%u gid=%g mode=%a size=%s\n' \
       "$path" |
       sed "s#path=$tree/#path=#" >>"$output"
-    getfattr \
-      --absolute-names \
-      --dump \
-      --encoding=hex \
-      --match=- \
-      "$path" 2>/dev/null |
+    {
+      getfattr \
+        --absolute-names \
+        --dump \
+        --encoding=hex \
+        --match=- \
+        "$path" 2>/dev/null || true
+    } |
       sed -e '/^# file:/d' -e '/^$/d' |
       sort |
       sed "s#^#xattr=$relative:#" >>"$output"
@@ -236,6 +259,14 @@ cmp -s \
   "$temporary_directory/stock-tree-metadata.txt" \
   "$temporary_directory/candidate-tree-metadata.txt" ||
   fail "candidate EROFS metadata differs after its round trip"
+
+candidate_timestamps="$temporary_directory/candidate-timestamps.txt"
+find "$candidate_tree" -mindepth 1 -exec stat -c '%Y' {} + |
+  sort -u >"$candidate_timestamps"
+if [[ "$(wc -l <"$candidate_timestamps")" -ne 1 ]] ||
+  ! grep -Fxq 1779770745 "$candidate_timestamps"; then
+  fail "candidate EROFS does not use the fixed stock build timestamp"
+fi
 
 for module in "${replacement_modules[@]}"; do
   cmp -s \
@@ -267,8 +298,7 @@ printf '%s\n' \
 
 chmod 0755 "$staging_directory"
 mv -T "$staging_directory" "$output_directory"
-trap - EXIT
-rm -r -- "$temporary_directory"
+completed=true
 
 echo "Karen control vendor repack passed."
 echo "output=$output_directory"
