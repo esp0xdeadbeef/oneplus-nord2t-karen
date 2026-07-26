@@ -51,6 +51,12 @@ grep -Fq -- '--expected-kernel-sha256' "$boot_audit"
 grep -Fq -- '--allow-embedded-adb-key' "$image_audit"
 grep -Fq -- '--allow-permissive-selinux' "$image_audit"
 grep -Fq -- '--expected-kernel-sha256' "$image_audit"
+grep -Fq 'lineage_audit_arguments+=(--allow-embedded-adb-key)' \
+  "$userspace_preflight"
+grep -Fq 'preflight_arguments+=(--allow-embedded-adb-key)' \
+  "$script_directory/scripts/lineage-userspace"
+grep -Fq -- '--allow-embedded-adb-key is valid only for install' \
+  "$script_directory/scripts/lineage-userspace"
 # shellcheck disable=SC2016
 grep -Fq 'simg2img "$image_directory/$partition.img"' "$image_audit"
 grep -Fq 'minimum_free_bytes' "$image_audit"

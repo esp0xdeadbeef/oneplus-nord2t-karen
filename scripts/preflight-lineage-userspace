@@ -7,6 +7,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: nord2t-preflight-lineage-userspace LINEAGE_DIR STOCK_RESTORE_DIR
                                            [--allow-stale-cow]
+                                           [--allow-embedded-adb-key]
                                            [--expected-kernel-sha256 SHA256]
 
 Validate a complete Lineage image bundle, the scoped .3001 rollback bundle,
@@ -30,11 +31,16 @@ lineage_directory="$(realpath "$1")"
 restore_directory="$(realpath "$2")"
 shift 2
 allow_stale_cow=false
+allow_embedded_adb_key=false
 expected_kernel_sha256=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --allow-stale-cow)
       allow_stale_cow=true
+      shift
+      ;;
+    --allow-embedded-adb-key)
+      allow_embedded_adb_key=true
       shift
       ;;
     --expected-kernel-sha256)
@@ -68,6 +74,9 @@ trap cleanup EXIT
 
 lineage_audit="$temporary_directory/lineage-audit.txt"
 lineage_audit_arguments=()
+if [[ "$allow_embedded_adb_key" == true ]]; then
+  lineage_audit_arguments+=(--allow-embedded-adb-key)
+fi
 if [[ -n "$expected_kernel_sha256" ]]; then
   lineage_audit_arguments+=(--expected-kernel-sha256 "$expected_kernel_sha256")
 fi

@@ -327,6 +327,10 @@ the scoped rollback set:
 nix run .#preflight-lineage-userspace -- ./result ./result-stock-restore
 ```
 
+For a private key-bound bundle, pass `--allow-embedded-adb-key` explicitly to
+both this preflight and the later install action. Neither helper infers that
+exception from the image.
+
 This preflight is read-only. It verifies the complete image/AVB bundle, every
 rollback hash, the active slot and the preserved OPlus allocation; it does not
 reboot, flash, erase or wipe the phone. In recovery it copies only the first
