@@ -293,11 +293,20 @@
           export PATH=/bin:/sbin
 
           mkdir -p /dev /proc /run /sys /tmp
-          if [ ! -c /dev/null ]; then
-            mount -t devtmpfs devtmpfs /dev
-          fi
           mount -t proc proc /proc
           mount -t sysfs sysfs /sys
+          # The ABI-preserving Android control kernel intentionally retains
+          # stock's CONFIG_DEVTMPFS=n. Create only the generic device nodes
+          # this diagnostic stage needs on an ephemeral tmpfs.
+          mount -t tmpfs -o mode=0755,nosuid tmpfs /dev
+          mknod -m 0600 /dev/console c 5 1
+          mknod -m 0666 /dev/null c 1 3
+          mknod -m 0600 /dev/kmsg c 1 11
+          mknod -m 0666 /dev/ptmx c 5 2
+          mknod -m 0666 /dev/random c 1 8
+          mknod -m 0666 /dev/tty c 5 0
+          mknod -m 0666 /dev/urandom c 1 9
+          mknod -m 0666 /dev/zero c 1 5
           mount -t tmpfs tmpfs /run
           mount -t tmpfs tmpfs /tmp
           hostname karen-nixos-kexec
@@ -457,6 +466,7 @@
               transport: "USB RNDIS only"
             },
             device_address: $device_address,
+            device_nodes: "minimal runtime tmpfs; no CONFIG_DEVTMPFS dependency",
             initramfs: {
               file: "initrd.gz",
               sha256: $sha256,

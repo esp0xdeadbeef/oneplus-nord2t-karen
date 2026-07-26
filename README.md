@@ -315,6 +315,11 @@ nix run .#karen-source-kernel-bootimage
 nix run .#karen-source-kernel-bootimage-cached
 nix run .#karen-source-kernel-full-images-cached
 
+# Export the non-persistent ARM64 stage-1 initramfs used only after the
+# kexec-enabled Android control kernel has passed its runtime gates.
+nix run .#nixos-kexec-initramfs -- \
+  ./result-nixos-kexec-initramfs
+
 # Check the kernel-only result against all exact pinned vendor-module imports
 # before spending time on a complete Android image.
 nix run .#audit-kernel-module-abi -- \

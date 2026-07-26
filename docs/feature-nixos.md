@@ -674,6 +674,28 @@ The kexec bundle must contain and hash:
 - the reviewed second-kernel command line;
 - a manifest tying all four artifacts to the `.3001` and Nix inputs.
 
+The first ARM64 diagnostic initramfs is exported without handling a Nix store
+path:
+
+```sh
+nix run .#nixos-kexec-initramfs -- ./result-nixos-kexec-initramfs
+```
+
+It contains only a static AArch64 BusyBox stage 1. The callback remains
+disabled unless the reviewed second-kernel command line contains
+`karen.nixos.callback=1`; when enabled, it creates a USB-only RNDIS link with
+the phone at `192.168.97.2/30` and calls `192.168.97.1:9001`. No Wi-Fi
+credential, private key or device-unique identifier is embedded. The fixed
+locally administered USB MAC addresses are protocol constants, not secrets.
+
+The ABI-preserving Android control kernel deliberately retains stock's
+`CONFIG_DEVTMPFS=n`. Stage 1 therefore mounts an ephemeral tmpfs at `/dev` and
+creates only the generic device nodes it needs at runtime; it does not assume
+devtmpfs or package persistent device nodes into the archive. The exported
+manifest records this boundary. Building and hashing this initramfs proves
+only its architecture and contents—the callback remains a hardware gate until
+the control kernel, live resolved FDT and kexec transition have all succeeded.
+
 Do not blindly pass the base DTB extracted from `boot.img`. The OnePlus
 bootloader normally applies DTBO and may fix up the tree before the first
 kernel starts. Compare the boot DTB, stock DTBO and live flattened device tree
