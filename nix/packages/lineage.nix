@@ -321,20 +321,38 @@
       }
     else null;
 
+  mkKarenSourceKernelBootimage = {
+    name,
+    robotnixSystem,
+  }:
+    robotnixSystem.config.build.mkAndroid {
+      inherit name;
+      makeTargets = ["bootimage"];
+      installPhase = ''
+        effective_config="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ/.config"
+        grep -Fxq 'CONFIG_KEXEC=y' "$effective_config"
+        mkdir -p "$out"
+        cp --reflink=auto "$ANDROID_PRODUCT_OUT/boot.img" "$out/boot.img"
+        cp --reflink=auto "$ANDROID_PRODUCT_OUT/kernel" "$out/kernel"
+        cp --reflink=auto "$effective_config" "$out/kernel.config"
+      '';
+    };
+
   karenSourceKernelBootimage =
     if system == "x86_64-linux"
     then
-      karenSourceKernelRobotnix.config.build.mkAndroid {
+      mkKarenSourceKernelBootimage {
         name = "lineage-21-karen-source-kernel-bootimage";
-        makeTargets = ["bootimage"];
-        installPhase = ''
-          effective_config="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ/.config"
-          grep -Fxq 'CONFIG_KEXEC=y' "$effective_config"
-          mkdir -p "$out"
-          cp --reflink=auto "$ANDROID_PRODUCT_OUT/boot.img" "$out/boot.img"
-          cp --reflink=auto "$ANDROID_PRODUCT_OUT/kernel" "$out/kernel"
-          cp --reflink=auto "$effective_config" "$out/kernel.config"
-        '';
+        robotnixSystem = karenSourceKernelRobotnix;
+      }
+    else null;
+
+  karenSourceKernelKeyboundBootimage =
+    if system == "x86_64-linux" && adbPublicKey != null
+    then
+      mkKarenSourceKernelBootimage {
+        name = "lineage-21-karen-source-kernel-keybound-bootimage";
+        robotnixSystem = karenSourceKernelKeyboundFullRobotnix;
       }
     else null;
 
@@ -403,6 +421,8 @@ in {
       karen-source-kernel-full-images = karenSourceKernelFullImages;
     }
     // pkgs.lib.optionalAttrs (karenSourceKernelKeyboundFullImages != null) {
+      karen-source-kernel-keybound-bootimage =
+        karenSourceKernelKeyboundBootimage;
       karen-source-kernel-keybound-full-images =
         karenSourceKernelKeyboundFullImages;
     };

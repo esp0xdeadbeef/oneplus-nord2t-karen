@@ -115,6 +115,12 @@
       == "x86_64-linux"
       && self.packages.${system} ? karen-source-kernel-keybound-full-images
     ) {
+      karen-source-kernel-keybound-bootimage = mkArtifactApp {
+        artifact =
+          self.packages.${system}.karen-source-kernel-keybound-bootimage;
+        defaultDirectory = "result-karen-source-kernel-keybound-bootimage";
+        name = "karen-source-kernel-keybound-bootimage";
+      };
       karen-source-kernel-keybound-full-images = mkArtifactApp {
         artifact =
           self.packages.${system}.karen-source-kernel-keybound-full-images;
