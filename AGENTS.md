@@ -69,3 +69,12 @@ nix shell nixpkgs#PACKAGE --command PROGRAM ...
 For example, `fdtoverlay` is a secondary executable from `dtc`, so invoke it
 as `nix shell nixpkgs#dtc --command fdtoverlay ...` instead of searching the
 Nix store for its path.
+
+## Live device state
+
+The optional `root-full` profile can deliberately mask Android boot
+properties, including the display build ID, verified-boot state and flash-lock
+state. Assistants MUST NOT infer the installed OS or bootloader state from
+those properties alone. Cross-check Lineage identity separately, use
+bootloader-fastboot for the physical unlock state, and inspect the effective
+running kernel configuration before making a flash or kexec decision.
