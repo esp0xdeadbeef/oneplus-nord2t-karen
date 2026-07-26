@@ -25,6 +25,7 @@
     (kernel.nixos)
     oneplusControlKernelModules
     oneplusControlKernelSource
+    ownerModuleSigningCertificate
     ;
 
   karenDeviceTree =
@@ -385,7 +386,11 @@
       makeTargets = ["bootimage"];
       postBuild = ''
         kernel_object="$ANDROID_PRODUCT_OUT/obj/KERNEL_OBJ"
-        bash \
+        KAREN_EXTERNAL_MODULE_SIGNING=${
+          if ownerModuleSigningCertificate != null
+          then "true"
+          else "false"
+        } bash \
           ${repositoryRoot + /scripts/build-karen-control-modules} \
           "$rootDir" \
           "$kernel_object" \

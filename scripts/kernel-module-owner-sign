@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+umask 077
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-kernel-module-owner-sign KERNEL_BUNDLE OUTPUT_DIRECTORY
+       [--shared-secret-file FILE]
+       [--private-secret-file FILE]
+       [--age-key-file FILE]
+
+Copy a fixed-public-key Karen kernel bundle and sign its eight stripped,
+unsigned control modules with the matching private SOPS identity. Private key
+material is decrypted only into a mode-0700 temporary directory and is never
+placed in the Nix store or output bundle.
+EOF
+}
+
+fail() {
+  echo "Kernel module owner signing failed: $*" >&2
+  exit 1
+}
+
+[[ $# -ge 2 ]] || {
+  usage
+  exit 2
+}
+
+kernel_bundle="$(realpath "$1")"
+output_directory="$(realpath -m "$2")"
+shift 2
+
+repository_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+  fail "run from a Git checkout"
+shared_secret_file="$repository_root/secrets/kernel-module-signing-shared.json.age"
+private_secret_file="$repository_root/secrets/kernel-module-signing-private.json.age"
+age_key_file="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --shared-secret-file)
+      [[ $# -ge 2 ]] || fail "--shared-secret-file requires a path"
+      shared_secret_file="$2"
+      shift 2
+      ;;
+    --private-secret-file)
+      [[ $# -ge 2 ]] || fail "--private-secret-file requires a path"
+      private_secret_file="$2"
+      shift 2
+      ;;
+    --age-key-file)
+      [[ $# -ge 2 ]] || fail "--age-key-file requires a path"
+      age_key_file="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      fail "unknown argument: $1"
+      ;;
+  esac
+done
+
+shared_secret_file="$(realpath "$shared_secret_file")"
+private_secret_file="$(realpath "$private_secret_file")"
+age_key_file="$(realpath "$age_key_file")"
+
+[[ -d "$kernel_bundle" ]] || fail "kernel bundle is not a directory"
+[[ ! -e "$output_directory" ]] ||
+  fail "refusing to overwrite output: $output_directory"
+[[ -s "$kernel_bundle/kernel.config" ]] ||
+  fail "kernel bundle has no effective config"
+grep -Fxq 'CONFIG_MODULE_SIG_FORCE=y' "$kernel_bundle/kernel.config" ||
+  fail "kernel bundle does not enforce module signatures"
+grep -Fxq 'CONFIG_MODULE_SIG_SHA512=y' "$kernel_bundle/kernel.config" ||
+  fail "kernel bundle does not use SHA-512 module signatures"
+grep -Fqx \
+  'CONFIG_MODULE_SIG_KEY="certs/karen-owner-module-signing.x509"' \
+  "$kernel_bundle/kernel.config" ||
+  fail "kernel bundle does not embed the stable owner module certificate"
+[[ -d "$kernel_bundle/modules" ]] ||
+  fail "kernel bundle contains no control modules"
+[[ -f "$shared_secret_file" && -s "$shared_secret_file" ]] ||
+  fail "shared SOPS document is missing or empty"
+[[ -f "$private_secret_file" && -s "$private_secret_file" ]] ||
+  fail "private SOPS document is missing or empty"
+[[ -f "$age_key_file" && -s "$age_key_file" ]] ||
+  fail "SOPS age identity is missing or empty"
+
+temporary_directory="$(mktemp -d -t nord2t-module-owner-sign.XXXXXXXX)"
+cleanup() {
+  rm -r -- "$temporary_directory"
+}
+trap cleanup EXIT HUP INT TERM
+chmod 700 "$temporary_directory"
+
+shared_json="$temporary_directory/shared.json"
+private_json="$temporary_directory/private.json"
+certificate="$temporary_directory/module-signing.x509.pem"
+private_key="$temporary_directory/module-signing.pem"
+
+SOPS_AGE_KEY_FILE="$age_key_file" \
+  sops decrypt --input-type json --output-type json \
+    "$shared_secret_file" >"$shared_json" ||
+  fail "could not decrypt the shared SOPS document"
+SOPS_AGE_KEY_FILE="$age_key_file" \
+  sops decrypt --input-type json --output-type json \
+    "$private_secret_file" >"$private_json" ||
+  fail "could not decrypt the private SOPS document"
+
+jq -er '.moduleSigningCertificate' "$shared_json" |
+  base64 --decode >"$certificate" ||
+  fail "shared certificate is not valid base64"
+jq -er '.moduleSigningPrivateKey' "$private_json" |
+  base64 --decode >"$private_key" ||
+  fail "private key is not valid base64"
+chmod 600 "$private_key"
+
+certificate_fingerprint="$(sha256sum "$certificate" | cut -d' ' -f1)"
+expected_shared_fingerprint="$(
+  jq -er '.moduleSigningCertificateSha256' "$shared_json"
+)"
+expected_private_fingerprint="$(
+  jq -er '.moduleSigningCertificateSha256' "$private_json"
+)"
+[[ "$certificate_fingerprint" == "$expected_shared_fingerprint" &&
+  "$certificate_fingerprint" == "$expected_private_fingerprint" ]] ||
+  fail "shared/private certificate fingerprints differ"
+certificate_public_key="$(
+  openssl x509 -in "$certificate" -pubkey -noout |
+    openssl pkey -pubin -outform DER 2>/dev/null |
+    sha256sum |
+    cut -d' ' -f1
+)"
+private_public_key="$(
+  openssl pkey -in "$private_key" -pubout |
+    openssl pkey -pubin -outform DER 2>/dev/null |
+    sha256sum |
+    cut -d' ' -f1
+)"
+[[ "$certificate_public_key" == "$private_public_key" ]] ||
+  fail "public certificate does not match the private key"
+
+embedded_certificate="$kernel_bundle/modules/signing_key.x509"
+[[ -s "$embedded_certificate" ]] ||
+  fail "kernel bundle does not export its embedded module certificate"
+cmp -s "$certificate" "$embedded_certificate" ||
+  fail "SOPS certificate does not match the kernel trust anchor"
+
+expected_modules=(
+  bt_drv_6893.ko
+  connfem.ko
+  conninfra.ko
+  fmradio_drv_connac2x.ko
+  gps_drv.ko
+  trace_mmstat.ko
+  wlan_drv_gen4m.ko
+  wmt_chrdev_wifi.ko
+)
+mapfile -t actual_modules < <(
+  find "$kernel_bundle/modules" -maxdepth 1 -type f -name '*.ko' \
+    -printf '%f\n' |
+    sort
+)
+mapfile -t sorted_expected < <(printf '%s\n' "${expected_modules[@]}" | sort)
+[[ "${actual_modules[*]}" == "${sorted_expected[*]}" ]] ||
+  fail "kernel bundle does not contain the exact eight-module control set"
+
+for module in "${expected_modules[@]}"; do
+  if tail -c 28 "$kernel_bundle/modules/$module" |
+    grep -Fq '~Module signature appended~'; then
+    fail "input module is already signed: $module"
+  fi
+done
+
+parent_directory="$(dirname "$output_directory")"
+install -d -m 0755 "$parent_directory"
+staging_directory="$temporary_directory/output"
+cp -a --reflink=auto "$kernel_bundle" "$staging_directory"
+chmod -R u+w "$staging_directory"
+
+for module in "${expected_modules[@]}"; do
+  nord2t-kernel-module-sign-file \
+    sha512 \
+    "$private_key" \
+    "$certificate" \
+    "$staging_directory/modules/$module"
+  tail -c 28 "$staging_directory/modules/$module" |
+    grep -Fq '~Module signature appended~' ||
+    fail "signature marker is absent after signing: $module"
+done
+install -m 0644 "$certificate" \
+  "$staging_directory/modules/signing_key.x509"
+find "$staging_directory" -type f -exec chmod 0644 {} +
+mv -T "$staging_directory" "$output_directory"
+
+echo "Kernel module owner signing passed."
+echo "output=$output_directory"
+echo "module_count=${#expected_modules[@]}"
+echo "signature_hash=sha512"
+echo "private_key_exported=false"

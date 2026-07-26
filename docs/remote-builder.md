@@ -155,6 +155,34 @@ identity and runs `vector-owner-build-intermediate`; it cannot decrypt
 and passwords never enter a Nix derivation, the Nix store or the remote
 builder.
 
+Kernel modules use the same public/private split with an independent
+RSA-4096 identity. After the owner has run
+`nix run .#kernel-module-signing-key-generator` and synchronized the encrypted
+repository files, the builder may compile a stable-key bundle with:
+
+```sh
+nix run .#kernel-module-owner-build -- \
+  --output /home/deadbeef/build/karen-owner-kernel-CANDIDATE \
+  --adb-public-key /private/path/adbkey.pub
+```
+
+The helper decrypts only
+`secrets/kernel-module-signing-shared.json.age`, embeds its public certificate
+in the kernel and exports eight stripped unsigned modules. It cannot decrypt
+`secrets/kernel-module-signing-private.json.age`. Return the bounded bundle to
+`l-esp` or `l-portal`, then run:
+
+```sh
+nix run .#kernel-module-owner-sign -- \
+  /home/deadbeef/build/karen-owner-kernel-CANDIDATE \
+  /home/deadbeef/build/karen-owner-kernel-CANDIDATE-signed
+```
+
+This final step is outside the Nix store. The fixed public input prevents a
+new random kernel trust anchor on every clean rebuild; ccache can consequently
+reuse certificate-dependent objects and the module compiler output, while the
+private key never reaches `s-tau`.
+
 ## Return and verify artifacts
 
 Stage the requested images outside Android's `out` tree on `s-tau`, create a

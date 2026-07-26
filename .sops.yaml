@@ -27,3 +27,18 @@ creation_rules:
       - age:
           - *l-portal-deadbeef
           - *l-esp-deadbeef
+  - path_regex: '^secrets/kernel-module-signing-shared\.json\.age$'
+    input_type: json
+    output_type: json
+    key_groups:
+      - age:
+          - *l-portal-deadbeef
+          - *l-esp-deadbeef
+          - *s-tau-deadbeef
+  - path_regex: '^secrets/kernel-module-signing-private\.json\.age$'
+    input_type: json
+    output_type: json
+    key_groups:
+      - age:
+          - *l-portal-deadbeef
+          - *l-esp-deadbeef

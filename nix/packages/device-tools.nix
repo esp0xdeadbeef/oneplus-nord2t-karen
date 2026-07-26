@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 {
   artifacts,
+  oneplus-kernel-source,
   pkgs,
   ...
 }: let
@@ -44,6 +45,78 @@
     text =
       builtins.readFile
       (repositoryRoot + /scripts/vector-signing-key-generator);
+  };
+
+  kernelModuleSigningKeyGenerator = pkgs.writeShellApplication {
+    name = "nord2t-kernel-module-signing-key-generator";
+    runtimeInputs = with pkgs; [
+      coreutils
+      gitMinimal
+      gnugrep
+      jq
+      openssl
+      sops
+    ];
+    text =
+      builtins.readFile
+      (repositoryRoot + /scripts/kernel-module-signing-key-generator);
+  };
+
+  kernelModuleOwnerBuild = pkgs.writeShellApplication {
+    name = "nord2t-kernel-module-owner-build";
+    runtimeInputs = with pkgs; [
+      coreutils
+      gitMinimal
+      jq
+      nix
+      openssl
+      sops
+    ];
+    text =
+      builtins.readFile
+      (repositoryRoot + /scripts/kernel-module-owner-build);
+  };
+
+  kernelModuleSignFile = pkgs.stdenv.mkDerivation {
+    pname = "nord2t-kernel-module-sign-file";
+    version = "4.19.191";
+    src = oneplus-kernel-source;
+    nativeBuildInputs = [pkgs.pkg-config];
+    buildInputs = [pkgs.openssl];
+    dontConfigure = true;
+    buildPhase = ''
+      runHook preBuild
+      "$CC" \
+        $NIX_CFLAGS_COMPILE \
+        scripts/sign-file.c \
+        -o nord2t-kernel-module-sign-file \
+        $(pkg-config --cflags --libs openssl)
+      runHook postBuild
+    '';
+    installPhase = ''
+      runHook preInstall
+      install -D -m 0755 \
+        nord2t-kernel-module-sign-file \
+        "$out/bin/nord2t-kernel-module-sign-file"
+      runHook postInstall
+    '';
+  };
+
+  kernelModuleOwnerSign = pkgs.writeShellApplication {
+    name = "nord2t-kernel-module-owner-sign";
+    runtimeInputs = with pkgs; [
+      coreutils
+      findutils
+      gitMinimal
+      gnugrep
+      jq
+      openssl
+      sops
+      kernelModuleSignFile
+    ];
+    text =
+      builtins.readFile
+      (repositoryRoot + /scripts/kernel-module-owner-sign);
   };
 
   vectorOwnerBuildIntermediate = pkgs.writeShellApplication {
@@ -583,6 +656,10 @@ in {
     default = auditLineageRuntime;
     extract-stock = extractStock;
     install-aurora = installAurora;
+    kernel-module-owner-build = kernelModuleOwnerBuild;
+    kernel-module-owner-sign = kernelModuleOwnerSign;
+    kernel-module-sign-file = kernelModuleSignFile;
+    kernel-module-signing-key-generator = kernelModuleSigningKeyGenerator;
     lineage-keybound-adb = lineageKeyboundAdb;
     lineage-root = lineageRoot;
     lineage-root-full = lineageRootFull;

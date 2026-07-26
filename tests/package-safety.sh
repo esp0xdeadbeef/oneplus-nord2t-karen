@@ -28,10 +28,28 @@ vector_owner_patch="$script_directory/patches/vector/0003-build-accept-public-si
 vector_memory_patch="$script_directory/patches/vector/0004-build-raise-gradle-daemon-memory.patch"
 vector_owner_sign="$script_directory/scripts/vector-owner-sign"
 vector_signing_generator="$script_directory/scripts/vector-signing-key-generator"
+kernel_module_build="$script_directory/scripts/kernel-module-owner-build"
+kernel_module_generator="$script_directory/scripts/kernel-module-signing-key-generator"
+kernel_module_signer="$script_directory/scripts/kernel-module-owner-sign"
 
 # shellcheck disable=SC2016
 grep -Fq 'PRODUCT_ADB_KEYS := $(strip $(KAREN_DEBUG_ADB_KEYS))' "$device_makefile"
 grep -Fq 'deviceDisplayName = "OnePlus Nord 2T 5G";' "$robotnix_device"
+grep -Fq \
+  'CONFIG_MODULE_SIG_KEY="certs/karen-owner-module-signing.x509"' \
+  "$nixos_kernel_packages"
+grep -Fq 'KAREN_EXTERNAL_MODULE_SIGNING' \
+  "$script_directory/scripts/build-karen-control-modules"
+grep -Fq 'private_key_accessed=false' "$kernel_module_build"
+grep -Fq 'private_key_exported=false' "$kernel_module_signer"
+grep -Fq 'shared_access=l-esp,l-portal,s-tau' "$kernel_module_generator"
+grep -Fq 'private_access=l-esp,l-portal' "$kernel_module_generator"
+grep -Fq \
+  "path_regex: '^secrets/kernel-module-signing-shared" \
+  "$sops_config"
+grep -Fq \
+  "path_regex: '^secrets/kernel-module-signing-private" \
+  "$sops_config"
 # shellcheck disable=SC2016
 grep -Fq 'ifeq ($(KAREN_DEBUG_PERMISSIVE),true)' "$board_config"
 grep -Fq 'BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive' "$board_config"
@@ -366,9 +384,9 @@ grep -Fq \
 grep -Fq \
   'path_regex: '"'"'^secrets/vector-signing-private\.json\.age$'"'"'' \
   "$sops_config"
-[[ "$(grep -Fc -- '- *l-portal-deadbeef' "$sops_config")" -eq 2 ]]
-[[ "$(grep -Fc -- '- *l-esp-deadbeef' "$sops_config")" -eq 3 ]]
-[[ "$(grep -Fc -- '- *s-tau-deadbeef' "$sops_config")" -eq 1 ]]
+[[ "$(grep -Fc -- '- *l-portal-deadbeef' "$sops_config")" -eq 4 ]]
+[[ "$(grep -Fc -- '- *l-esp-deadbeef' "$sops_config")" -eq 5 ]]
+[[ "$(grep -Fc -- '- *s-tau-deadbeef' "$sops_config")" -eq 2 ]]
 for signing_attribute in \
   androidStoreFile \
   androidStorePassword \

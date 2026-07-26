@@ -1,0 +1,263 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+umask 077
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-kernel-module-signing-key-generator
+       [--shared-secret-file FILE]
+       [--private-secret-file FILE]
+       [--age-key-file FILE]
+
+Create or verify the stable split SOPS identity used for Karen kernel-module
+signing. The shared document contains only the public X.509 certificate and is
+readable by the optional remote builder. The private PEM remains readable only
+by the owner hosts. Both existing documents are verified without changing them.
+EOF
+}
+
+fail() {
+  echo "Kernel module signing-key setup failed: $*" >&2
+  exit 1
+}
+
+repository_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+  fail "run from a Git checkout"
+shared_secret_file="$repository_root/secrets/kernel-module-signing-shared.json.age"
+private_secret_file="$repository_root/secrets/kernel-module-signing-private.json.age"
+age_key_file="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --shared-secret-file)
+      [[ $# -ge 2 ]] || fail "--shared-secret-file requires a path"
+      shared_secret_file="$2"
+      shift 2
+      ;;
+    --private-secret-file)
+      [[ $# -ge 2 ]] || fail "--private-secret-file requires a path"
+      private_secret_file="$2"
+      shift 2
+      ;;
+    --age-key-file)
+      [[ $# -ge 2 ]] || fail "--age-key-file requires a path"
+      age_key_file="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      fail "unknown argument: $1"
+      ;;
+  esac
+done
+
+shared_secret_file="$(realpath -m "$shared_secret_file")"
+private_secret_file="$(realpath -m "$private_secret_file")"
+age_key_file="$(realpath -m "$age_key_file")"
+sops_config="$repository_root/.sops.yaml"
+
+[[ -f "$sops_config" ]] || fail "repository SOPS configuration is missing"
+[[ -f "$age_key_file" && -s "$age_key_file" ]] ||
+  fail "SOPS age identity is missing or empty"
+age_key_mode="$(stat -c %a "$age_key_file")"
+(((8#$age_key_mode & 077) == 0)) ||
+  fail "SOPS age identity must not be group/world accessible"
+
+temporary_directory="$(mktemp -d -t nord2t-module-signing.XXXXXXXX)"
+cleanup() {
+  rm -r -- "$temporary_directory"
+}
+trap cleanup EXIT HUP INT TERM
+chmod 700 "$temporary_directory"
+
+shared_json="$temporary_directory/shared.json"
+private_json="$temporary_directory/private.json"
+certificate="$temporary_directory/module-signing.x509.pem"
+private_key="$temporary_directory/module-signing.pem"
+shared_certificate="$temporary_directory/shared-module-signing.x509.pem"
+stored_private_key="$temporary_directory/stored-module-signing.pem"
+
+public_key_digest() {
+  local input_type="$1"
+  local input="$2"
+
+  case "$input_type" in
+    certificate)
+      openssl x509 -in "$input" -pubkey -noout
+      ;;
+    private)
+      openssl pkey -in "$input" -pubout
+      ;;
+    *)
+      fail "internal public-key digest type is invalid"
+      ;;
+  esac |
+    openssl pkey -pubin -outform DER 2>/dev/null |
+    sha256sum |
+    cut -d' ' -f1
+}
+
+validate_pair() {
+  jq -e '
+    .schema == 1 and
+    (.moduleSigningCertificate | type == "string" and length > 0) and
+    (.moduleSigningCertificateSha256 |
+      type == "string" and test("^[0-9a-f]{64}$"))
+  ' "$shared_json" >/dev/null ||
+    fail "shared SOPS document has an invalid schema"
+  jq -e '
+    .schema == 1 and
+    (.moduleSigningPrivateKey | type == "string" and length > 0) and
+    (.moduleSigningCertificateSha256 |
+      type == "string" and test("^[0-9a-f]{64}$"))
+  ' "$private_json" >/dev/null ||
+    fail "private SOPS document has an invalid schema"
+
+  jq -er '.moduleSigningCertificate' "$shared_json" |
+    base64 --decode >"$shared_certificate" ||
+    fail "shared moduleSigningCertificate is not valid base64"
+  jq -er '.moduleSigningPrivateKey' "$private_json" |
+    base64 --decode >"$stored_private_key" ||
+    fail "private moduleSigningPrivateKey is not valid base64"
+  chmod 600 "$stored_private_key"
+
+  openssl x509 -in "$shared_certificate" -noout -checkend 31536000 \
+    >/dev/null 2>&1 ||
+    fail "shared signing certificate is invalid or expires within one year"
+  openssl pkey -in "$stored_private_key" -check -noout >/dev/null 2>&1 ||
+    fail "private signing key is invalid"
+  openssl x509 -in "$shared_certificate" -text -noout |
+    grep -Fq 'Public-Key: (4096 bit)' ||
+    fail "shared signing certificate is not RSA-4096"
+
+  shared_fingerprint="$(
+    sha256sum "$shared_certificate" | cut -d' ' -f1
+  )"
+  expected_shared_fingerprint="$(
+    jq -er '.moduleSigningCertificateSha256' "$shared_json"
+  )"
+  expected_private_fingerprint="$(
+    jq -er '.moduleSigningCertificateSha256' "$private_json"
+  )"
+  [[ "$shared_fingerprint" == "$expected_shared_fingerprint" &&
+    "$shared_fingerprint" == "$expected_private_fingerprint" ]] ||
+    fail "shared/private certificate fingerprints differ"
+  certificate_public_key_digest="$(
+    public_key_digest certificate "$shared_certificate"
+  )"
+  private_public_key_digest="$(
+    public_key_digest private "$stored_private_key"
+  )"
+  [[ "$certificate_public_key_digest" == "$private_public_key_digest" ]] ||
+    fail "public certificate does not match the private key"
+}
+
+shared_exists=false
+private_exists=false
+[[ -e "$shared_secret_file" ]] && shared_exists=true
+[[ -e "$private_secret_file" ]] && private_exists=true
+[[ "$shared_exists" == "$private_exists" ]] ||
+  fail "shared and private SOPS files must either both exist or both be absent"
+
+if [[ "$shared_exists" == true ]]; then
+  [[ -f "$shared_secret_file" && -s "$shared_secret_file" ]] ||
+    fail "shared SOPS file is not a non-empty regular file"
+  [[ -f "$private_secret_file" && -s "$private_secret_file" ]] ||
+    fail "private SOPS file is not a non-empty regular file"
+  SOPS_AGE_KEY_FILE="$age_key_file" \
+    sops decrypt --input-type json --output-type json \
+      "$shared_secret_file" >"$shared_json" ||
+    fail "could not decrypt the shared SOPS file"
+  SOPS_AGE_KEY_FILE="$age_key_file" \
+    sops decrypt --input-type json --output-type json \
+      "$private_secret_file" >"$private_json" ||
+    fail "could not decrypt the private SOPS file"
+  validate_pair
+  action=verified-existing
+else
+  install -d -m 0755 "$(dirname "$shared_secret_file")"
+  shared_secret_directory="$(dirname "$shared_secret_file")"
+  private_secret_directory="$(dirname "$private_secret_file")"
+  [[ "$shared_secret_directory" == "$private_secret_directory" ]] ||
+    install -d -m 0755 "$(dirname "$private_secret_file")"
+
+  openssl req \
+    -new \
+    -x509 \
+    -newkey rsa:4096 \
+    -nodes \
+    -sha512 \
+    -days 36500 \
+    -subj '/CN=Karen owner kernel module signing/O=Local Android Build' \
+    -addext 'basicConstraints=critical,CA:FALSE' \
+    -addext 'keyUsage=critical,digitalSignature' \
+    -addext 'subjectKeyIdentifier=hash' \
+    -keyout "$private_key" \
+    -out "$certificate" >/dev/null 2>&1 ||
+    fail "could not generate the module-signing identity"
+  chmod 600 "$private_key"
+
+  base64 -w 0 "$certificate" >"$temporary_directory/certificate.b64"
+  base64 -w 0 "$private_key" >"$temporary_directory/private-key.b64"
+  sha256sum "$certificate" | cut -d' ' -f1 \
+    >"$temporary_directory/certificate.sha256"
+  jq -n \
+    --argjson schema 1 \
+    --rawfile moduleSigningCertificate \
+      "$temporary_directory/certificate.b64" \
+    --rawfile moduleSigningCertificateSha256 \
+      "$temporary_directory/certificate.sha256" \
+    '{
+      schema: $schema,
+      moduleSigningCertificate: $moduleSigningCertificate,
+      moduleSigningCertificateSha256: $moduleSigningCertificateSha256
+    }' >"$shared_json"
+  jq -n \
+    --argjson schema 1 \
+    --rawfile moduleSigningPrivateKey \
+      "$temporary_directory/private-key.b64" \
+    --rawfile moduleSigningCertificateSha256 \
+      "$temporary_directory/certificate.sha256" \
+    '{
+      schema: $schema,
+      moduleSigningPrivateKey: $moduleSigningPrivateKey,
+      moduleSigningCertificateSha256: $moduleSigningCertificateSha256
+    }' >"$private_json"
+  validate_pair
+
+  sops \
+    --config "$sops_config" \
+    encrypt \
+    --filename-override "$shared_secret_file" \
+    --input-type json \
+    --output-type json \
+    "$shared_json" >"$temporary_directory/shared.json.age" ||
+    fail "could not encrypt the shared SOPS document"
+  sops \
+    --config "$sops_config" \
+    encrypt \
+    --filename-override "$private_secret_file" \
+    --input-type json \
+    --output-type json \
+    "$private_json" >"$temporary_directory/private.json.age" ||
+    fail "could not encrypt the private SOPS document"
+  install -m 0644 \
+    "$temporary_directory/shared.json.age" \
+    "$shared_secret_file"
+  install -m 0644 \
+    "$temporary_directory/private.json.age" \
+    "$private_secret_file"
+  action=generated-new
+fi
+
+echo "Kernel module signing-key setup passed."
+echo "action=$action"
+echo "shared_access=l-esp,l-portal,s-tau"
+echo "private_access=l-esp,l-portal"
+echo "secret_encryption=sops-age"

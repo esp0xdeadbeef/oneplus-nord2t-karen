@@ -15,6 +15,10 @@ in {
     audit-lineage-runtime
     extract-stock
     install-aurora
+    kernel-module-owner-build
+    kernel-module-owner-sign
+    kernel-module-sign-file
+    kernel-module-signing-key-generator
     lineage-keybound-adb
     lineage-root
     lineage-root-full

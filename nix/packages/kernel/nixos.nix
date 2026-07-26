@@ -15,6 +15,17 @@
     stockModuleSigningCertificate
     ;
 
+  ownerModuleSigningCertificateEnvironment =
+    builtins.getEnv "KAREN_KERNEL_MODULE_SIGNING_CERTIFICATE_FILE";
+  ownerModuleSigningCertificate =
+    if ownerModuleSigningCertificateEnvironment == ""
+    then null
+    else
+      builtins.path {
+        path = ownerModuleSigningCertificateEnvironment;
+        name = "karen-owner-module-signing.x509.pem";
+      };
+
   # OnePlus published the MT6893 DWS hardware descriptions but omitted
   # MediaTek's generated cust.dtsi outputs and DCT generator. The community
   # Lineage 21 kernel retained the generated GPL-2.0 files. The control source
@@ -87,6 +98,20 @@
         '-----BEGIN CERTIFICATE-----' \
         "$out/certs/karen-stock-module-signing.x509"
       chmod 0444 "$out/certs/karen-stock-module-signing.x509"
+      ${pkgs.lib.optionalString (ownerModuleSigningCertificate != null) ''
+        openssl x509 \
+          -in ${ownerModuleSigningCertificate} \
+          -noout \
+          -checkend 31536000
+        openssl x509 \
+          -in ${ownerModuleSigningCertificate} \
+          -text \
+          -noout |
+          grep -Fq 'Public-Key: (4096 bit)'
+        install -m 0444 \
+          ${ownerModuleSigningCertificate} \
+          "$out/certs/karen-owner-module-signing.x509"
+      ''}
       patch --batch --forward --fuzz=0 -d "$out" -p1 \
         <${repositoryRoot + /nixos/patches/kernel/0001-clang-fix-control-kernel-errors.patch}
       patch --batch --forward --fuzz=0 -d "$out" -p1 \
@@ -168,6 +193,11 @@
       cat >>"$control_defconfig" <<'EOF'
       CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"
       EOF
+      ${pkgs.lib.optionalString (ownerModuleSigningCertificate != null) ''
+        cat >>"$control_defconfig" <<'EOF'
+        CONFIG_MODULE_SIG_KEY="certs/karen-owner-module-signing.x509"
+        EOF
+      ''}
       grep -Fxq 'CONFIG_KEXEC=y' "$control_defconfig"
       grep -Fxq 'CONFIG_LOCALVERSION="+"' "$control_defconfig"
       grep -Fxq \
@@ -176,6 +206,11 @@
       grep -Fxq \
         'CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"' \
         "$control_defconfig"
+      ${pkgs.lib.optionalString (ownerModuleSigningCertificate != null) ''
+        grep -Fxq \
+          'CONFIG_MODULE_SIG_KEY="certs/karen-owner-module-signing.x509"' \
+          "$control_defconfig"
+      ''}
     '';
 
   oneplusControlKernelModules =
@@ -433,6 +468,7 @@ in {
     nixosKexecInitramfs
     oneplusControlKernelModules
     oneplusControlKernelSource
+    ownerModuleSigningCertificate
     stockModuleSigningCertificate
     ;
 

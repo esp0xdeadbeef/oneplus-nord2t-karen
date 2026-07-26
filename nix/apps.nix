@@ -18,6 +18,9 @@
     audit-lineage-runtime = "nord2t-audit-lineage-runtime";
     extract-stock = "nord2t-extract-stock";
     install-aurora = "nord2t-install-aurora";
+    kernel-module-owner-build = "nord2t-kernel-module-owner-build";
+    kernel-module-owner-sign = "nord2t-kernel-module-owner-sign";
+    kernel-module-signing-key-generator = "nord2t-kernel-module-signing-key-generator";
     lineage-keybound-adb = "nord2t-lineage-keybound-adb";
     lineage-root = "nord2t-lineage-root";
     lineage-root-full = "nord2t-lineage-root-full";

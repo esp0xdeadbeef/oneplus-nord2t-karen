@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+umask 077
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-kernel-module-owner-build [--output DIRECTORY]
+       [--target bootimage|full-images]
+       [--adb-public-key FILE]
+       [--shared-secret-file FILE]
+       [--age-key-file FILE]
+
+Build a cached source-kernel Lineage artifact with the stable owner module
+certificate embedded. Only the shared SOPS document is decrypted, so this
+step is safe on the optional remote builder. Control modules remain unsigned
+until nord2t-kernel-module-owner-sign runs on an owner host.
+EOF
+}
+
+fail() {
+  echo "Kernel module owner build failed: $*" >&2
+  exit 1
+}
+
+if repository_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  :
+else
+  repository_root="$(pwd -P)"
+  [[ -f "$repository_root/flake.nix" &&
+    -d "$repository_root/secrets" ]] ||
+    fail "run from a Git checkout or a repository-root mirror"
+fi
+
+shared_secret_file="$repository_root/secrets/kernel-module-signing-shared.json.age"
+age_key_file="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
+target=bootimage
+output_directory=
+adb_public_key=
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output)
+      [[ $# -ge 2 ]] || fail "--output requires a directory"
+      output_directory="$2"
+      shift 2
+      ;;
+    --target)
+      [[ $# -ge 2 ]] || fail "--target requires bootimage or full-images"
+      target="$2"
+      shift 2
+      ;;
+    --adb-public-key)
+      [[ $# -ge 2 ]] || fail "--adb-public-key requires a path"
+      adb_public_key="$2"
+      shift 2
+      ;;
+    --shared-secret-file)
+      [[ $# -ge 2 ]] || fail "--shared-secret-file requires a path"
+      shared_secret_file="$2"
+      shift 2
+      ;;
+    --age-key-file)
+      [[ $# -ge 2 ]] || fail "--age-key-file requires a path"
+      age_key_file="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      fail "unknown argument: $1"
+      ;;
+  esac
+done
+
+case "$target" in
+  bootimage | full-images)
+    ;;
+  *)
+    fail "--target must be bootimage or full-images"
+    ;;
+esac
+
+shared_secret_file="$(realpath "$shared_secret_file")"
+age_key_file="$(realpath "$age_key_file")"
+[[ -f "$shared_secret_file" && -s "$shared_secret_file" ]] ||
+  fail "shared SOPS document is missing or empty"
+[[ -f "$age_key_file" && -s "$age_key_file" ]] ||
+  fail "SOPS age identity is missing or empty"
+if [[ -n "$output_directory" ]]; then
+  output_directory="$(realpath -m "$output_directory")"
+  [[ ! -e "$output_directory" ]] ||
+    fail "refusing to overwrite output: $output_directory"
+fi
+if [[ -n "$adb_public_key" ]]; then
+  adb_public_key="$(realpath "$adb_public_key")"
+  [[ -f "$adb_public_key" && -s "$adb_public_key" ]] ||
+    fail "ADB public key is missing or empty"
+fi
+
+temporary_directory="$(mktemp -d -t nord2t-module-owner-build.XXXXXXXX)"
+cleanup() {
+  rm -r -- "$temporary_directory"
+}
+trap cleanup EXIT HUP INT TERM
+chmod 700 "$temporary_directory"
+
+shared_json="$temporary_directory/shared.json"
+certificate="$temporary_directory/module-signing.x509.pem"
+SOPS_AGE_KEY_FILE="$age_key_file" \
+  sops decrypt --input-type json --output-type json \
+    "$shared_secret_file" >"$shared_json" ||
+  fail "could not decrypt the shared SOPS document"
+jq -e '
+  .schema == 1 and
+  (.moduleSigningCertificate | type == "string" and length > 0) and
+  (.moduleSigningCertificateSha256 |
+    type == "string" and test("^[0-9a-f]{64}$"))
+' "$shared_json" >/dev/null ||
+  fail "shared SOPS document has an invalid schema"
+jq -er '.moduleSigningCertificate' "$shared_json" |
+  base64 --decode >"$certificate" ||
+  fail "shared signing certificate is not valid base64"
+actual_fingerprint="$(sha256sum "$certificate" | cut -d' ' -f1)"
+expected_fingerprint="$(
+  jq -er '.moduleSigningCertificateSha256' "$shared_json"
+)"
+[[ "$actual_fingerprint" == "$expected_fingerprint" ]] ||
+  fail "shared signing-certificate fingerprint does not match"
+openssl x509 -in "$certificate" -noout -checkend 31536000 >/dev/null ||
+  fail "shared signing certificate is invalid or expires within one year"
+
+package="karen-source-kernel-${target}-cached"
+environment=(
+  "KAREN_KERNEL_MODULE_SIGNING_CERTIFICATE_FILE=$certificate"
+)
+if [[ -n "$adb_public_key" ]]; then
+  environment+=("KAREN_DEBUG_ADB_PUBLIC_KEY_FILE=$adb_public_key")
+  package="karen-source-kernel-keybound-${target}-cached"
+fi
+
+run_arguments=(
+  run
+  --accept-flake-config
+  --impure
+  "path:$repository_root#$package"
+)
+if [[ -n "$output_directory" ]]; then
+  run_arguments+=(-- "$output_directory")
+fi
+
+env "${environment[@]}" nix "${run_arguments[@]}"
+echo "module_signing=owner-public-certificate"
+echo "private_key_accessed=false"

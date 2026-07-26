@@ -68,8 +68,15 @@ gcc32_root="$android_root/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9"
 kernel_tools="$android_root/prebuilts/kernel-build-tools/linux-x86/bin"
 build_tools="$android_root/prebuilts/build-tools/linux-x86/bin"
 sign_file="$kernel_out/scripts/sign-file"
-signing_key="$kernel_out/certs/signing_key.pem"
 signing_certificate="$kernel_out/certs/signing_key.x509"
+external_signing="${KAREN_EXTERNAL_MODULE_SIGNING:-false}"
+case "$external_signing" in
+  true | false)
+    ;;
+  *)
+    fail "KAREN_EXTERNAL_MODULE_SIGNING must be true or false"
+    ;;
+esac
 
 for required_tool in \
   "$make_binary" \
@@ -87,10 +94,18 @@ for required_tool in \
 done
 [[ -x "$sign_file" ]] ||
   fail "kernel output does not contain scripts/sign-file"
-[[ -s "$signing_key" ]] ||
-  fail "kernel output does not contain its private ephemeral signing key"
 [[ -s "$signing_certificate" ]] ||
   fail "kernel output does not contain its public signing certificate"
+if [[ "$external_signing" == false ]]; then
+  signing_key="$kernel_out/certs/signing_key.pem"
+  [[ -s "$signing_key" ]] ||
+    fail "kernel output does not contain its private ephemeral signing key"
+else
+  grep -Fqx \
+    'CONFIG_MODULE_SIG_KEY="certs/karen-owner-module-signing.x509"' \
+    "$kernel_out/.config" ||
+    fail "external signing requested without the owner certificate in config"
+fi
 
 export PATH="$android_root/out/host/linux-x86/bin:$clang_root/bin:$gcc64_root/bin:$gcc32_root/bin:$build_tools:$PATH"
 export LD_LIBRARY_PATH="$clang_root/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -228,13 +243,20 @@ for module in \
   "$clang_root/bin/llvm-strip" \
     --strip-debug \
     "$output_directory/$module"
-  "$sign_file" \
-    sha512 \
-    "$signing_key" \
-    "$signing_certificate" \
-    "$output_directory/$module"
+  if [[ "$external_signing" == false ]]; then
+    "$sign_file" \
+      sha512 \
+      "$signing_key" \
+      "$signing_certificate" \
+      "$output_directory/$module"
+  fi
 done
 
 install -m 0644 "$signing_certificate" "$output_directory/signing_key.x509"
 
 echo "Built eight Karen source control modules in $output_directory"
+if [[ "$external_signing" == true ]]; then
+  echo "Module signing state: owner public key embedded; private signing pending"
+else
+  echo "Module signing state: ephemeral build key"
+fi
