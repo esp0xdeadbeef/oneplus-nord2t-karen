@@ -239,9 +239,9 @@ The clean build on the optional owner build host completed successfully in
 | `kernel` | 18,821,574 | `0ec542e43f759a6d69eb81a1995ef056052b9b2655c6a1a43c6243c117e7b3a6` |
 | `kernel.config` | 174,687 | `eb1876edb00b7b1a9d615792ab3f49c9fb1e71e44d76f4ead5df2da27686c673` |
 
-The effective configuration has `CONFIG_KEXEC=y`, `CONFIG_KEXEC_CORE=y`,
-devtmpfs, file handles and the requested cgroup controllers built in. The
-packaged DTB remains byte-identical to the exact stock DTB.
+That first effective configuration has `CONFIG_KEXEC=y`,
+`CONFIG_KEXEC_CORE=y`, devtmpfs, file handles and extra cgroup controllers
+built in. The packaged DTB remains byte-identical to the exact stock DTB.
 
 This output is deliberately not a flash candidate. Its diagnostic recovery
 ramdisk has `ro.adb.secure=0`, is unrooted and has no owner ADB key. It has
@@ -270,14 +270,15 @@ The source-kernel boot audit passed with the explicit kernel hash and
 enforcing, the OLED-breaking init power-cycle is absent and the DTB hash is
 the exact stock
 `3f556b701b84247e529d4c05a46c7e45c9e29cffd4aca2c18822290de8d603c6`.
-This closes the secure boot-image construction gate, not the install gate:
-the candidate still needs a complete matching Lineage userspace/AVB bundle,
-the root-full patch and a live boot/runtime audit.
+This closed the secure boot-image construction gate, not the install gate.
+The complete image audit described below subsequently rejected the kernel
+before flash.
 
-The complete source-kernel image target keeps the exact stock `vendor` and
-`odm` images. Lineage's source-kernel build therefore routes only the modules
-built alongside the new kernel into `system/lib/modules`. The control kernel
-also trusts the public module-signing certificate derived from the exact
+The complete source-kernel image target keeps the exact stock-derived
+`vendor` and `odm` images. The first successful full build did not place
+replacement `.ko` files in any generated Lineage-owned image, so the ten
+modules in `vendor` remain part of the actual boot contract. The control
+kernel trusts the public module-signing certificate derived from the exact
 pinned stock boot image; no stock private key is present or required.
 
 Signature trust alone does not prove ABI compatibility. Source-kernel
@@ -287,6 +288,22 @@ verifies each PKCS#7 signature against that public certificate, checks the
 kernel release and compares every imported modversion CRC against the new
 kernel plus the complete stock module set. A mismatch is a pre-flash failure,
 not a runtime experiment.
+
+The retained secure full build completed 160,247 Android actions and passed
+VINTF. Its module census found 1,192 imports: 943 matched and 249 had a
+different CRC, spread across all ten modules. The bundle was not flashed.
+This broad mismatch is consistent with configuration and source drift rather
+than a missing signature.
+
+The Lineage bootstrap configuration now starts from the effective config
+embedded in the exact pinned `.3001` boot image instead of OnePlus's older
+published defconfig. Its SHA-256 is checked before the small
+`lineage-control.config` fragment adds only KEXEC, the stock module release
+suffix, the public trust key and an explicit compat-vDSO disable. The
+devtmpfs, file-handle and extra cgroup options are still available in the
+separate `nixos-control.config` for the second kernel; they no longer alter
+the first Android control kernel's module ABI. A kernel-only rebuild and the
+same 1,192-import census are required before another full image build.
 
 ## Concrete remaining gates
 

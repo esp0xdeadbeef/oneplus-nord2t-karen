@@ -9,7 +9,11 @@
 }: let
   repositoryRoot = ../../..;
 
-  inherit (deviceTools) stockModuleSigningCertificate;
+  inherit
+    (deviceTools)
+    stockBoot3001
+    stockModuleSigningCertificate
+    ;
 
   # OnePlus published the MT6893 DWS hardware descriptions but omitted
   # MediaTek's generated cust.dtsi outputs and DCT generator. The community
@@ -42,6 +46,9 @@
   oneplusControlKernelSource =
     pkgs.runCommand "oneplus-karen-control-kernel-source" {
       nativeBuildInputs = [
+        pkgs.findutils
+        pkgs.gzip
+        pkgs.mkbootimg-osm0sis
         pkgs.openssl
         pkgs.patch
       ];
@@ -128,18 +135,42 @@
           'extern Eeprom_DistortionParamsRead(' \
           'extern void Eeprom_DistortionParamsRead('
       done
-      control_defconfig="$out/arch/arm64/configs/k6893v1_64_k419_ab_nixos_control_defconfig"
-      cp \
-        "$out/arch/arm64/configs/k6893v1_64_k419_ab_defconfig" \
-        "$control_defconfig"
+      stock_boot_directory="$TMPDIR/stock-boot"
+      mkdir -p "$stock_boot_directory"
+      unpackbootimg \
+        -i ${stockBoot3001} \
+        -o "$stock_boot_directory" \
+        >/dev/null
+      mapfile -t stock_kernels < <(
+        find \
+          "$stock_boot_directory" \
+          -maxdepth 1 \
+          -type f \
+          -name '*boot.img-kernel' \
+          -print
+      )
+      test "''${#stock_kernels[@]}" = 1
+      stock_effective_config="$TMPDIR/stock-effective.config"
+      "$out/scripts/extract-ikconfig" \
+        "''${stock_kernels[0]}" \
+        >"$stock_effective_config"
+      test \
+        "$(sha256sum "$stock_effective_config" | cut -d' ' -f1)" = \
+        c04501ba593a32415f21bd36972d28dad2ffbeb0dbac7b0897db8ee2cb06fbd4
+
+      control_defconfig="$out/arch/arm64/configs/k6893v1_64_k419_ab_lineage_control_defconfig"
+      cp "$stock_effective_config" "$control_defconfig"
       cat \
-        ${repositoryRoot + /nixos/families/mt6893/kernel/nixos-control.config} \
+        ${repositoryRoot + /nixos/families/mt6893/kernel/lineage-control.config} \
         >>"$control_defconfig"
       cat >>"$control_defconfig" <<'EOF'
       CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"
       EOF
       grep -Fxq 'CONFIG_KEXEC=y' "$control_defconfig"
       grep -Fxq 'CONFIG_LOCALVERSION="+"' "$control_defconfig"
+      grep -Fxq \
+        '# CONFIG_COMPAT_VDSO is not set' \
+        "$control_defconfig"
       grep -Fxq \
         'CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"' \
         "$control_defconfig"

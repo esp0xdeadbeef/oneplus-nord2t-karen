@@ -321,8 +321,18 @@ grep -Fq \
 grep -Fq 'serial=9DFB3A7B9EEB1555' "$device_tools_packages"
 grep -Fq -- '-inform DER' "$nixos_kernel_packages"
 grep -Fq -- "'-----BEGIN CERTIFICATE-----'" "$nixos_kernel_packages"
-grep -Fq 'CONFIG_LOCALVERSION="+"' \
-  "$script_directory/nixos/families/mt6893/kernel/nixos-control.config"
+lineage_control_config="$script_directory/nixos/families/mt6893/kernel/lineage-control.config"
+grep -Fq 'CONFIG_KEXEC=y' "$lineage_control_config"
+grep -Fq 'CONFIG_LOCALVERSION="+"' "$lineage_control_config"
+grep -Fq '# CONFIG_COMPAT_VDSO is not set' "$lineage_control_config"
+grep -Fq \
+  'c04501ba593a32415f21bd36972d28dad2ffbeb0dbac7b0897db8ee2cb06fbd4' \
+  "$nixos_kernel_packages"
+# shellcheck disable=SC2016
+grep -Fq '"$out/scripts/extract-ikconfig"' "$nixos_kernel_packages"
+grep -Fq \
+  'k6893v1_64_k419_ab_lineage_control_defconfig' \
+  "$script_directory/lineage/device/oneplus/karen/BoardConfig.mk"
 grep -Fq "'4.19.191+'" "$lineage_packages"
 grep -Fq \
   'CONFIG_SYSTEM_TRUSTED_KEYS="certs/karen-stock-module-signing.x509"' \

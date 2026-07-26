@@ -52,14 +52,16 @@ along with the host boundary, rsync flow and artifact-return checks.
   library was denied while Vector injected it into `system_server`. Do not
   automate that scope until the framework issue and rollback health check are
   resolved.
-- The pinned OnePlus 4.19 source plus matching MediaTek/OPlus modules now
-  compiles successfully with the control fragment on the optional build host.
-  The 11-minute build produced a 64 MiB boot image and an effective config
-  with `CONFIG_KEXEC=y`, devtmpfs, file handles and the requested cgroup
-  controllers. Its exported kernel SHA-256 is
+- The pinned OnePlus 4.19 source plus matching MediaTek/OPlus sources compiles
+  successfully on the optional build host. The first 11-minute control build
+  produced a 64 MiB boot image and an effective config with `CONFIG_KEXEC=y`,
+  devtmpfs, file handles and extra cgroup controllers. Its exported kernel
+  SHA-256 is
   `0ec542e43f759a6d69eb81a1995ef056052b9b2655c6a1a43c6243c117e7b3a6`.
   The diagnostic ramdisk has insecure ADB and remains non-flashable; the
-  secure follow-up candidate is recorded next.
+  secure follow-up candidate is recorded next. These artifacts remain useful
+  compile evidence, but the complete module audit below supersedes them as
+  flash candidates.
 - The follow-up secure key-bound `bootimage` build completed on the optional
   build host in 10 minutes 31 seconds. Its config is byte-identical to the
   diagnostic config and contains `CONFIG_KEXEC=y` and
@@ -70,9 +72,21 @@ along with the host boundary, rsync flow and artifact-return checks.
   `f1bd81e3f78674c2c8a1f7153a70ad98a4af7765b6779534d9d7e5c05a257cc1`,
   the compressed kernel is
   `89827d94738926488fbba1d2ebf2c3bb544b6bb44736a6ea0f427fb6712e1325`
-  and the DTB remains exact stock. This candidate is not installed yet.
-  Combine it with the already validated complete Lineage userspace/AVB set,
-  rerun the complete bundle audit and only then apply the root-full profile.
+  and the DTB remains exact stock. This candidate was not installed.
+- A subsequent complete secure Lineage image build finished all 160,247
+  Android actions and passed VINTF, but its pre-flash module audit correctly
+  rejected it. Of 1,192 imports made by the ten stock-derived vendor modules,
+  249 have different modversion CRCs against the source kernel. No replacement
+  `.ko` files were present in the generated Lineage-owned images, so those
+  modules cannot be ignored. The phone still runs the previously validated
+  LineageOS 21/root-full build; the rejected image was never flashed.
+- The Android bootstrap and future NixOS kernel configurations are now
+  separate. The next bootstrap build derives its baseline directly from the
+  effective config embedded in the exact pinned `.3001` boot image, verifies
+  that config by hash, and adds only KEXEC, the `4.19.191+` suffix, the public
+  stock module trust key and an explicit compat-vDSO disable. Devtmpfs,
+  file-handle and extra cgroup features remain in the later NixOS kernel
+  fragment instead of perturbing Lineage's vendor-module ABI.
 - The earlier exact-stock relock and green/rootless boot completed
   successfully. The bootloader was deliberately unlocked again, with the
   expected wipe, and the next Lineage installation also booted successfully.

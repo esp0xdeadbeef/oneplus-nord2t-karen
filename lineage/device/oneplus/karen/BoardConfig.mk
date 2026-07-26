@@ -94,10 +94,11 @@ TARGET_KERNEL_SOURCE := kernel/oneplus/mt6893
 # the exact stock vendor image immutable and install the seven modules built
 # and signed alongside this kernel into the writable Lineage system instead.
 NEED_KERNEL_MODULE_SYSTEM := true
-# This derived defconfig is the pinned OnePlus virtual-A/B baseline plus the
-# reviewed Mobile NixOS control-kernel fragment, including classic
-# CONFIG_KEXEC=y.
-TARGET_KERNEL_CONFIG := k6893v1_64_k419_ab_nixos_control_defconfig
+# This derived defconfig starts with the effective config embedded in the
+# exact pinned .3001 kernel and adds only the reviewed Lineage bootstrap
+# delta, including classic CONFIG_KEXEC=y. NixOS-only kernel features belong
+# in the separate Mobile NixOS kernel fragment.
+TARGET_KERNEL_CONFIG := k6893v1_64_k419_ab_lineage_control_defconfig
 TARGET_KERNEL_CLANG_VERSION := r487747c
 TARGET_KERNEL_ADDITIONAL_FLAGS := LLVM=1 LLVM_IAS=1 DEPMOD=depmod
 else

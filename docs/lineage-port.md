@@ -696,7 +696,7 @@ then applies ten small reviewed strict-compiler, type and Lineage path fixes;
 it does not create empty OPlus implementations or import a different product
 kernel.
 
-The clean optional-host build completed successfully in 11 minutes. It
+The first clean optional-host build completed successfully in 11 minutes. It
 produced a 64 MiB `boot.img`, an 18,821,574-byte kernel and the effective
 configuration. Their SHA-256 values are:
 
@@ -706,18 +706,28 @@ kernel        0ec542e43f759a6d69eb81a1995ef056052b9b2655c6a1a43c6243c117e7b3a6
 kernel.config eb1876edb00b7b1a9d615792ab3f49c9fb1e71e44d76f4ead5df2da27686c673
 ```
 
-The effective config contains `CONFIG_KEXEC=y`, `CONFIG_KEXEC_CORE=y`,
-devtmpfs, file handles and the requested cgroup controllers. The boot image
-retains the exact stock DTB and passes the structural audit when its explicit
-kernel hash and temporary `--allow-insecure-adb` exception are supplied.
-Without that exception, the audit correctly rejects `ro.adb.secure=0`.
+That first effective config contained `CONFIG_KEXEC=y`,
+`CONFIG_KEXEC_CORE=y`, devtmpfs, file handles and extra cgroup controllers.
+The boot image retains the exact stock DTB and passes the structural audit
+when its explicit kernel hash and temporary `--allow-insecure-adb` exception
+are supplied. Without that exception, the audit correctly rejects
+`ro.adb.secure=0`.
 
-This diagnostic output is build evidence, not a flash candidate. Its recovery
-ramdisk is insecure, has no owner ADB key and is not the requested
-Magisk/root-full boot. The next image must reuse the successful kernel in the
-normal secure key-bound Lineage ramdisk, produce matching AVB metadata and
-pass the source-kernel form of the image audit documented in
-[LineageOS root and unroot](lineage-root.md).
+This diagnostic output is build evidence, not a flash candidate. A later
+secure full-image build finished all Android actions and VINTF, then exposed
+the more important incompatibility: 249 of 1,192 versioned imports from the
+ten exact stock-derived vendor modules differ from the source kernel's
+`Module.symvers`. The generated Lineage-owned images contained no replacement
+kernel modules. The audit therefore failed before flash, as intended.
+
+The Android bootstrap configuration is now distinct from the future NixOS
+kernel configuration. The flake extracts and hashes the effective config
+embedded in the exact pinned `.3001` boot image, then adds only
+`CONFIG_KEXEC=y`, the required `4.19.191+` release suffix, the public module
+trust key and an explicit compat-vDSO disable. NixOS-only devtmpfs,
+file-handle and cgroup options remain in `nixos-control.config`. Rebuild the
+kernel-only target first and require complete modversion compatibility before
+spending time on another full Android image or performing any flash.
 
 The verified full Android 14 OTA in this repository's manifest is the preferred
 source for matching proprietary blobs. Rooting the currently installed system
