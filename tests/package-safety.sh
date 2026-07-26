@@ -381,7 +381,7 @@ grep -Fq \
   "$nixos_kernel_packages"
 # shellcheck disable=SC2016
 grep -Fq \
-  'ifeq ($(CONFIG_MODULE_SIG_KEY),"certs/karen-owner-module-signing.x509")' \
+  'ifneq ($(findstring certs/karen-owner-module-signing.x509,$(mod_sign_cmd)),)' \
   "$script_directory/nixos/patches/kernel/0012-defer-owner-module-signing.patch"
 # shellcheck disable=SC2016
 grep -Fq 'modprobe --show-modversions "$module_path"' "$image_audit"

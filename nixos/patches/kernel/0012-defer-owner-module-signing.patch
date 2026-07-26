@@ -19,7 +19,7 @@ index a9a38ec..ab9d383 100644
 --- a/scripts/Makefile.modsign
 +++ b/scripts/Makefile.modsign
 @@ -23,3 +23,8 @@
-+ifeq ($(CONFIG_MODULE_SIG_KEY),"certs/karen-owner-module-signing.x509")
++ifneq ($(findstring certs/karen-owner-module-signing.x509,$(mod_sign_cmd)),)
 +quiet_cmd_sign_ko = UNSIGNED [M] $@
 +        cmd_sign_ko = :
 +else
