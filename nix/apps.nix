@@ -30,6 +30,7 @@
     preflight-lineage-userspace = "nord2t-preflight-lineage-userspace";
     probe-preloader = "nord2t-probe-preloader";
     read-gpt = "nord2t-read-gpt";
+    repack-control-vendor = "nord2t-repack-control-vendor";
     snapshot = "nord2t-snapshot";
     stock-root = "nord2t-stock-root";
     stock-root-full = "nord2t-stock-root-full";

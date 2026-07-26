@@ -122,6 +122,10 @@
         <${repositoryRoot + /nixos/patches/kernel/0006-clang-fix-control-kernel-types.patch}
       patch --batch --forward --fuzz=0 -d "$out" -p1 \
         <${repositoryRoot + /nixos/patches/kernel/0011-preserve-stock-runtime-release.patch}
+      ${pkgs.lib.optionalString (ownerModuleSigningCertificate != null) ''
+        patch --batch --forward --fuzz=0 -d "$out" -p1 \
+          <${repositoryRoot + /nixos/patches/kernel/0012-defer-owner-module-signing.patch}
+      ''}
       substituteInPlace "$out/net/oplus_nwpower/oplus_nwpower.c" \
         --replace-fail \
         'static void nwpower_unsl_blacklist_reject() {' \

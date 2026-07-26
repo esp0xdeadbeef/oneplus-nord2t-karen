@@ -31,6 +31,7 @@ vector_signing_generator="$script_directory/scripts/vector-signing-key-generator
 kernel_module_build="$script_directory/scripts/kernel-module-owner-build"
 kernel_module_generator="$script_directory/scripts/kernel-module-signing-key-generator"
 kernel_module_signer="$script_directory/scripts/kernel-module-owner-sign"
+control_vendor_repack="$script_directory/scripts/repack-control-vendor"
 
 # shellcheck disable=SC2016
 grep -Fq 'PRODUCT_ADB_KEYS := $(strip $(KAREN_DEBUG_ADB_KEYS))' "$device_makefile"
@@ -45,6 +46,14 @@ grep -Fq -- '--keep-failed' "$kernel_module_build"
 grep -Fq 'private_key_exported=false' "$kernel_module_signer"
 grep -Fq 'shared_access=l-esp,l-portal,s-tau' "$kernel_module_generator"
 grep -Fq 'private_access=l-esp,l-portal' "$kernel_module_generator"
+grep -Fq 'nord2t-audit-kernel-module-abi' "$control_vendor_repack"
+grep -Fq -- '--do_not_generate_fec' "$control_vendor_repack"
+# shellcheck disable=SC2016
+grep -Fq 'replacement_module_count=${#replacement_modules[@]}' \
+  "$control_vendor_repack"
+grep -Fq 'non_replacement_content=roundtrip-identical' \
+  "$control_vendor_repack"
+grep -Fq 'metadata=roundtrip-identical' "$control_vendor_repack"
 grep -Fq \
   "path_regex: '^secrets/kernel-module-signing-shared" \
   "$sops_config"
@@ -362,6 +371,13 @@ grep -Fq \
 grep -Fq \
   '0011-preserve-stock-runtime-release.patch' \
   "$nixos_kernel_packages"
+grep -Fq \
+  '0012-defer-owner-module-signing.patch' \
+  "$nixos_kernel_packages"
+# shellcheck disable=SC2016
+grep -Fq \
+  'ifeq ($(CONFIG_MODULE_SIG_KEY),"certs/karen-owner-module-signing.x509")' \
+  "$script_directory/nixos/patches/kernel/0012-defer-owner-module-signing.patch"
 # shellcheck disable=SC2016
 grep -Fq 'modprobe --show-modversions "$module_path"' "$image_audit"
 grep -Fq 'openssl cms' "$image_audit"

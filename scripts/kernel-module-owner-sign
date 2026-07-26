@@ -85,6 +85,9 @@ grep -Fqx \
   fail "kernel bundle does not embed the stable owner module certificate"
 [[ -d "$kernel_bundle/modules" ]] ||
   fail "kernel bundle contains no control modules"
+unsigned_hash_manifest="$kernel_bundle/modules/UNSIGNED-MODULE-SHA256SUMS"
+[[ -s "$unsigned_hash_manifest" ]] ||
+  fail "kernel bundle has no unsigned module hash manifest"
 [[ -f "$shared_secret_file" && -s "$shared_secret_file" ]] ||
   fail "shared SOPS document is missing or empty"
 [[ -f "$private_secret_file" && -s "$private_secret_file" ]] ||
@@ -173,6 +176,11 @@ mapfile -t actual_modules < <(
 mapfile -t sorted_expected < <(printf '%s\n' "${expected_modules[@]}" | sort)
 [[ "${actual_modules[*]}" == "${sorted_expected[*]}" ]] ||
   fail "kernel bundle does not contain the exact eight-module control set"
+(
+  cd "$kernel_bundle/modules"
+  sha256sum --check --strict "$(basename "$unsigned_hash_manifest")"
+) >/dev/null ||
+  fail "unsigned control modules do not match their build manifest"
 
 for module in "${expected_modules[@]}"; do
   if tail -c 28 "$kernel_bundle/modules/$module" |
@@ -199,6 +207,10 @@ for module in "${expected_modules[@]}"; do
 done
 install -m 0644 "$certificate_der" \
   "$staging_directory/modules/signing_key.x509"
+(
+  cd "$staging_directory/modules"
+  sha256sum "${expected_modules[@]}" >SIGNED-MODULE-SHA256SUMS
+)
 find "$staging_directory" -type f -exec chmod 0644 {} +
 mv -T "$staging_directory" "$output_directory"
 

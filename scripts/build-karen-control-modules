@@ -227,6 +227,8 @@ declare -A module_paths=(
 )
 
 mkdir -p "$output_directory"
+unsigned_hash_manifest="$output_directory/UNSIGNED-MODULE-SHA256SUMS"
+: >"$unsigned_hash_manifest"
 for module in \
   bt_drv_6893.ko \
   connfem.ko \
@@ -243,6 +245,10 @@ for module in \
   "$clang_root/bin/llvm-strip" \
     --strip-debug \
     "$output_directory/$module"
+  (
+    cd "$output_directory"
+    sha256sum "$module"
+  ) >>"$unsigned_hash_manifest"
   if [[ "$external_signing" == false ]]; then
     "$sign_file" \
       sha512 \
@@ -253,6 +259,7 @@ for module in \
 done
 
 install -m 0644 "$signing_certificate" "$output_directory/signing_key.x509"
+chmod 0644 "$unsigned_hash_manifest"
 
 echo "Built eight Karen source control modules in $output_directory"
 if [[ "$external_signing" == true ]]; then

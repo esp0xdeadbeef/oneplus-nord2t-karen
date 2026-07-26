@@ -28,6 +28,7 @@ in {
     preflight-lineage-userspace
     probe-preloader
     read-gpt
+    repack-control-vendor
     snapshot
     vector-owner-build-intermediate
     vector-owner-sign

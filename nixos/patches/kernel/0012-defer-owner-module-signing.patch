@@ -1,0 +1,29 @@
+From 1ca42806facd0d0a2f04da190fd6bf3b326d9477 Mon Sep 17 00:00:00 2001
+From: oneplus-nord2t-karen contributors <noreply@example.invalid>
+Date: Sun, 26 Jul 2026 14:32:00 +0200
+Subject: [PATCH] kbuild: defer owner module signing
+
+The optional owner build deliberately supplies only a public X.509
+certificate to an untrusted compilation host. Embed that certificate in the
+kernel, but leave Kbuild's intermediate modules unsigned for the separate
+owner-host signing step. Keep the normal signing command unchanged for every
+other module-key configuration.
+
+Assisted-by: Codex:gpt-5
+---
+ scripts/Makefile.modsign | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/scripts/Makefile.modsign b/scripts/Makefile.modsign
+index a9a38ec..ab9d383 100644
+--- a/scripts/Makefile.modsign
++++ b/scripts/Makefile.modsign
+@@ -23,3 +23,8 @@
++ifeq ($(CONFIG_MODULE_SIG_KEY),"certs/karen-owner-module-signing.x509")
++quiet_cmd_sign_ko = UNSIGNED [M] $@
++        cmd_sign_ko = :
++else
+ quiet_cmd_sign_ko = SIGN [M] $@
+         cmd_sign_ko = $(mod_sign_cmd) $@
++endif
+ #endif /*OPLUS_FEATURE_SECURITY_COMMON*/

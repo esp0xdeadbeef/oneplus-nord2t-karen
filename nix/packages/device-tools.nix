@@ -516,6 +516,30 @@
       );
   };
 
+  repackControlVendor = pkgs.writeShellApplication {
+    name = "nord2t-repack-control-vendor";
+    runtimeInputs = with pkgs; [
+      attr
+      auditKernelModuleAbi
+      coreutils
+      diffutils
+      erofs-utils
+      findutils
+      gnugrep
+      gnused
+      jq
+      mkbootimg-osm0sis
+    ];
+    text =
+      builtins.replaceStrings
+      ["@PARTITION_MANIFEST@"]
+      ["${repositoryRoot + /firmware/partitions-3001.json}"]
+      (
+        builtins.readFile
+        (repositoryRoot + /scripts/repack-control-vendor)
+      );
+  };
+
   auditLineageImages = pkgs.writeShellApplication {
     name = "nord2t-audit-lineage-images";
     runtimeInputs = with pkgs; [
@@ -670,6 +694,7 @@ in {
     probe-preloader = probePreloader;
     read-lineage-system-fingerprint = readLineageSystemFingerprint;
     read-gpt = readGpt;
+    repack-control-vendor = repackControlVendor;
     snapshot = snapshotDevice;
     stock-boot-3001 = stockBoot3001;
     stock-framework-vintf-3001 = stockFrameworkVintf3001;

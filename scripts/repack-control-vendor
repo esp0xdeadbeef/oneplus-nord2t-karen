@@ -1,0 +1,276 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+umask 022
+
+usage() {
+  cat >&2 <<'EOF'
+usage: nord2t-repack-control-vendor STOCK_VENDOR_IMAGE SIGNED_KERNEL_BUNDLE OUTPUT_DIRECTORY
+
+Rebuild the exact pinned Karen vendor EROFS image with only the eight audited,
+owner-signed control modules replaced. The command must run as root so Android
+UID/GID metadata and security.selinux xattrs survive extraction and repacking.
+It creates a fixed-size AVB-footer image for the existing unlocked control
+installation; it does not modify or flash a device.
+EOF
+}
+
+fail() {
+  echo "Karen control vendor repack failed: $*" >&2
+  exit 1
+}
+
+if [[ $# -eq 1 && ("$1" == -h || "$1" == --help) ]]; then
+  usage
+  exit 0
+fi
+[[ $# -eq 3 ]] || {
+  usage
+  exit 2
+}
+[[ "$EUID" -eq 0 ]] ||
+  fail "run as root, for example: sudo nix run .#repack-control-vendor -- ..."
+
+stock_vendor_image="$(realpath "$1")"
+kernel_bundle="$(realpath "$2")"
+output_directory="$(realpath -m "$3")"
+partition_manifest="${PARTITION_MANIFEST:-@PARTITION_MANIFEST@}"
+
+[[ -s "$stock_vendor_image" ]] ||
+  fail "stock vendor image is missing or empty"
+[[ -d "$kernel_bundle" ]] ||
+  fail "signed kernel bundle is not a directory"
+[[ -r "$partition_manifest" ]] ||
+  fail "partition manifest is missing"
+[[ ! -e "$output_directory" ]] ||
+  fail "refusing to overwrite output: $output_directory"
+
+expected_vendor_size="$(
+  jq -er '.partitions[] | select(.name == "vendor") | .size' \
+    "$partition_manifest"
+)"
+expected_vendor_hash="$(
+  jq -er '.partitions[] | select(.name == "vendor") | .sha256' \
+    "$partition_manifest"
+)"
+[[ "$(stat -c %s "$stock_vendor_image")" == "$expected_vendor_size" ]] ||
+  fail "stock vendor image has an unexpected size"
+actual_vendor_hash="$(
+  sha256sum "$stock_vendor_image" | cut -d' ' -f1
+)"
+[[ "$actual_vendor_hash" == "$expected_vendor_hash" ]] ||
+  fail "stock vendor image does not match the pinned manifest"
+
+nord2t-audit-kernel-module-abi \
+  "$kernel_bundle" \
+  "$stock_vendor_image" \
+  "$kernel_bundle/modules"
+
+replacement_modules=(
+  bt_drv_6893.ko
+  connfem.ko
+  conninfra.ko
+  fmradio_drv_connac2x.ko
+  gps_drv.ko
+  trace_mmstat.ko
+  wlan_drv_gen4m.ko
+  wmt_chrdev_wifi.ko
+)
+
+output_parent="$(dirname "$output_directory")"
+install -d -m 0755 "$output_parent"
+temporary_directory="$(
+  mktemp -d --tmpdir="$output_parent" .nord2t-vendor-repack.XXXXXXXX
+)"
+cleanup() {
+  rm -r -- "$temporary_directory"
+}
+trap cleanup EXIT HUP INT TERM
+chmod 0700 "$temporary_directory"
+
+stock_tree="$temporary_directory/stock-tree"
+candidate_tree="$temporary_directory/candidate-tree"
+raw_image="$temporary_directory/vendor.erofs"
+candidate_image="$temporary_directory/vendor.img"
+staging_directory="$temporary_directory/output"
+
+fsck.erofs \
+  --extract="$stock_tree" \
+  --xattrs \
+  --preserve \
+  "$stock_vendor_image" >/dev/null
+
+metadata_snapshot() {
+  local path="$1"
+  stat -c '%u:%g:%a' "$path"
+  getfattr \
+    --absolute-names \
+    --dump \
+    --encoding=hex \
+    --match=- \
+    "$path" 2>/dev/null |
+    sed -e '/^# file:/d' -e '/^$/d' |
+    sort
+}
+
+for module in "${replacement_modules[@]}"; do
+  source_module="$kernel_bundle/modules/$module"
+  destination_module="$stock_tree/lib/modules/$module"
+  [[ -s "$source_module" ]] ||
+    fail "signed kernel bundle is missing $module"
+  [[ -s "$destination_module" ]] ||
+    fail "stock vendor tree is missing $module"
+  before_metadata="$temporary_directory/$module.before-metadata"
+  after_metadata="$temporary_directory/$module.after-metadata"
+  metadata_snapshot "$destination_module" >"$before_metadata"
+  cp \
+    --no-preserve=mode,ownership,timestamps,xattr \
+    --reflink=never \
+    "$source_module" \
+    "$destination_module"
+  metadata_snapshot "$destination_module" >"$after_metadata"
+  cmp -s "$before_metadata" "$after_metadata" ||
+    fail "replacing $module changed its Android ownership, mode or xattrs"
+  cmp -s "$source_module" "$destination_module" ||
+    fail "replacement payload differs after copying $module"
+done
+
+mkfs.erofs \
+  -b4096 \
+  -zlz4hc,level=9 \
+  -C65536 \
+  -T1779770745 \
+  --all-time \
+  -Ue7df3f34-3df8-582e-a846-c21b733395b1 \
+  "$raw_image" \
+  "$stock_tree" >/dev/null
+
+raw_size="$(stat -c %s "$raw_image")"
+(( raw_size < expected_vendor_size )) ||
+  fail "repacked EROFS does not fit the vendor partition"
+
+cp --reflink=auto "$raw_image" "$candidate_image"
+avbtool add_hashtree_footer \
+  --image "$candidate_image" \
+  --partition_name vendor \
+  --partition_size "$expected_vendor_size" \
+  --hash_algorithm sha256 \
+  --salt c6a49bca23843e3884052038dad89dd8 \
+  --do_not_generate_fec \
+  --prop com.android.build.oplus_custom_images.os_version:11 \
+  --prop com.android.build.oplus_custom_images.security_patch:2020-10-05
+[[ "$(stat -c %s "$candidate_image")" == "$expected_vendor_size" ]] ||
+  fail "AVB-footed vendor image does not have the exact partition size"
+
+avbtool info_image --image "$candidate_image" \
+  >"$temporary_directory/vendor-avb-info.txt"
+grep -Fq 'Partition Name:        vendor' \
+  "$temporary_directory/vendor-avb-info.txt" ||
+  fail "candidate AVB descriptor does not name vendor"
+grep -Fq 'FEC num roots:         0' \
+  "$temporary_directory/vendor-avb-info.txt" ||
+  fail "candidate AVB descriptor unexpectedly enables FEC"
+
+dump.erofs -s "$candidate_image" \
+  >"$temporary_directory/vendor-erofs-info.txt"
+grep -Fq 'Filesystem blocksize:                         4096' \
+  "$temporary_directory/vendor-erofs-info.txt" ||
+  fail "candidate EROFS block size differs from stock"
+grep -Fq 'Filesystem compr_algs:                        lz4' \
+  "$temporary_directory/vendor-erofs-info.txt" ||
+  fail "candidate EROFS compression differs from stock"
+grep -Fq \
+  'Filesystem UUID:                              e7df3f34-3df8-582e-a846-c21b733395b1' \
+  "$temporary_directory/vendor-erofs-info.txt" ||
+  fail "candidate EROFS UUID differs from stock"
+
+fsck.erofs \
+  --extract="$candidate_tree" \
+  --xattrs \
+  --preserve \
+  "$candidate_image" >/dev/null
+if ! diff \
+  --brief \
+  --no-dereference \
+  --recursive \
+  "$stock_tree" \
+  "$candidate_tree" >"$temporary_directory/tree-diff.txt"; then
+  head -n 100 "$temporary_directory/tree-diff.txt" >&2
+  fail "candidate EROFS content differs after its round trip"
+fi
+
+tree_manifest() {
+  local tree="$1"
+  local output="$2"
+  local relative
+  local path
+
+  : >"$output"
+  while IFS= read -r -d '' relative; do
+    path="$tree/$relative"
+    stat \
+      --printf='path=%n type=%F uid=%u gid=%g mode=%a size=%s mtime=%Y\n' \
+      "$path" |
+      sed "s#path=$tree/#path=#" >>"$output"
+    getfattr \
+      --absolute-names \
+      --dump \
+      --encoding=hex \
+      --match=- \
+      "$path" 2>/dev/null |
+      sed -e '/^# file:/d' -e '/^$/d' |
+      sort |
+      sed "s#^#xattr=$relative:#" >>"$output"
+  done < <(
+    find "$tree" -mindepth 1 -printf '%P\0' |
+      LC_ALL=C sort -z
+  )
+}
+
+tree_manifest "$stock_tree" "$temporary_directory/stock-tree-metadata.txt"
+tree_manifest \
+  "$candidate_tree" \
+  "$temporary_directory/candidate-tree-metadata.txt"
+cmp -s \
+  "$temporary_directory/stock-tree-metadata.txt" \
+  "$temporary_directory/candidate-tree-metadata.txt" ||
+  fail "candidate EROFS metadata differs after its round trip"
+
+for module in "${replacement_modules[@]}"; do
+  cmp -s \
+    "$kernel_bundle/modules/$module" \
+    "$candidate_tree/lib/modules/$module" ||
+    fail "candidate EROFS does not contain exact signed $module"
+done
+
+install -d -m 0755 "$staging_directory"
+install -m 0644 "$candidate_image" "$staging_directory/vendor.img"
+install -m 0644 \
+  "$temporary_directory/vendor-avb-info.txt" \
+  "$staging_directory/vendor-avb-info.txt"
+install -m 0644 \
+  "$temporary_directory/vendor-erofs-info.txt" \
+  "$staging_directory/vendor-erofs-info.txt"
+(
+  cd "$staging_directory"
+  sha256sum vendor.img >SHA256SUMS
+)
+printf '%s\n' \
+  "source_vendor_sha256=$expected_vendor_hash" \
+  "source_vendor_size=$expected_vendor_size" \
+  "replacement_module_count=${#replacement_modules[@]}" \
+  "non_replacement_content=roundtrip-identical" \
+  "metadata=roundtrip-identical" \
+  "avb_verification_context=unlocked-control-installation" \
+  >"$staging_directory/manifest.txt"
+
+chmod 0755 "$staging_directory"
+mv -T "$staging_directory" "$output_directory"
+trap - EXIT
+rm -r -- "$temporary_directory"
+
+echo "Karen control vendor repack passed."
+echo "output=$output_directory"
+echo "replacement_module_count=${#replacement_modules[@]}"
+echo "persistent_device_writes=false"
