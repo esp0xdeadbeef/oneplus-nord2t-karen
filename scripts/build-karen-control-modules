@@ -195,6 +195,7 @@ build_module \
   MTK_ANDROID_WMT=y \
   MTK_ANDROID_EMI=y \
   WIFI_IP_SET=1 \
+  MTK_WLAN_SERVICE=yes \
   "KBUILD_EXTRA_SYMBOLS=$wireless_symbols"
 build_module "$trace"
 
