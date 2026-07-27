@@ -82,8 +82,13 @@ The Magisk kexec module therefore cannot jump from the unmodified stock
 kernel: root can install the userspace loader, but the required syscall was
 compiled out. Kexec-first now means “before a NixOS partition install”, not
 “before every persistent boot write”. The prerequisite is a source-built 4.19
-Lineage control kernel with the tracked `nixos-control.config` fragment,
-installed to one explicitly recoverable boot slot.
+Lineage control kernel with the tracked `nixos-control.config` fragment. It
+must be isolated in a self-contained recovery on `boot_b`; known-good
+LineageOS on `boot_a` remains untouched. Recovery must select A as the next
+cold boot before it loads any RAM candidate. Userland, Magisk and an
+`init.rc` service cannot emulate the missing syscall: doing so requires a
+kernel module that reimplements the ARM64 transition or an arbitrary
+kernel-execution exploit, both less reviewable than the minimal source build.
 
 That source build now completes successfully with the official OnePlus kernel
 and module trees, verified generated DCT inputs and the reviewed patchset.

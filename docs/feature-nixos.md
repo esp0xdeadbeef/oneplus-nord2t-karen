@@ -639,6 +639,167 @@ Magisk root and the module cannot compensate because the syscall
 implementation was compiled out. A source-built, kexec-enabled 4.19 Lineage
 control kernel is required before `evdenis/kexec` can be tested.
 
+### Why userland cannot replace the missing syscall
+
+Android root changes credentials and capabilities, but the process still runs
+at ARM64 exception level EL0. The kernel runs at EL1. That boundary is enforced
+by the CPU, page tables and syscall dispatcher; it is not an Android property
+that Magisk can mask.
+
+On the exact stock kernel, a userspace loader encounters two independent
+negative gates:
+
+```text
+kexec_load(kernel, initrd, dtb, command line) -> ENOSYS
+reboot(LINUX_REBOOT_CMD_KEXEC)                -> EINVAL
+```
+
+The first operation has no compiled syscall implementation. The second has no
+previously loaded `kimage` to execute. `uid=0` and `CAP_SYS_BOOT` are required
+when kexec exists, but cannot create absent kernel code.
+
+The same boundary excludes several apparent shortcuts:
+
+| Candidate shortcut | Boundary |
+| --- | --- |
+| Magisk `kexec` module | Installs `kexec-tools` in userspace only |
+| Recovery `init.rc` service | Still invokes the running kernel's absent syscall |
+| eBPF | Runs verifier-constrained programs; it cannot install an arbitrary ARM64 reboot trampoline |
+| `ptrace` or namespaces | Affects user processes, not the EL0/EL1 boundary |
+| Direct PSCI/SMC from an application | EL0 cannot issue an unrestricted platform firmware transition |
+| Flip `IKCONFIG` or a boot property | Changes reported configuration at most; the machine code is absent |
+| Loadable “kexec module” | Must recreate the architecture loader, CPU stop, cache/MMU and jump path and still pass module loading/signature gates |
+| Arbitrary kernel-memory write | Is a kernel exploit, not a userland kexec implementation |
+
+A vendor device node that accidentally permits arbitrary kernel execution
+would be a vulnerability. Depending on such a primitive would be harder to
+audit and more likely to corrupt unrelated memory than enabling OnePlus's
+already present ARM64 kexec implementation in a reviewed source build.
+`kexec-hardboot` likewise requires kernel and usually bootloader-specific
+support; it is not a userspace fallback.
+
+The project therefore permits one minimal persistent prerequisite: a
+kexec-enabled control kernel on inactive `boot_b`. It does not permit another
+experimental control kernel write to the known-good active `boot_a`.
+
+### Recovery-B RAM trampoline
+
+The control system does not need to boot the complete Android vendor stack.
+It can use a self-contained Lineage Recovery ramdisk on B:
+
+```text
+LK
+  -> boot_b: reviewed 4.19 control kernel + recovery ramdisk
+       -> authenticated recovery ADB
+       -> select known-good A for the next cold boot
+       -> load kernel + initrd + resolved DTB into RAM
+       -> kexec
+            -> NixOS stage 1 in RAM
+                 -> USB-only callback
+
+Any cold reset
+  -> LK
+       -> boot_a: known-good LineageOS
+```
+
+This avoids loading the full set of stock Android vendor modules in the
+control environment. Consequently, the full Android module-ABI gate and the
+smaller recovery-kernel gate must be reported separately: a recovery canary
+may prove CPU, memory, USB and kexec without authorizing that kernel as a
+daily Android boot image.
+
+The boot-control guard must run before loading a candidate. Its intended calls
+from the already booted B recovery are:
+
+```sh
+bootctl get-current-slot
+# required: 1
+
+bootctl is-slot-bootable 0
+# required: true
+
+bootctl is-slot-marked-successful 0
+# required: true
+
+bootctl is-slot-marked-successful 1
+# required: false; never mark the control slot successful
+
+bootctl set-active-boot-slot 0
+bootctl get-active-boot-slot
+# required: 0
+
+sync
+```
+
+Those commands describe the AOSP interface, not yet proven Karen recovery
+behavior. First run them with the already working stock-kernel Lineage
+Recovery on B, reboot without kexec and prove that A starts. Also prove the
+independent B retry/fallback behavior. If recovery lacks the applicable boot
+HAL, if either query is unavailable or if the next cold boot is not A, the
+automated kexec path remains blocked.
+
+Do not start kexec unconditionally from `early-init`. An unconditional action
+would turn one bad RAM candidate into an automatic warm-reboot loop. The
+recovery should instead:
+
+1. run the boot and slot attestations;
+2. select A for the next cold boot and verify that selection;
+3. start authenticated ADB;
+4. wait for a host-provided, hash-manifested one-run bundle in tmpfs;
+5. load the candidate without executing it;
+6. permit a separate explicit execute action only after the load audit passes;
+7. reboot to A after a timeout or any failed gate.
+
+The host-to-recovery staging shape is:
+
+```sh
+adb wait-for-recovery
+adb push ./karen-kexec-bundle /tmp/karen-kexec
+adb shell 'cd /tmp/karen-kexec && sha256sum -c SHA256SUMS'
+```
+
+`wait-for-recovery` denotes a wrapper requirement, not a portable adb
+subcommand guaranteed by every platform-tools version. The final helper must
+attest exactly one recovery device rather than relying on an ambiguous
+`adb wait-for-device`.
+
+After boot-control and bundle checks, the intended classic ARM64 userspace
+calls are:
+
+```sh
+kexec -l /tmp/karen-kexec/Image \
+  --initrd=/tmp/karen-kexec/initrd.gz \
+  --dtb=/tmp/karen-kexec/live.dtb \
+  --command-line='rdinit=/init karen.nixos.callback=1'
+
+# Separate non-destructive gate:
+kexec -u
+
+# A later run may load the same audited bundle again, then explicitly jump:
+kexec -e
+```
+
+The exact CLI and accepted kernel format must be checked against the pinned
+ARM64 `kexec-tools` build before these become repository entrypoints. Under
+the interface, `kexec -l` invokes `kexec_load`; `kexec -e` requests
+`LINUX_REBOOT_CMD_KEXEC`. Linux then performs the generic reboot preparation,
+device and syscore shutdown, stops secondary CPUs and enters ARM64
+`machine_kexec`. There is no `mtkclient`, Download Agent, preloader or LK call
+in that warm transition. MediaTek-specific risk is in whether its running
+drivers quiesce DMA, interrupts and coprocessors correctly before the generic
+ARM64 jump.
+
+The `live.dtb` input must be the reviewed bootloader-resolved tree captured
+privately from the running control kernel, not the unresolved base DTB copied
+from `boot.img`. It can contain device-specific values and must remain outside
+Git, the Nix store and the remote build host.
+
+The first target remains the existing all-in-RAM stage-1 initramfs. It must
+not mount, repair or write UFS, change GPT, mark B successful or store a NixOS
+root filesystem. Its only expected success signal is the USB callback. This
+does not make the test risk-free, but it confines persistent phone changes to
+the separately recoverable `boot_b` control image and boot-control selection.
+
 ### Kexec gates
 
 Establish each gate independently:

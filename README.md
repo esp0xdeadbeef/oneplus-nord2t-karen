@@ -7,8 +7,10 @@ European OnePlus Nord 2T 5G.
 
 A full Mobile NixOS host with a containerized LineageOS hardware-compatibility
 layer is planned in this same device-integration repository. Bring-up starts
-with headless kexec tests from rooted LineageOS through Magisk before any
-persistent NixOS install. Its scope, repository boundary, staged bring-up and
+with a minimal kexec-enabled recovery/control kernel isolated on `boot_b`.
+That kernel loads the first headless NixOS tests entirely from RAM while the
+known-good LineageOS `boot_a` remains untouched; no persistent NixOS install
+precedes those tests. Its scope, repository boundary, staged bring-up and
 hardware safety gates are documented in the
 [Mobile NixOS feature plan](docs/feature-nixos.md).
 The initial build-only device metadata and structure-aware DTB patch workspace
@@ -43,6 +45,58 @@ The scripts refuse to operate on a device unless ADB reports both:
 
 Do not flash builds for `oscaro`, `avicii` or `denniz`. Those are different
 phones.
+
+## Before modifying a new phone
+
+A backup of photos, accounts and application data permits a wipe or device
+replacement; it does not make the physical phone recoverable after Android,
+recovery and fastboot stop booting. Before the first unlock or custom image,
+capture the untouched stock identity and the complete public factory inputs:
+
+```bash
+nix run .#snapshot -- /private/encrypted/karen/rootless-stock
+nix run .#verify-firmware -- /private/firmware/nord2t
+nix run .#verify-firmware -- \
+  --device-cert /private/firmware/nord2t
+nix run .#extract-stock -- \
+  --profile stock \
+  --output /private/encrypted/karen/stock-3001 \
+  /private/firmware/nord2t/CPH2399_14.0.0.3001_OTA.zip
+nix run .#extract-stock -- \
+  --profile restore \
+  --output /private/encrypted/karen/restore-3001 \
+  /private/firmware/nord2t/CPH2399_14.0.0.3001_OTA.zip
+```
+
+The paths are placeholders and must resolve to actual owner-controlled
+encrypted storage outside Git. `stock` contains all 34 public payload images;
+`restore` is the ten-image scoped rollback set. Neither is a physical-device
+backup: the OTA omits GPT, UFS boot regions, `vendor_boot`, device-unique
+radio/calibration state and OPlus Download Agent authorization.
+
+Preserve the existing ADB host identity before depending on headless access:
+
+```bash
+nix run .#adb-key-generator
+```
+
+Back up its matching `~/.config/sops/age/keys.txt` separately; the committed
+encrypted ADB key is useless if every decrypting age identity is lost. The
+phone contains only authorized ADB public keys. It does not contain the
+private OPlus OTA, AVB or Download Agent signing keys.
+
+After unlock, collect the exact live A/B boot images and the explicitly
+allowlisted device-unique partitions to private encrypted storage. Then prove
+a recovery on slot B, automatic A/B fallback and—before any active-slot
+experimental kernel—a legitimate authenticated MediaTek DA read/write path.
+The current public DA candidates fail DAA on this phone, so self-service
+preloader-only recovery is **not** currently proven.
+
+The complete commands, partition classes, certificate/key inventory, privacy
+boundary, restore drills and mandatory stop gates are in
+[New-device recovery readiness](docs/new-device-readiness.md). Do not perform
+an experimental active-slot kernel write after reading only the shorter
+firmware extraction instructions below.
 
 ## Current state
 
@@ -618,6 +672,12 @@ That fixed-output derivation is roughly 5.6 GB. Pass its printed path as the
 final argument to `nix run .#extract-stock -- ...` if the normal cache is not
 being used.
 
+These extraction commands preserve public factory inputs, not the phone's
+device-specific identity or the authorization needed to write them after a
+deep softbrick. Complete the
+[new-device recovery-readiness procedure](docs/new-device-readiness.md)
+before treating the rollback set as a recovery plan.
+
 Build a verified Magisk-patched stock boot image without flashing it:
 
 ```bash
@@ -686,6 +746,7 @@ by Git.
 
 ## Documentation
 
+- [New-device recovery readiness](docs/new-device-readiness.md)
 - [Device inventory](docs/device.md)
 - [OS choice](docs/os-options.md)
 - [Update and recovery](docs/recovery.md)

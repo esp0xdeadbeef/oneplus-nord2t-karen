@@ -2,6 +2,12 @@
 
 # Update and recovery
 
+Before unlocking or modifying a new phone, first complete
+[New-device recovery readiness](new-device-readiness.md). The firmware
+commands below preserve public factory inputs; they do not preserve host ADB
+authorization, device-unique calibration or an authenticated preloader write
+path.
+
 ## Installed baseline
 
 The phone originally ran `.608` with a 2024-12-05 Android security patch. The

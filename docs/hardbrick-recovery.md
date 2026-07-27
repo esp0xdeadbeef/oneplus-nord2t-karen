@@ -7,6 +7,11 @@ Android, fastbootd, bootloader-fastboot and the transient preloader interface
 have been observed on this host, but a complete BROM/DA stock flash round-trip
 is still pending.
 
+For the capture that must be completed while a new phone is still functional,
+including host authorization, device-unique state and the distinction between
+restore bytes and restore access, start with
+[New-device recovery readiness](new-device-readiness.md).
+
 ## Recovery ladder
 
 1. **Android/stock recovery:** ADB is available, or signed OxygenOS recovery
