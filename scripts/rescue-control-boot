@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  nord2t-rescue-control-boot ROLLBACK_POINTER [--wait SECONDS] --yes
+
+Wait for the single expected Karen device in ordinary bootloader-fastboot,
+restore only its audited slot-A boot image, then request a normal reboot.
+EOF
+}
+
+die() {
+  printf 'nord2t-rescue-control-boot: %s\n' "$*" >&2
+  exit 1
+}
+
+getvar() {
+  local variable=$1
+
+  timeout 5 fastboot -s "$fastboot_serial" getvar "$variable" 2>&1 |
+    sed -nE "s/.*${variable}: *([^ ]+).*/\\1/p" |
+    tail -n 1
+}
+
+wait_seconds=60
+confirmed=false
+rollback_pointer=
+
+while (($# > 0)); do
+  case "$1" in
+    --wait)
+      (($# >= 2)) || die '--wait requires a value'
+      wait_seconds=$2
+      shift 2
+      ;;
+    --yes)
+      confirmed=true
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    -*)
+      die "unknown option: $1"
+      ;;
+    *)
+      if [[ -n "$rollback_pointer" ]]; then
+        die 'exactly one rollback pointer is required'
+      fi
+      rollback_pointer=$1
+      shift
+      ;;
+  esac
+done
+
+[[ "$confirmed" == true ]] || die 'refusing without --yes'
+[[ -n "$rollback_pointer" ]] || die 'a rollback pointer is required'
+[[ "$wait_seconds" =~ ^[1-9][0-9]*$ ]] || die '--wait must be a positive integer'
+[[ -f "$rollback_pointer" ]] || die 'rollback pointer is not a regular file'
+
+rollback_directory=$(<"$rollback_pointer")
+[[ "$rollback_directory" == /* ]] || die 'rollback pointer must contain an absolute path'
+[[ -d "$rollback_directory" ]] || die 'rollback directory is missing'
+[[ "$(stat -c %a "$rollback_directory")" == 700 ]] ||
+  die 'rollback directory must have mode 0700'
+
+boot_image="$rollback_directory/boot_a.img"
+checksums="$rollback_directory/SHA256SUMS"
+[[ -f "$boot_image" ]] || die 'rollback boot_a.img is missing'
+[[ -f "$checksums" ]] || die 'rollback SHA256SUMS is missing'
+[[ "$(stat -c %a "$boot_image")" == 600 ]] ||
+  die 'rollback boot_a.img must have mode 0600'
+[[ "$(stat -c %s "$boot_image")" == 67108864 ]] ||
+  die 'rollback boot_a.img has the wrong size'
+(
+  cd "$rollback_directory"
+  sha256sum --check --strict SHA256SUMS >/dev/null
+) || die 'rollback checksum verification failed'
+
+printf 'Waiting up to %s seconds for ordinary bootloader-fastboot...\n' \
+  "$wait_seconds"
+
+fastboot_serial=
+deadline=$((SECONDS + wait_seconds))
+while ((SECONDS < deadline)); do
+  mapfile -t fastboot_serials < <(
+    fastboot devices 2>/dev/null |
+      awk 'NF >= 2 { print $1 }'
+  )
+  if ((${#fastboot_serials[@]} > 1)); then
+    die 'more than one fastboot device appeared'
+  fi
+  if ((${#fastboot_serials[@]} == 1)); then
+    fastboot_serial=${fastboot_serials[0]}
+    if [[ "$(getvar is-userspace)" == no ]]; then
+      break
+    fi
+    fastboot_serial=
+  fi
+  sleep 0.2
+done
+
+[[ -n "$fastboot_serial" ]] || die 'ordinary bootloader-fastboot did not appear'
+[[ "$(getvar product)" == k6893v1_64_k419 ]] || die 'unexpected fastboot product'
+[[ "$(getvar hw-revision)" == ca00 ]] || die 'unexpected hardware revision'
+[[ "$(getvar current-slot)" == a ]] || die 'active slot is not A'
+[[ "$(getvar unlocked)" == yes ]] || die 'bootloader is not unlocked'
+[[ "$(getvar is-userspace)" == no ]] || die 'refusing userspace fastbootd'
+
+printf 'Ordinary fastboot attestation passed; restoring only boot_a.\n'
+timeout 30 fastboot -s "$fastboot_serial" flash boot_a "$boot_image"
+printf 'Rollback boot flash completed.\n'
+timeout 20 fastboot -s "$fastboot_serial" reboot || true
+printf 'Normal reboot requested.\n'

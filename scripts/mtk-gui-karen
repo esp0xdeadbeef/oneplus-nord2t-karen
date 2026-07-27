@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+mtk_gui="$(command -v mtk_gui)"
+wrapped="$(dirname "$mtk_gui")/.mtk_gui-wrapped"
+python="$(sed -n '1s/^#!//p' "$wrapped")"
+script_dir="$(cd -- "$(dirname -- "$0")" && pwd)"
+
+exec "$python" -c '
+import runpy
+import sys
+
+runpy.run_path(sys.argv[1], run_name="mtkclient_wrapper_bootstrap")
+runpy.run_path(sys.argv[2], run_name="__main__")
+' "$wrapped" "$script_dir/mtk-gui-karen.py"

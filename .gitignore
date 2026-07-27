@@ -32,7 +32,9 @@
 *.pcap
 *.trace
 /dumps/
+/hwparam.json
 /live-partitions/
+/logs/
 /snapshots/
 
 # Local configuration

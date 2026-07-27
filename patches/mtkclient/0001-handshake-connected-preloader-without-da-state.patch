@@ -1,0 +1,39 @@
+From 8ecf6105764d34502429571032361964656966f5 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Sun, 26 Jul 2026 20:04:00 +0200
+Subject: [PATCH] Handshake connected preloader without DA state
+
+An OPlus preloader can already be enumerated when mtkclient starts.  The USB
+transport then connects successfully, but no Download Agent state exists yet.
+Treat that as a preloader connection and perform the normal handshake instead
+of asking for another disconnect/reconnect cycle.
+
+Signed-off-by: Codex <codex@openai.com>
+---
+ mtkclient/Library/DA/mtk_da_handler.py | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/mtkclient/Library/DA/mtk_da_handler.py b/mtkclient/Library/DA/mtk_da_handler.py
+index 00ab920..09c1043 100644
+--- a/mtkclient/Library/DA/mtk_da_handler.py
++++ b/mtkclient/Library/DA/mtk_da_handler.py
+@@ -120,14 +120,15 @@ class DaHandler(metaclass=LogBase):
+                 step = self.mtk.step
+                 mtk.preloader.dump_internal_flash(offset=offset,length=length,step=step,filename="internal_flash.bin")
+         else:
+-            if mtk.serialportname is not None:
+-                mtk.preloader.init()
+             if directory:
+                 self.mtk.config.hwparam_path = directory
+             if mtk.port.cdc.connected and os.path.exists(os.path.join(mtk.config.hwparam_path, ".state")):
+                 mtk.daloader.reinit()
+                 mtk.reinited = True
+                 return mtk
++            # A connected preloader is not an already running Download Agent.
++            # Perform the normal handshake when there is no DA state to resume.
++            mtk.preloader.init(directory=directory)
+         if mtk.config.target_config is None:
+             self.info("Please disconnect, start mtkclient and reconnect.")
+             return None
+--
+2.51.0

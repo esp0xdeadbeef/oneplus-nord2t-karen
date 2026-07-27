@@ -32,6 +32,7 @@
     probe-preloader = "nord2t-probe-preloader";
     read-gpt = "nord2t-read-gpt";
     repack-control-vendor = "nord2t-repack-control-vendor";
+    rescue-control-boot = "nord2t-rescue-control-boot";
     snapshot = "nord2t-snapshot";
     stock-root = "nord2t-stock-root";
     stock-root-full = "nord2t-stock-root-full";

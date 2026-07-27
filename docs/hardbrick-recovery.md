@@ -159,3 +159,26 @@ erase, format, whole-flash or preloader write command.
 Until those checks pass, fastbootd, bootloader-fastboot and the pinned
 stock-boot restoration are tested softbrick routes, while true BROM recovery
 remains an active bring-up item.
+
+## Local GUI experiment
+
+The retained `scripts/mtk-gui-karen` experiment starts MTKClient's GUI with
+`skipwdt`, the explicitly supplied CPH2399 preloader and an optional explicitly
+supplied DA. It does not bundle firmware, a DA, an authorization file or
+credentials:
+
+```bash
+KAREN_MTK_PRELOADER=/private/reviewed/preloader.bin \
+KAREN_MTK_DA=/private/reviewed/DA.bin \
+  nix shell .#mtkclient-karen --command ./scripts/mtk-gui-karen
+```
+
+Omit `KAREN_MTK_DA` only to inspect GUI connection behavior without a selected
+loader. `KAREN_MTK_SERIAL` may name an explicitly reviewed serial endpoint;
+the default is raw USB.
+
+The wrapper changes connection initialization only. Once open, MTKClient's GUI
+still exposes destructive operations. Its presence is not a flash
+authorization, does not bypass DAA and does not turn a public DA into an
+OPlus-signed loader. Do not select Format all, whole-flash, GPT, preloader,
+radio or device-unique targets.

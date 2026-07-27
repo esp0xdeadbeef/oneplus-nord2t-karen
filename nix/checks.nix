@@ -30,6 +30,7 @@ in {
     probe-preloader
     read-gpt
     repack-control-vendor
+    rescue-control-boot
     snapshot
     vector-owner-build-intermediate
     vector-owner-sign
@@ -103,6 +104,20 @@ in {
       src = repositoryRoot;
     } ''
       bash "$src"/tests/preloader-safety.sh
+      touch "$out"
+    '';
+
+  rescue-control-boot-test =
+    pkgs.runCommand "nord2t-rescue-control-boot-test" {
+      nativeBuildInputs = with pkgs; [
+        bash
+        coreutils
+        gawk
+        gnused
+      ];
+      src = repositoryRoot;
+    } ''
+      bash "$src"/tests/rescue-control-boot.sh
       touch "$out"
     '';
 

@@ -19,6 +19,17 @@
     vectorSigningAndroid
     ;
 
+  mtkclientKaren = pkgs.mtkclient.overrideAttrs (old: {
+    patches =
+      (old.patches or [])
+      ++ [
+        (repositoryRoot
+          + /patches/mtkclient/0001-handshake-connected-preloader-without-da-state.patch)
+        (repositoryRoot
+          + /patches/mtkclient/0002-probe-oplus-preloader-for-meta-fastboot.patch)
+      ];
+  });
+
   adbKeyGenerator = pkgs.writeShellApplication {
     name = "nord2t-adb-key-generator";
     runtimeInputs = with pkgs; [
@@ -196,7 +207,7 @@
       coreutils
       gnugrep
       gnused
-      mtkclient
+      mtkclientKaren
     ];
     text = builtins.readFile (repositoryRoot + /scripts/probe-preloader);
   };
@@ -209,7 +220,7 @@
       gawk
       gnugrep
       gnused
-      mtkclient
+      mtkclientKaren
     ];
     text = builtins.readFile (repositoryRoot + /scripts/read-gpt);
   };
@@ -654,6 +665,17 @@
     text = builtins.readFile (repositoryRoot + /scripts/lineage-keybound-adb);
   };
 
+  rescueControlBoot = pkgs.writeShellApplication {
+    name = "nord2t-rescue-control-boot";
+    runtimeInputs = with pkgs; [
+      android-tools
+      coreutils
+      gawk
+      gnused
+    ];
+    text = builtins.readFile (repositoryRoot + /scripts/rescue-control-boot);
+  };
+
   snapshotDevice = pkgs.writeShellApplication {
     name = "nord2t-snapshot";
     runtimeInputs = with pkgs; [
@@ -711,12 +733,14 @@ in {
     lineage-root-full = lineageRootFull;
     lineage-unroot = lineageUnroot;
     lineage-userspace = lineageUserspace;
+    mtkclient-karen = mtkclientKaren;
     owner-sign-apk = ownerSignApk;
     preflight-lineage-userspace = preflightLineageUserspace;
     probe-preloader = probePreloader;
     read-lineage-system-fingerprint = readLineageSystemFingerprint;
     read-gpt = readGpt;
     repack-control-vendor = repackControlVendor;
+    rescue-control-boot = rescueControlBoot;
     snapshot = snapshotDevice;
     stock-boot-3001 = stockBoot3001;
     stock-framework-vintf-3001 = stockFrameworkVintf3001;

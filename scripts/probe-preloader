@@ -3,21 +3,63 @@
 
 set -euo pipefail
 
-if [[ $# -ne 0 ]]; then
-  echo "usage: nord2t-probe-preloader" >&2
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  nord2t-probe-preloader
+  nord2t-probe-preloader --manual [--wait SECONDS]
+
+The normal mode attests a running Karen device over ADB and reboots it into
+the preloader. Manual mode only waits for an already disconnected device to
+enumerate in preloader/BROM mode; it performs the same storage-read-free
+target-configuration handshake.
+EOF
+}
+
+manual=false
+wait_seconds=30
+while (($# > 0)); do
+  case "$1" in
+    --manual)
+      manual=true
+      shift
+      ;;
+    --wait)
+      (($# >= 2)) || {
+        usage
+        exit 2
+      }
+      wait_seconds=$2
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+[[ "$wait_seconds" =~ ^[1-9][0-9]*$ ]] || {
+  echo "--wait must be a positive integer." >&2
   exit 2
-fi
+}
 
-if [[ "$(adb get-state 2>/dev/null || true)" != device ]]; then
-  echo "No authorized Android device is connected through ADB." >&2
-  exit 1
-fi
+if [[ "$manual" != true ]]; then
+  if [[ "$(adb get-state 2>/dev/null || true)" != device ]]; then
+    echo "No authorized Android device is connected through ADB." >&2
+    exit 1
+  fi
 
-model="$(adb shell getprop ro.product.model | tr -d '\r')"
-device="$(adb shell getprop ro.product.device | tr -d '\r')"
-if [[ "$model" != CPH2399 || "$device" != OP557AL1 ]]; then
-  echo "Refusing preloader probe for model=$model device=$device" >&2
-  exit 1
+  model="$(adb shell getprop ro.product.model | tr -d '\r')"
+  device="$(adb shell getprop ro.product.device | tr -d '\r')"
+  if [[ "$model" != CPH2399 || "$device" != OP557AL1 ]]; then
+    echo "Refusing preloader probe for model=$model device=$device" >&2
+    exit 1
+  fi
 fi
 
 temporary_directory="$(mktemp -d -t nord2t-preloader-probe.XXXXXXXX)"
@@ -34,12 +76,18 @@ trap cleanup EXIT
 raw_log="$temporary_directory/mtkclient.log"
 (
   cd "$temporary_directory"
-  timeout 30s mtk gettargetconfig --skipwdt >"$raw_log" 2>&1
+  timeout "${wait_seconds}s" \
+    mtk gettargetconfig --skipwdt >"$raw_log" 2>&1
 ) &
 probe_pid="$!"
 
 sleep 1
-adb reboot edl
+if [[ "$manual" == true ]]; then
+  echo "Waiting for a manually entered MediaTek preloader/BROM interface."
+  echo "No storage read or write command will be sent."
+else
+  adb reboot edl
+fi
 
 set +e
 wait "$probe_pid"

@@ -1,0 +1,29 @@
+From 3fbdc702b3703f1b1bb0dcd991e751cc5d7cc370 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Sun, 26 Jul 2026 20:30:00 +0200
+Subject: [PATCH] Probe OPlus preloader for META fastboot
+
+The OnePlus Nord 2T enumerates its OPlus preloader as 22d9:0006 instead
+of the generic MediaTek 0e8d:2000 identity.  Allow the non-writing META
+path to probe that identity.  The path still waits for the preloader's
+READY response before sending a requested mode switch.
+
+Signed-off-by: Codex <codex@openai.com>
+---
+ mtkclient/Library/meta.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mtkclient/Library/meta.py b/mtkclient/Library/meta.py
+index b00f535..89631a5 100644
+--- a/mtkclient/Library/meta.py
++++ b/mtkclient/Library/meta.py
+@@ -47,6 +47,6 @@ class META(metaclass=LogBase):
+                     break
+                 cdc.connected = cdc.connect()
+-                if cdc.connected and cdc.pid == 0x2000:
++                if cdc.connected and cdc.pid in [0x2000, 0x0006]:
+                     counter += 1
+                     ep_out = cdc.EP_OUT.write
+                     ep_in = cdc.EP_IN.read
+--
+2.51.0
